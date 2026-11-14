@@ -28,6 +28,18 @@ FIGURES = {"howto_04_section_stress.py": ("howto_04_section_stress.png",)}
 _OUTPUT = re.compile(r"<!-- howto-output: (\S+) -->\s*```text\n(.*?)```", re.DOTALL)
 
 
+_NEGATIVE_ZERO = re.compile(r"-(0(?:\.0+)?)(?![0-9])")
+
+
+def _lines(text: str) -> list[str]:
+    """Output lines with a printed negative zero read as zero.
+
+    A value that rounds to zero carries no sign; platforms differ in the sign
+    of the round-off behind it.
+    """
+    return [_NEGATIVE_ZERO.sub(r"\1", line) for line in text.splitlines()]
+
+
 def _shown() -> dict[str, str]:
     return dict(_OUTPUT.findall(PAGE.read_text(encoding="utf-8")))
 
@@ -68,7 +80,7 @@ def test_every_script_is_on_the_page() -> None:
 def test_recipe_output_matches_page(script: str, tmp_path: Path) -> None:
     shown = _shown()[script]
     printed = _run(SCRIPTS / script, tmp_path)
-    assert printed.splitlines() == shown.splitlines()
+    assert _lines(printed) == _lines(shown)
     figures = FIGURES.get(script, ())
     for name in figures:
         figure = tmp_path / name

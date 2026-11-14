@@ -44,6 +44,18 @@ _OUTPUT = re.compile(r"<!-- tutorial-output -->\s*```text\n(.*?)```", re.DOTALL)
 _MARKER = re.compile(r':(?:start-after|end-before|start-at): "([^"]+)"')
 
 
+_NEGATIVE_ZERO = re.compile(r"-(0(?:\.0+)?)(?![0-9])")
+
+
+def _lines(text: str) -> list[str]:
+    """Output lines with a printed negative zero read as zero.
+
+    A value that rounds to zero carries no sign; platforms differ in the sign
+    of the round-off behind it.
+    """
+    return [_NEGATIVE_ZERO.sub(r"\1", line) for line in text.splitlines()]
+
+
 def _run(script: Path, folder: Path) -> str:
     env = dict(os.environ)
     env.update(
@@ -84,7 +96,7 @@ def test_tutorial_output_matches_page(
 
     printed = _run(DOC / "scripts" / script, tmp_path)
 
-    assert printed.splitlines() == shown.splitlines()
+    assert _lines(printed) == _lines(shown)
     for name in figures:
         figure = tmp_path / name
         assert figure.is_file(), name

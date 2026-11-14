@@ -55,7 +55,7 @@ for twist in (0.0, None):  # twist held, then torque-free
     print(
         f"twist {held}: strain {section.axial_strain * 1e6:.0f} ue, "
         f"twist {section.twist_per_m * 1e3:.2f} mrad/m, "
-        f"torque {section.torque_resultant_Nm:.1f} N m"
+        f"torque {round(section.torque_resultant_Nm, 1) + 0.0:.1f} N m"
     )
     print(
         "  contact "
