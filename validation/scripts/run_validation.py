@@ -1510,6 +1510,9 @@ def _normal_state_rows() -> list[Row]:
     hot = cx.compute_component_response(tube, 0, section_state=thermal).states[0]
     alpha = library.get_property(material, "alpha_T_K")
     error_t = abs(thermal.axial_strain / (alpha * 40) - 1)
+    # Free expansion leaves no stress; measured against the fully restrained
+    # thermal stress E alpha dT, so the gate does not depend on the unit.
+    stress_t = hot.sigma_equivalent_max_Pa / (e * alpha * 40)
     return [
         Row(
             "1",
@@ -1531,11 +1534,9 @@ def _normal_state_rows() -> list[Row]:
             "1",
             "STATE-T",
             "Uniform free thermal expansion and stress",
-            "< 1e-10 relative strain; < 1e-5 Pa stress",
-            f"strain {error_t:.2e}; stress {hot.sigma_equivalent_max_Pa:.2e} Pa",
-            "PASS"
-            if error_t < 1e-10 and hot.sigma_equivalent_max_Pa < 1e-5
-            else "FAIL",
+            "< 1e-10 relative strain; < 1e-10 stress relative to E alpha dT",
+            f"strain {error_t:.2e}; stress {stress_t:.2e}",
+            "PASS" if error_t < 1e-10 and stress_t < 1e-10 else "FAIL",
         ),
     ]
 

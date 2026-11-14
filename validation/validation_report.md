@@ -12,7 +12,7 @@ Every row is computed from published data or closed-form references in this repo
 |------|----|----------|--------|-------|--------|
 | 1 | STATE-NQ | Annulus extension and Saint-Venant twist | < 1e-10 relative | extension 6.66e-16; twist 0.00e+00 | PASS |
 | 1 | STATE-P | Closed-end thick-tube von Mises stress vs Lame solution | < 1e-10 relative | 7.33e-15 | PASS |
-| 1 | STATE-T | Uniform free thermal expansion and stress | < 1e-10 relative strain; < 1e-5 Pa stress | strain 3.11e-15; stress 1.30e-06 Pa | PASS |
+| 1 | STATE-T | Uniform free thermal expansion and stress | < 1e-10 relative strain; < 1e-10 stress relative to E alpha dT | strain 3.11e-15; stress 1.29e-14 | PASS |
 | 1 | A10 | Conditional vector-slip rotation equivariance | < 1e-12 relative | 3.84e-16 | PASS |
 | 1 | A10b | Matched fixed-plane vector/loxodromic contrast | < 1e-12 relative | 1.22e-16 | PASS |
 | 1 | OvM | Frictionless contact slip vs Out-von Morgen geodesic (Eqs. 26-28): loxodromic slip = wire-direction component; magnitude within bound; closed forms vs exact geodesic | < 1e-12 relative; ratio <= 1; < 1e-3 relative at k = 1e-4 | identity 1.07e-15; ratio 0.333; closed form 3.76e-04 | PASS |
