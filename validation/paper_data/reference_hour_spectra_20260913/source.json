@@ -1,0 +1,13 @@
+{
+  "assessment_summary_sha256": "730c61764adbd2c9307a6ee467fd2ba5e7bac3f72ac385e8970d9e9aa06224b4",
+  "simulation_sha256": "ee3408e45631c4410622d6ca46d521695a9b2f01cf6da8210c32fd5d33457fa7",
+  "source_spectra": {
+    "sag_bend": "e5fa3b621c9d7a87463634c45ae0104ac92454a151a32b2541f0ac5980be7497",
+    "hog_bend": "234b24500fe4aca4570f17592836f77bbae73b808bd599549561bc9fd866eaa4",
+    "touchdown_region": "41501d7b1e5e8aa7ba7ab4a1cbd25b9ff725c03bff5dc22ac985b5af82911a1b",
+    "arc_263p478": "3db4af1736074829433e0b9c06b55fa7104913ab02adde6037c87f0d8a829791"
+  },
+  "frequency_selection": "original positive bins through 0.5 Hz, no smoothing or decimation",
+  "curvature_quantity": "sum of signed-component PSDs, not PSD of curvature norm",
+  "scope": "one hour, each location's selected wire/fibre; not ensemble-selected-point spectra"
+}

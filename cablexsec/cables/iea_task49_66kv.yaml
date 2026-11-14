@@ -1,0 +1,215 @@
+---
+# IEA Wind Task 49 / Janocha et al. (2024) 66 kV three-core dynamic cable —
+# PUBLIC wet-design template for rehearsing analyses before project data.
+#
+# Geometry: Janocha, Ong, Lee, Chen & Ye, "Reference Power Cable Models for
+# Floating Offshore Wind Applications", Sustainability 16 (2024) 2899,
+# Table 1 (66 kV layer outer diameters, lay angles), Section 2.1 (630 mm2
+# copper per core, 3.15 mm armour wires), Fig. 2b (conductor-envelope
+# diameter 111 mm) and Fig. 4a (66 kV model section: 139 inner and 145 outer
+# armour wires, counted from the published figure). Materials: Table 2.
+# Published properties of the same cable: Janocha Section 2.4 (EA, GJ) and the
+# IEA Wind Task 49 design basis (Hall et al. 2024, NREL/TP-5000-89709),
+# Table 13, 630 mm2 row (D, m, EA, EI slipping at 50 kN, MBL, MBR, power).
+#
+# Wet design: no radial metallic water barrier in Table 1 (copper screens
+# only). CIGRE TB 610 (2015) Section 5.4.3: wet designs usually have no
+# radial water barrier; ORE Catapult (2022) PN000486-RPT-013 selects a wet
+# design for its generic 66 kV dynamic cable. The source itself does not
+# state wet or dry; the declaration below is this template's reading.
+#
+# Core pitch-circle radius: the cross-section of Table 1 has touching circular
+# cores (35.2 mm / sin 60 deg = 40.65 mm; Fig. 2b's 111 mm gives 40.55 mm).
+# Cores laid at 10 deg cut the section as ellipses, and touching laid tubes
+# need at least 40.80 mm; 40.81 mm is adopted. The core envelope then reaches
+# 76.01 mm, 0.11 mm beyond the 75.90 mm filler radius (Table 1 diameters are
+# rounded to 0.1 mm).
+#
+# Assumptions (not published; see doc/template_66kv.md):
+#   * core lay pitch from the 10 deg bundle lay angle taken at the core-centre
+#     radius; lay directions (only "opposite" armour lays are stated);
+#   * screens are loose (no axial load), as the source merges them into the
+#     conductor and insulation bodies (Table 3);
+#   * the three MDPE filler bodies are one equal-filler-area annulus;
+#   * no manufacturing clamping (none stated by the source): declared as
+#     manufacturing_clamping with basis not_published and value zero;
+#   * thermal boundary, S-N curve and electrical-life constants.
+# All values are from public sources; no project or partner data.
+cable:
+  name: "IEA Task 49 / Janocha 2024 66 kV three-core (public template)"
+  description: "66 kV three-core wet-design dynamic inter-array cable, 3 x 630 mm2 Cu"
+  manufacturer: "Public reference design (Janocha et al. 2024; IEA Wind Task 49)"
+  source_document: "Janocha et al., Sustainability 16 (2024) 2899; Hall et al., NREL/TP-5000-89709 (2024)"
+  voltage_kV: 66
+  design_life_years: 25        # [IEATask49] Section 3 (reference arrays designed for 25 years)
+  DFF: 10                      # [IEATask49] Section 3.3.2 (DNV-ST-0119 steel components)
+  MBR_dynamic_m: 2.76          # [IEATask49] Table 13, 630 mm2 row
+
+water_ingress:
+  design: wet
+  armour_annulus: flooded
+  source: >-
+    No radial metallic barrier in [Janocha2024] Table 1; wet design per
+    [CIGRE TB 610] Section 5.4.3 and [OREC2022] Section 3 case study (66 kV)
+
+environment:
+  ambient_C: 15.0
+  # IEC 60287-2-1 Section 4.2.2 buried single cable, T4 = rho/(2 pi) ln(u +
+  # sqrt(u^2 - 1)), u = 2L/De, with ASSUMED burial depth L = 1.0 m and seabed
+  # thermal resistivity 0.7 K m/W (De = 0.184 m): T4 = 0.343 K m/W.
+  T4_external_Km_W: 0.343
+  frequency_Hz: 50.0
+  source: "[IEC60287-2-1] 4.2.2 with assumed L = 1.0 m, rho_soil = 0.7 K m/W; ambient assumed"
+
+core_lay:
+  pitch_m: 1.4542              # 2 pi r_offset / tan(10 deg); [Janocha2024] Table 1 lay 10 deg
+  lay_direction: right_hand    # ASSUMED (not stated by the source)
+  source: "[Janocha2024] Table 1 conductor-bundle lay angle 10 deg at the core-centre radius"
+
+layers:
+
+  # --- Three power cores (trefoil; r_offset from touching core sheaths) ---
+  - name: cu_conductor
+    layer_type: cylindrical_offset
+    material: copper_janocha2024
+    n_cores: 3
+    r_offset_m: 0.04081       # laid touching cores at 10 deg (see header); Fig. 2b: 111 mm
+    r_inner_m: 0.0
+    r_outer_m: 0.014161046158239446  # exactly 630 mm2 in the aligned equivalent
+    conductor_area_mm2: 630.0  # [Janocha2024] Section 2.1; [IEATask49] Table 13
+    construction: aligned_solid_equivalent
+    notes: >-
+      Stranded copper of 29.90 mm envelope (Table 1, Fig. 4a); wire count and
+      pitches are not tabulated. Modelled as the 630 mm2 area-equivalent solid
+      (28.32 mm) so the radial solution applies; the stranding voids up to
+      14.95 mm are merged into the loose conductor screen.
+    source: "[Janocha2024] Table 1 (Conductor 29.90 mm), Section 2.1 (630 mm2)"
+
+  - name: cu_conductor_screen
+    layer_type: cylindrical_offset
+    material: copper_tape_screen
+    n_cores: 3
+    r_offset_m: 0.04081
+    r_inner_m: 0.014161046158239446  # conductor envelope 14.95 mm less the stranding voids
+    r_outer_m: 0.01695         # 33.90 mm [Table 1]
+    structural: false
+    notes: "Copper tape per Table 1 (merged into the conductor body in the source model, Table 3); also spans the stranding voids"
+    source: "[Janocha2024] Table 1 (Conductor screen 33.90 mm, copper tape)"
+
+  - name: xlpe_insulation
+    layer_type: cylindrical_offset
+    material: xlpe_janocha2024
+    n_cores: 3
+    r_offset_m: 0.04081
+    r_inner_m: 0.01695
+    r_outer_m: 0.02885         # 57.70 mm [Table 1]
+    electrical:
+      permittivity_relative: 2.5     # [IEC60287-1-1] Table 3, XLPE
+      loss_factor_tan_delta: 0.001   # [IEC60287-1-1] Table 3, XLPE
+      vec_exponent_n: 15.0           # [Mazzanti2007] Table I (XLPE), as other templates
+      thermal_b_k: 12430
+      vec_synergism_b: 4420
+      field_threshold_kV_mm: 5.0
+    source: "[Janocha2024] Table 1 (Insulation 57.70 mm, XLPE); electrical [IEC60287-1-1]/[Mazzanti2007]"
+
+  - name: cu_wire_screen
+    layer_type: cylindrical_offset
+    material: copper_wire_screen
+    n_cores: 3
+    r_offset_m: 0.04081
+    r_inner_m: 0.02885
+    r_outer_m: 0.0320          # 64.00 mm [Table 1]
+    structural: false
+    notes: "Copper per Table 1; merged into the insulation body in the source model (Table 3)"
+    source: "[Janocha2024] Table 1 (Insulation screen 64.00 mm, copper)"
+
+  - name: mdpe_core_sheath
+    layer_type: cylindrical_offset
+    material: mdpe_janocha2024
+    n_cores: 3
+    r_offset_m: 0.04081
+    r_inner_m: 0.0320
+    r_outer_m: 0.0352          # 70.40 mm [Table 1]
+    source: "[Janocha2024] Table 1 (Conductor sheath 70.40 mm, MDPE)"
+
+  # --- Bundle layers (concentric about the cable axis) ---
+  - name: mdpe_filler
+    layer_type: cylindrical
+    material: mdpe_janocha2024
+    r_inner_m: 0.0
+    r_outer_m: 0.0759          # 151.80 mm [Table 1]
+    structural: false
+    notes: "Three MDPE filler bodies (lay 10 deg) as the interstitial annulus outside the cores"
+    source: "[Janocha2024] Table 1 (Filler 151.80 mm, MDPE)"
+
+  - name: ppy_bedding_inner
+    layer_type: cylindrical
+    material: ppy_janocha2024
+    r_inner_m: 0.0759
+    r_outer_m: 0.0763          # 152.60 mm [Table 1]
+    source: "[Janocha2024] Table 1 (Bedding 152.60 mm, PPY)"
+
+  - name: mdpe_inner_sheath
+    layer_type: cylindrical
+    material: mdpe_janocha2024
+    r_inner_m: 0.0763
+    r_outer_m: 0.08035         # 160.70 mm [Table 1]
+    source: "[Janocha2024] Table 1 (Inner sheath 160.70 mm, MDPE)"
+
+  - name: inner_armour
+    layer_type: helical
+    material: steel_janocha2024
+    n_wires: 139               # counted in [Janocha2024] Fig. 4a (66 kV model)
+    d_wire_m: 0.00315          # [Janocha2024] Section 2.1; Table 1 annulus 160.70-167.00 mm
+    r_helix_m: 0.081925        # inner-sheath radius + wire radius
+    lay_angle_deg: 13.0        # [Table 1]
+    lay_direction: left_hand   # ASSUMED; opposite to the outer layer [Section 2.1]
+    manufacturing_clamping:    # not published: zero, with MissingClampingStateWarning
+      armour_winding_stress_Pa: 0.0
+      basis: not_published
+      source: "[Janocha2024] states no armour winding stress or extrusion pressure; zero is this template's assumption (doc/template_66kv.md Section 4.2)"
+    fretting_sn: ""            # bulk fatigue only; no qualified steel contact-life law
+    bulk_sn: saevik_2011_flat_steel   # flooded annulus: seawater curve with CP (assumed)
+    source: "[Janocha2024] Table 1 (Armour inner 167.00 mm, 13 deg), Section 2.1 (3.15 mm), Fig. 4a (139 wires)"
+
+  - name: ppy_bedding_armour
+    layer_type: cylindrical
+    material: ppy_janocha2024
+    r_inner_m: 0.0835
+    r_outer_m: 0.0837          # 167.40 mm [Table 1]
+    source: "[Janocha2024] Table 1 (Bedding 167.40 mm, PPY)"
+
+  - name: outer_armour
+    layer_type: helical
+    material: steel_janocha2024
+    n_wires: 145               # counted in [Janocha2024] Fig. 4a (66 kV model)
+    d_wire_m: 0.00315
+    r_helix_m: 0.085275        # bedding radius + wire radius
+    lay_angle_deg: 10.0        # [Table 1]
+    lay_direction: right_hand  # ASSUMED; opposite to the inner layer [Section 2.1]
+    manufacturing_clamping:    # not published: zero, with MissingClampingStateWarning
+      armour_winding_stress_Pa: 0.0
+      basis: not_published
+      source: "[Janocha2024] states no armour winding stress or extrusion pressure; zero is this template's assumption (doc/template_66kv.md Section 4.2)"
+    fretting_sn: ""
+    bulk_sn: saevik_2011_flat_steel
+    source: "[Janocha2024] Table 1 (Armour outer 173.70 mm, 10 deg), Section 2.1 (3.15 mm), Fig. 4a (145 wires)"
+
+  - name: hdpe_outer_sheath
+    layer_type: cylindrical
+    material: hdpe_janocha2024
+    r_inner_m: 0.08685
+    r_outer_m: 0.0920          # 184.00 mm [Table 1]
+    source: "[Janocha2024] Table 1 (Outer sheath 184.00 mm, HDPE)"
+
+# Published properties of this cable (comparison targets, not inputs).
+aggregate_properties:
+  EA_fixed_MN: 658.0           # [Janocha2024] Section 2.4 / [IEATask49] Table 13; end-twist condition not stated
+  EI_min_kNm2: 42.47           # [IEATask49] Table 13, slipping stiffness at 50 kN
+  GJ_kNm2: 152.0               # [Janocha2024] Section 2.4, 50 kN tension
+  OD_mm: 184.0                 # [Janocha2024] Table 1
+  mass_kg_m: 55.76             # [IEATask49] Table 13, 630 mm2 row
+  EI_min_tension_kN: 50.0      # [IEATask49] Table 13: slipping stiffness at 50 kN
+  GJ_tension_kN: 50.0          # [Janocha2024] Section 2.4: 50 kN tension
+  MBL_kN: 659.0                # [IEATask49] Table 13, p. 35, 630 mm2 row
+  MBL_basis: "approximate: IEA Wind Task 49 design basis (Hall et al. 2024, NREL/TP-5000-89709), Table 13, p. 35, 630 mm2 row; the source gives MBL and MBR as approximate values to which safety factors need to be applied"

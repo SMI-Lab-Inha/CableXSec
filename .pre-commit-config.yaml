@@ -1,0 +1,40 @@
+# File: .pre-commit-config.yaml
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 Jae Hoon Seo, SMI Lab, Inha University
+#
+# Hooks run locally on every commit. CI does NOT invoke `pre-commit` itself --
+# python.yml runs the equivalent gates as explicit steps (ruff, mypy, release
+# metadata, tree audit). Keep this list and that workflow in sync so a hook that
+# passes locally is also enforced in CI.
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+        # Digitised and exported data files are kept byte-exact.
+        exclude: ^(validation/paper_data/|tests/data/)
+      - id: end-of-file-fixer
+        exclude: ^(validation/paper_data/|tests/data/)
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: check-added-large-files
+        args: [--maxkb=2000]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.11
+    hooks:
+      - id: ruff-check
+        files: ^(cablexsec|tests|examples|validation|release)/.*\.py$
+      - id: ruff-format
+        files: ^(cablexsec|tests|examples|validation|release)/.*\.py$
+
+  - repo: local
+    hooks:
+      - id: release-metadata
+        name: release metadata
+        entry: python release/check_release_metadata.py
+        # Let pre-commit provide the interpreter. This avoids relying on a
+        # system-level `python` command, which is commonly absent on Windows.
+        language: python
+        pass_filenames: false

@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 Jae Hoon Seo, SMI Lab, Inha University
+# Conda environment for CableXSec development.
+#
+# Provides Python and the developer tools. After:
+#
+#     conda env create -f environment.yml
+#     conda activate cablexsec
+#     python -m pip install -e ".[dev,fast,contact]"
+#     python -m pytest -q
+#
+# Optional: activate the local formatting/commit hooks:
+#     pre-commit install
+
+name: cablexsec
+channels:
+  - conda-forge
+  - nodefaults
+
+dependencies:
+  # The supported range; pyproject.toml declares the same requires-python.
+  - python>=3.11,<3.13
+  - pip
+  # Runtime dependencies (pip installs them as well; listed so that the conda solver
+  # provides consistent binary builds).
+  - numpy>=1.24
+  - scipy>=1.10
+  - matplotlib>=3.7
+  - pandas>=2.0
+  - pydantic>=2
+  - pyyaml>=6.0
+  # Optional compiled kernels (extra `fast`).
+  - numba>=0.65
+  # Developer tools.
+  - pre-commit
+  - pytest
+  - python-build
+  - twine

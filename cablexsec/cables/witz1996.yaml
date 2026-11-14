@@ -1,0 +1,113 @@
+---
+# Witz (1996) ISSC case-study 2.5-inch non-bonded flexible pipe — PUBLIC.
+#
+# Layer geometry and polymer moduli: Witz, Marine Structures 9 (1996) 885-904,
+# Table 2; the same data in Ramos and Pesce, J. Offshore Mech. Arct. Eng. 126
+# (2004) 141-146, Table 3, which adds the outer-armour lay direction (right
+# hand) and the assumed steel moduli and carcass lay angle (Section 4).
+# Measured loops: Witz Figs 5 (0 bar) and 6 (300 bar), digitised in
+# validation/paper_data/witz1996_fig*_*.csv. Benchmark rows WITZ-EI and WITZ-ID
+# in doc/benchmarks.md.
+#
+# Mapping (stated, not hidden):
+# * HelicalLayer has only a round wire section (gap G1). Every strip is an
+#   AREA-EQUIVALENT round wire, d = sqrt(4 A / pi): axial stiffness, stick
+#   stiffness and friction per wire are kept; the individual bending inertia
+#   of the 6 x 3 mm strip is not. The round wires overlap the neighbouring
+#   tapes radially, so the solved radial route rejects this definition; it
+#   runs on a thickness-wire variant (doc/benchmarks.md, Witz section).
+# * The interlocked carcass and the Zeta pressure armour have no layer type
+#   (gap G2): near-hoop helices with the tabulated strip area (carcass 1
+#   strip at 87.5 deg; Zeta 2 strips at 85.5 deg, 2 pi R cos(a) / w = 2.3).
+# * The anti-friction and fabric tapes are isotropic annuli (gap G3), as all
+#   ISSC participants except one and as Ramos and Pesce.
+# * Helix radius = mid-thickness of the tabulated layer.
+#
+# IMPORTANT — the initial contact state was not reported. The initial
+# external pressure below is IDENTIFIED by CableXSec on the 0-bar loop width
+# at zero curvature with mu = 0.10 declared (the value used for this pipe by
+# Kraincanic and Kebadze 2001, Yun et al. 2020 and Chu et al. 2026). The
+# 0-bar loop width is therefore not a prediction; the 300-bar loop is. One
+# bending loop identifies only the combination of mu and this pressure.
+cable:
+  name: "Witz 1996 ISSC 2.5-inch flexible pipe"
+  description: "Eight-layer non-bonded flexible riser, ISSC Committee V7 case study"
+  manufacturer: "Public (pipe data published in Witz 1996)"
+  source_document: "Witz, Marine Structures 9 (1996) 885-904, Table 2; Ramos and Pesce, JOMAE 126 (2004) 141-146, Table 3"
+
+initial_state:
+  external_pressure_Pa: 1037264.0
+  identification: identified
+  source: "Identified on [Witz1996] Fig. 5 loop width at zero curvature (552.7 N m), mu = 0.10, bounded chain; scripts/run_validation.py WITZ-ID"
+
+layers:
+  - name: carcass
+    layer_type: helical
+    material: aisi304_witz1996
+    n_wires: 1
+    d_wire_m: 0.0049956        # sqrt(4 * 19.6 mm2 / pi), [Witz1996] Table 2
+    r_helix_m: 0.03335         # ID 63.2/2 + 3.5/2 mm
+    lay_angle_deg: 87.5        # [RamosPesce2004] Sec. 4
+    lay_direction: left_hand
+    source: "[Witz1996] Table 2 layer 1; equivalent round wire"
+
+  - name: pressure_sheath
+    layer_type: cylindrical
+    material: pa12_grilamid_witz1996
+    r_inner_m: 0.0351          # ID 70.2 mm
+    r_outer_m: 0.0400          # + 4.9 mm
+    source: "[Witz1996] Table 2 layer 2"
+
+  - name: zeta_pressure_armour
+    layer_type: helical
+    material: fi15_steel_witz1996
+    n_wires: 2
+    d_wire_m: 0.0080977        # sqrt(4 * 51.5 mm2 / pi)
+    r_helix_m: 0.04315         # ID 80.1/2 + 6.2/2 mm
+    lay_angle_deg: 85.5
+    lay_direction: left_hand
+    source: "[Witz1996] Table 2 layer 3; 2 strips; equivalent round wire"
+
+  - name: antifriction_tape_inner
+    layer_type: cylindrical
+    material: pa11_rilsan_witz1996
+    r_inner_m: 0.04625         # ID 92.5 mm
+    r_outer_m: 0.04775
+    source: "[Witz1996] Table 2 layer 4 (84.2 deg tape as isotropic annulus)"
+
+  - name: inner_tensile_armour
+    layer_type: helical
+    material: fi41_steel_witz1996
+    n_wires: 40
+    d_wire_m: 0.0047873        # sqrt(4 * 6 * 3 mm2 / pi)
+    r_helix_m: 0.04925         # ID 95.5/2 + 3.0/2 mm
+    lay_angle_deg: 35.0
+    lay_direction: left_hand
+    source: "[Witz1996] Table 2 layer 5: 40 strips 6 x 3 mm, 35 deg LH; round equivalent"
+
+  - name: antifriction_tape_outer
+    layer_type: cylindrical
+    material: pa11_rilsan_witz1996
+    r_inner_m: 0.05075         # ID 101.5 mm
+    r_outer_m: 0.05225
+    source: "[Witz1996] Table 2 layer 6 (84.7 deg tape as isotropic annulus)"
+
+  - name: outer_tensile_armour
+    layer_type: helical
+    material: fi41_steel_witz1996
+    n_wires: 44
+    d_wire_m: 0.0047873
+    r_helix_m: 0.05375         # ID 104.5/2 + 3.0/2 mm
+    lay_angle_deg: 35.0
+    lay_direction: right_hand  # [RamosPesce2004] Table 3; Witz Table 2 prints LH
+    source: "[Witz1996] Table 2 layer 7: 44 strips 6 x 3 mm, 35 deg; RH per [RamosPesce2004] Table 3"
+
+  - name: fabric_tape
+    layer_type: cylindrical
+    material: fabric_tape_witz1996
+    r_inner_m: 0.05525         # ID 110.5 mm
+    r_outer_m: 0.05575         # OD 111.5 mm
+    source: "[Witz1996] Table 2 layer 8 (transverse stiffness 300 MPa)"
+
+aggregate_properties:
+  OD_mm: 111.5                 # [Witz1996] Table 2

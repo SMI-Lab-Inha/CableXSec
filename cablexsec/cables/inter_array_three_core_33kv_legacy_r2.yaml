@@ -1,0 +1,128 @@
+---
+# Three-core inter-array dynamic cable — PUBLIC representative template.
+#
+# Generic, public geometry for a 33 kV three-core wet-design dynamic
+# inter-array cable in trefoil: three offset cores (solid Cu + XLPE + screen +
+# core sheath), PP filler, HDPE bedding, double steel armour, HDPE outer sheath.
+# Round representative numbers for a topology integration test.
+cable:
+  name: "Three-core inter-array 33 kV (public representative)"
+  description: "33 kV three-core dynamic inter-array cable, polymer sheath"
+  manufacturer: "Public representative template"
+  source_document: "Representative public geometry (topology template)"
+  voltage_kV: 33
+  design_life_years: 25
+  MBR_dynamic_m: 3.0
+
+environment:
+  ambient_C: 15.0
+  T4_external_Km_W: 0.5
+  frequency_Hz: 50.0
+  source: "Representative seabed boundary (topology template)"
+
+layers:
+
+  - name: cu_conductor
+    layer_type: cylindrical_offset
+    material: copper_stranded
+    n_cores: 3
+    r_offset_m: 0.026          # trefoil pitch-circle radius
+    r_inner_m: 0.0
+    r_outer_m: 0.0097720502380584  # exactly 300 mm^2 in the aligned equivalent
+    conductor_area_mm2: 300.0
+    construction: aligned_solid_equivalent
+    notes: "Representative aligned conductor; no resolved strand lay or compaction"
+    source: "Representative"
+
+  - name: xlpe_insulation
+    layer_type: cylindrical_offset
+    material: xlpe_qiao2025
+    n_cores: 3
+    r_offset_m: 0.026
+    r_inner_m: 0.01077
+    r_outer_m: 0.01877
+    electrical:
+      permittivity_relative: 2.3
+      loss_factor_tan_delta: 0.0004
+      vec_exponent_n: 15.0
+      thermal_b_k: 12430
+      vec_synergism_b: 4420
+      field_threshold_kV_mm: 5.0
+    source: "Representative; electrical [Mazzanti2007] Table I (XLPE)"
+
+  - name: cu_screen
+    layer_type: cylindrical_offset
+    material: copper_tape_screen
+    n_cores: 3
+    r_offset_m: 0.026
+    r_inner_m: 0.01977
+    r_outer_m: 0.02047
+    structural: false
+    source: "Representative"
+
+  - name: hdpe_core_sheath
+    layer_type: cylindrical_offset
+    material: hdpe
+    n_cores: 3
+    r_offset_m: 0.026
+    r_inner_m: 0.02047
+    r_outer_m: 0.02247
+    source: "Representative"
+
+  - name: pp_filler
+    layer_type: cylindrical
+    material: pp_filler
+    r_inner_m: 0.0
+    r_outer_m: 0.0485
+    structural: false
+    notes: "Equivalent annular filler approximation"
+    source: "Representative"
+
+  - name: hdpe_bedding
+    layer_type: cylindrical
+    material: hdpe
+    r_inner_m: 0.0485
+    r_outer_m: 0.0505
+    source: "Representative"
+
+  - name: inner_armour
+    layer_type: helical
+    material: galvanised_steel_armour
+    n_wires: 76
+    d_wire_m: 0.005
+    r_helix_m: 0.0530
+    lay_angle_deg: 22.0
+    lay_direction: right_hand
+    manufacturing_clamping:
+      initial_contact_pressure_Pa: 2.0e6
+      basis: representative
+      source: "Representative pressure jump P0 of this demonstration template; not a manufacturer or published value"
+    fretting_sn: ""  # Bulk fatigue only; no qualified steel contact-life law.
+    bulk_sn: saevik_2011_flat_steel
+    source: "Representative"
+
+  - name: outer_armour
+    layer_type: helical
+    material: galvanised_steel_armour
+    n_wires: 84
+    d_wire_m: 0.005
+    r_helix_m: 0.0580
+    lay_angle_deg: 22.0
+    lay_direction: left_hand
+    manufacturing_clamping:
+      initial_contact_pressure_Pa: 2.0e6
+      basis: representative
+      source: "Representative pressure jump P0 of this demonstration template; not a manufacturer or published value"
+    fretting_sn: ""  # Bulk fatigue only; no qualified steel contact-life law.
+    bulk_sn: saevik_2011_flat_steel
+    source: "Representative"
+
+  - name: hdpe_outer_sheath
+    layer_type: cylindrical
+    material: hdpe
+    r_inner_m: 0.0605
+    r_outer_m: 0.0645
+    source: "Representative"
+
+aggregate_properties:
+  OD_mm: 129.0

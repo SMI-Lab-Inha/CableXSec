@@ -1,0 +1,179 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 Jae Hoon Seo, SMI Lab, Inha University
+name: python
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+concurrency:
+  group: python-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # One thread per process: the suite is numerically heavy and runs serially.
+  OMP_NUM_THREADS: "1"
+  MKL_NUM_THREADS: "1"
+  OPENBLAS_NUM_THREADS: "1"
+  NUMBA_NUM_THREADS: "1"
+  MPLBACKEND: Agg
+  PYTHONUTF8: "1"
+
+jobs:
+  lint:
+    name: Lint, type check and release metadata
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install the package and development tools
+        run: python -m pip install --upgrade pip ".[dev,fast,contact]"
+      - name: Ruff
+        run: |
+          python -m ruff check cablexsec tests examples validation release
+          python -m ruff format --check cablexsec tests examples validation release
+      - name: Mypy (strict)
+        run: python -m mypy
+      - name: Check release metadata
+        run: python release/check_release_metadata.py
+      - name: Audit the tracked tree
+        run: python release/audit_release_tree.py --tree .
+
+  test:
+    name: Python ${{ matrix.python-version }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ['3.11', '3.12']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install the package and test dependencies
+        run: python -m pip install --upgrade pip ".[dev,fast,contact]"
+      - name: Run the test suite
+        run: python -m pytest -q -p no:cacheprovider
+
+  reference-path:
+    name: Tests without the compiled kernels
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      CABLEXSEC_DISABLE_NUMBA: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install the package without numba
+        run: python -m pip install --upgrade pip ".[dev,contact]"
+      - name: Run the test suite on the NumPy reference path
+        run: python -m pytest -q -p no:cacheprovider
+
+  coverage:
+    name: Coverage and validation report
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install the package and test dependencies
+        run: python -m pip install --upgrade pip ".[dev,fast,contact]"
+      - name: Run the whole suite with line and branch coverage, kernels traced
+        # Functions compiled by numba run outside the coverage tracer, so the kernel
+        # tests run a second time with NUMBA_DISABLE_JIT=1 and are appended.
+        run: python release/check_coverage.py --fail-under 95
+      - name: The committed validation report is current
+        # The script exits non-zero while registered benchmark rows fail; the step
+        # fails only if the committed report differs from the live calculation.
+        shell: bash
+        run: |
+          set +e
+          python validation/scripts/run_validation.py --check 2>&1 | tee validation-check.txt
+          status=${PIPESTATUS[0]}
+          if grep -q "validation artefacts are stale" validation-check.txt; then exit 1; fi
+          echo "run_validation exit status ${status} (registered FAIL rows are expected)"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: cablexsec-coverage
+          path: coverage.xml
+          if-no-files-found: ignore
+
+  distribution:
+    name: Build Python distributions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --upgrade pip build twine
+      - name: Build reproducible distributions
+        shell: bash
+        run: |
+          export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
+          python -m build --outdir dist
+      - run: python -m twine check dist/*
+      - name: Install and smoke-test the wheel in a clean environment
+        shell: bash
+        run: |
+          python -m venv wheel-test
+          wheel-test/bin/python -m pip install dist/*.whl
+          version="$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')"
+          PATH="$PWD/wheel-test/bin:$PATH" wheel-test/bin/python release/smoke_test_wheel.py --version "$version"
+          wheel-test/bin/cablexsec-batch --help
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cablexsec-python-distributions
+          path: dist/*
+          if-no-files-found: error
+
+  documentation:
+    name: Sphinx documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: doc/requirements.txt
+      - name: Install documentation dependencies
+        run: python -m pip install --upgrade pip -r doc/requirements.txt
+      - name: Build documentation with warnings as errors
+        run: sphinx-build -W --keep-going -b html doc doc/_build/html

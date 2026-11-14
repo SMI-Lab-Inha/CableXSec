@@ -1,0 +1,104 @@
+{
+  "calibration": "Fig. 16a only; measured curvature path; no offset or moment rescaling",
+  "withheld_validation": "Fig. 16b--f; no use in parameter selection",
+  "parameters": "effective clamping-pressure and shear-support-rigidity multipliers",
+  "work_definition": "stored-energy change plus friction at inserted complete-cycle boundaries; original measured points retained for RMSE",
+  "search_bounds": {
+    "pressure_factor": [
+      0.01,
+      100.0
+    ],
+    "support_factor": [
+      0.001,
+      100.0
+    ]
+  },
+  "bounds_status": "numerical search intervals, not physical manufacturing bounds",
+  "solutions": [
+    {
+      "mu": 0.1,
+      "effective_pressure_factor": 1.3584479657169783,
+      "effective_support_rigidity_factor": 0.2875795136002405,
+      "calibration_range_rmse_pct": 4.56606033784375,
+      "starts_final_costs": [
+        1.3676882997792335,
+        1.3676885686257827,
+        1.3676882997792332
+      ],
+      "converged": true,
+      "jacobian_singular_values": [
+        4.9040891871249945,
+        1.7382101473415958
+      ],
+      "note": "two log-parameter sensitivities at fixed friction, not a confidence interval"
+    },
+    {
+      "mu": 0.15,
+      "effective_pressure_factor": 0.8969365689745566,
+      "effective_support_rigidity_factor": 0.28770050381591106,
+      "calibration_range_rmse_pct": 4.563288675461656,
+      "starts_final_costs": [
+        1.3660283919351373,
+        1.3660283919351373,
+        21.861997133262772
+      ],
+      "converged": true,
+      "jacobian_singular_values": [
+        4.902564694100075,
+        1.7365244741126749
+      ],
+      "note": "two log-parameter sensitivities at fixed friction, not a confidence interval"
+    },
+    {
+      "mu": 0.2,
+      "effective_pressure_factor": 0.6661935292845095,
+      "effective_support_rigidity_factor": 0.2879638494797128,
+      "calibration_range_rmse_pct": 4.560485742192209,
+      "starts_final_costs": [
+        1.3643507814308409,
+        1.3643507979200158,
+        21.861997133262772
+      ],
+      "converged": true,
+      "jacobian_singular_values": [
+        4.900767794706554,
+        1.7328179205913212
+      ],
+      "note": "two log-parameter sensitivities at fixed friction, not a confidence interval"
+    },
+    {
+      "mu": 0.25,
+      "effective_pressure_factor": 0.5277919511488226,
+      "effective_support_rigidity_factor": 0.28813173863125446,
+      "calibration_range_rmse_pct": 4.557641512284805,
+      "starts_final_costs": [
+        1.3626496955737475,
+        1.3626495077353131,
+        21.861997133262772
+      ],
+      "converged": true,
+      "jacobian_singular_values": [
+        4.899750544535923,
+        1.731762308597543
+      ],
+      "note": "two log-parameter sensitivities at fixed friction, not a confidence interval"
+    },
+    {
+      "mu": 0.3,
+      "effective_pressure_factor": 0.435530565413315,
+      "effective_support_rigidity_factor": 0.2884682108524705,
+      "calibration_range_rmse_pct": 4.554758345714608,
+      "starts_final_costs": [
+        1.3609260273634107,
+        1.3609260273634107,
+        21.861997133262772
+      ],
+      "converged": true,
+      "jacobian_singular_values": [
+        4.897867331295383,
+        1.7277974422837252
+      ],
+      "note": "two log-parameter sensitivities at fixed friction, not a confidence interval"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "case": "dlc12_U10.74_seed104729_p4800",
+  "native_sha256": "ee3408e45631c4410622d6ca46d521695a9b2f01cf6da8210c32fd5d33457fa7",
+  "local_summary_sha256": "eae49371912ae3e29ba920b2c17903c693e60c8df0c5ea62b25320ea3cb2c3a0",
+  "supplementary_recoveries": [
+    {
+      "directory": "selected_arc263p478_32",
+      "summary_sha256": "861202a2ebac8d43cf0cf8aed08c631873085e8aeb77807dd7fa99af7c9c6c12",
+      "simulation_sha256": "ee3408e45631c4410622d6ca46d521695a9b2f01cf6da8210c32fd5d33457fa7",
+      "regions": [
+        "arc_263p478"
+      ]
+    }
+  ],
+  "retained_period_s": [
+    0.0,
+    3600.0
+  ],
+  "n_fibres": 32,
+  "component_convention": "strain-gradient x = native rotation curvature y; y = -native x",
+  "scope": "one operating hour; fixed material-point DEL at each section, not six-seed statistics"
+}

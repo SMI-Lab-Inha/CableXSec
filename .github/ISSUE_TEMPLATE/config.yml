@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: Apache-2.0
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://cablexsec.readthedocs.io
+    about: Installation, the cable definition, the analysis guides, the benchmarks and the API.
+  - name: Security vulnerability
+    url: https://github.com/SMI-Lab-Inha/CableXSec/security/advisories/new
+    about: Report security issues privately, never in a public issue.

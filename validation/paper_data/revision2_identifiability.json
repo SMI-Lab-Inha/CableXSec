@@ -1,0 +1,153 @@
+{
+  "range_a_fits_at_fixed_mu": [
+    {
+      "mu": 0.1,
+      "pressure_factor": 1.3584479657169783,
+      "support_factor": 0.2875795136002405,
+      "mu_times_pressure": 0.08150687794301871,
+      "fit_nrmse_pct": 4.56606033784375,
+      "jacobian_condition_number": 2.8213442400076123
+    },
+    {
+      "mu": 0.15,
+      "pressure_factor": 0.8969365689745566,
+      "support_factor": 0.28770050381591106,
+      "mu_times_pressure": 0.08072429120771009,
+      "fit_nrmse_pct": 4.563288675461656,
+      "jacobian_condition_number": 2.823205066893846
+    },
+    {
+      "mu": 0.2,
+      "pressure_factor": 0.6661935292845095,
+      "support_factor": 0.2879638494797128,
+      "mu_times_pressure": 0.07994322351414114,
+      "fit_nrmse_pct": 4.560485742192209,
+      "jacobian_condition_number": 2.828207012675732
+    },
+    {
+      "mu": 0.25,
+      "pressure_factor": 0.5277919511488226,
+      "support_factor": 0.28813173863125446,
+      "mu_times_pressure": 0.0791687926723234,
+      "fit_nrmse_pct": 4.557641512284805,
+      "jacobian_condition_number": 2.829343565344112
+    },
+    {
+      "mu": 0.3,
+      "pressure_factor": 0.435530565413315,
+      "support_factor": 0.2884682108524705,
+      "mu_times_pressure": 0.07839550177439669,
+      "fit_nrmse_pct": 4.554758345714608,
+      "jacobian_condition_number": 2.834746256379221
+    }
+  ],
+  "mu_times_pressure_relative_spread_pct": 3.9688197641438716,
+  "withheld_ranges_by_mu": {
+    "0.10": {
+      "withheld_nrmse_pct_range": [
+        4.507140802061235,
+        7.045261070940036
+      ],
+      "withheld_work_difference_pct_range": [
+        -35.92969971894567,
+        -8.872322800908162
+      ]
+    },
+    "0.15": {
+      "withheld_nrmse_pct_range": [
+        4.5057685641889735,
+        7.043931965240322
+      ],
+      "withheld_work_difference_pct_range": [
+        -35.92375324475202,
+        -8.86831446937222
+      ]
+    },
+    "0.20": {
+      "withheld_nrmse_pct_range": [
+        4.504530006571737,
+        7.042790286147992
+      ],
+      "withheld_work_difference_pct_range": [
+        -35.91749470840736,
+        -8.858973928255054
+      ]
+    },
+    "0.25": {
+      "withheld_nrmse_pct_range": [
+        4.503141787484839,
+        7.041466613708883
+      ],
+      "withheld_work_difference_pct_range": [
+        -35.9112001213291,
+        -8.853231773693294
+      ]
+    },
+    "0.30": {
+      "withheld_nrmse_pct_range": [
+        4.50190991347269,
+        7.040356806669487
+      ],
+      "withheld_work_difference_pct_range": [
+        -35.90450807969088,
+        -8.841116858931407
+      ]
+    }
+  },
+  "prescribed_sensitivity_at_0p10": {
+    "stick_stiffness_range_Nm2": [
+      33472.7042673,
+      89230.8340013
+    ],
+    "peak_moment_range_Nm": [
+      403.908174407,
+      795.124155526
+    ],
+    "cycle_work_range_J_m": [
+      18.4148728129,
+      166.022431086
+    ]
+  },
+  "same_product_cases_support_1": {
+    "0.0225": {
+      "peak_moment_spread_pct": 0.1613571944188985,
+      "work_spread_pct": 0.9676738698738863,
+      "cases": 2
+    },
+    "0.03": {
+      "peak_moment_spread_pct": 0.410823507171143,
+      "work_spread_pct": 1.938620155387949,
+      "cases": 2
+    },
+    "0.0375": {
+      "peak_moment_spread_pct": 0.7374603104171928,
+      "work_spread_pct": 2.9123030807573613,
+      "cases": 2
+    },
+    "0.045": {
+      "peak_moment_spread_pct": 1.1324309404820099,
+      "work_spread_pct": 3.888134911347141,
+      "cases": 4
+    },
+    "0.0675": {
+      "peak_moment_spread_pct": 1.120177351758067,
+      "work_spread_pct": 2.8586978569949517,
+      "cases": 2
+    },
+    "0.075": {
+      "peak_moment_spread_pct": 0.3967730289360816,
+      "work_spread_pct": 0.9385905945587414,
+      "cases": 2
+    },
+    "0.09": {
+      "peak_moment_spread_pct": 0.8878754644732867,
+      "work_spread_pct": 1.866855969233705,
+      "cases": 2
+    },
+    "0.1125": {
+      "peak_moment_spread_pct": 0.5004000302336387,
+      "work_spread_pct": 0.9129255965063532,
+      "cases": 2
+    }
+  }
+}

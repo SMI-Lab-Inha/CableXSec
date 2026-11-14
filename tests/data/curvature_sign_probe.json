@@ -1,0 +1,141 @@
+{
+ "description": "Static sign probe of the global line model (17 October 2026). Line in air, 10 m, OD 0.2 m, ID 0.15 m, EI 50 kN m2, EA 1e6 kN, 0.1 t/m, 0.25 m segments, threadCount 1. 'sag': both ends fixed and pinned, End B 9.5 m from End A, probe at mid-span (arc 5 m), concave up. 'cantilever': End A clamped (infinite bending stiffness, declination 90 deg, horizontal), End B free, probe at arc 1 m, hogging (concave down). gamma is End A gamma, which turns the line's local x/y axes. Results: x/y curvature, x/y bend moment, wall tension, ZZ stress at the outer fibre for theta = 0..315 deg (theta from local x towards local y), and d2z = z(s-1)+z(s+1)-2z(s) (positive concave up).",
+ "source": "static analyses of four global line models; no global solver is needed to use this file",
+ "units": {
+  "curvature": "rad/m",
+  "moment": "kN m",
+  "tension": "kN",
+  "stress": "kPa",
+  "length": "m"
+ },
+ "cases": [
+  {
+   "case": "sag",
+   "gamma_deg": 0.0,
+   "arc_m": 5.0,
+   "x_curvature_1_m": 0.0,
+   "y_curvature_1_m": -0.13603222175947388,
+   "x_bend_moment_kNm": 0.0,
+   "y_bend_moment_kNm": -6.801611087973689,
+   "wall_tension_kN": 3.2874560267348585,
+   "theta_deg": [
+    0.0,
+    45.0,
+    90.0,
+    135.0,
+    180.0,
+    225.0,
+    270.0,
+    315.0
+   ],
+   "zz_stress_outer_kPa": [
+    12907.64412947534,
+    9197.13804825465,
+    239.1839437038155,
+    -8718.770160847022,
+    -12429.276242067712,
+    -8718.770160847023,
+    239.1839437038124,
+    9197.13804825465
+   ],
+   "theta_max_tension_deg": 0.0,
+   "concavity_d2z_m": 0.1351678799247651
+  },
+  {
+   "case": "sag",
+   "gamma_deg": 90.0,
+   "arc_m": 5.0,
+   "x_curvature_1_m": -0.1360322217594735,
+   "y_curvature_1_m": -8.329571247932116e-18,
+   "x_bend_moment_kNm": -6.8016110879736775,
+   "y_bend_moment_kNm": -4.1647856239660595e-16,
+   "wall_tension_kN": 3.2874560267348585,
+   "theta_deg": [
+    0.0,
+    45.0,
+    90.0,
+    135.0,
+    180.0,
+    225.0,
+    270.0,
+    315.0
+   ],
+   "zz_stress_outer_kPa": [
+    239.1839437038155,
+    -8718.770160847005,
+    -12429.276242067692,
+    -8718.770160847007,
+    239.1839437038124,
+    9197.138048254634,
+    12907.64412947532,
+    9197.138048254637
+   ],
+   "theta_max_tension_deg": 270.0,
+   "concavity_d2z_m": 0.1351678799247651
+  },
+  {
+   "case": "cantilever",
+   "gamma_deg": 0.0,
+   "arc_m": 1.0,
+   "x_curvature_1_m": 0.0,
+   "y_curvature_1_m": 0.37165246459634993,
+   "x_bend_moment_kNm": 0.0,
+   "y_bend_moment_kNm": 18.582623229817496,
+   "wall_tension_kN": 4.366414214196368,
+   "theta_deg": [
+    0.0,
+    45.0,
+    90.0,
+    135.0,
+    180.0,
+    225.0,
+    270.0,
+    315.0
+   ],
+   "zz_stress_outer_kPa": [
+    -34293.706041509104,
+    -24156.264249051044,
+    317.68521406905654,
+    24791.63467718915,
+    34929.076469647225,
+    24791.634677189162,
+    317.685214069065,
+    -24156.264249051033
+   ],
+   "theta_max_tension_deg": 180.0,
+   "concavity_d2z_m": -0.352100383287933
+  },
+  {
+   "case": "cantilever",
+   "gamma_deg": 90.0,
+   "arc_m": 1.0,
+   "x_curvature_1_m": 0.37165246459634993,
+   "y_curvature_1_m": 2.275715005815725e-17,
+   "x_bend_moment_kNm": 18.582623229817496,
+   "y_bend_moment_kNm": 1.1378575029078626e-15,
+   "wall_tension_kN": 4.366414214196368,
+   "theta_deg": [
+    0.0,
+    45.0,
+    90.0,
+    135.0,
+    180.0,
+    225.0,
+    270.0,
+    315.0
+   ],
+   "zz_stress_outer_kPa": [
+    317.68521406905654,
+    24791.63467718915,
+    34929.076469647225,
+    24791.63467718916,
+    317.685214069065,
+    -24156.264249051037,
+    -34293.706041509104,
+    -24156.264249051048
+   ],
+   "theta_max_tension_deg": 90.0,
+   "concavity_d2z_m": -0.352100383287933
+  }
+ ]
+}

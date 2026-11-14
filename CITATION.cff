@@ -1,0 +1,56 @@
+cff-version: 1.2.0
+message: >-
+  If you use CableXSec in academic work, please cite this software entry with
+  the version you used. The journal article that describes the method is under
+  review; its reference will be added here when it is published.
+title: "CableXSec: Component-resolved local cross-section mechanics of dynamic power cables"
+type: software
+abstract: >-
+  CableXSec is an open-source Python library for the local (cross-section)
+  mechanics of dynamic power cables. From a cable definition and a section
+  load history it computes the axial, torsional and bending stiffness, the
+  hysteretic moment-curvature response of helical armour with frictional slip,
+  wire and component stresses, contact pressures and slip, temperatures, and
+  fatigue damage at fixed material points of every wire. It reads global
+  results of CableDyn, RIFLEX and CSV exports and turns them into fatigue damage
+  of the armour, the conductor and the sheaths.
+authors:
+  - family-names: Seo
+    given-names: Jae Hoon
+    email: jaehoon.seo@inha.ac.kr
+    affiliation: "Department of Naval Architecture and Ocean Engineering, Inha University, Incheon, Republic of Korea"
+    orcid: "https://orcid.org/0000-0003-1047-2119"
+repository-code: "https://github.com/SMI-Lab-Inha/CableXSec"
+url: "https://github.com/SMI-Lab-Inha/CableXSec"
+license: Apache-2.0
+version: 0.1.0
+date-released: 2026-11-14
+keywords:
+  - dynamic power cable
+  - cross-section mechanics
+  - helical armour
+  - frictional slip
+  - bending hysteresis
+  - wire fatigue
+  - fretting
+  - floating offshore wind
+references:
+  - type: article
+    title: >-
+      CableDyn: Curvature-resolving implicit finite-element analysis of mooring
+      lines and dynamic power cables for floating offshore wind
+    authors:
+      - family-names: Seo
+        given-names: Jae Hoon
+      - family-names: Lim
+        given-names: Junsoo
+      - family-names: Shim
+        given-names: Kyusung
+      - family-names: Song
+        given-names: Jinwoo
+    journal: Ocean Engineering
+    year: 2026
+    volume: 368
+    issue: "Part 2"
+    start: "128332"
+    doi: "10.1016/j.oceaneng.2026.128332"

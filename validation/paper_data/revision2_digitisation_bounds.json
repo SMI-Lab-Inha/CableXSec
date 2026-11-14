@@ -1,0 +1,140 @@
+[
+  {
+    "range": "a",
+    "curvature_halfwidth_1_m": 0.0003457531251694777,
+    "moment_halfwidth_Nm": 2.7660250013558216,
+    "loading_rmse_Nm": 71.44226482079101,
+    "loading_rmse_bound_Nm": 16.585587080263252,
+    "unloading_rmse_Nm": 76.98428901544321,
+    "unloading_rmse_bound_Nm": 6.617417754880215,
+    "all_rmse_Nm": 73.97739570526628,
+    "all_rmse_bound_Nm": 13.092884575034628,
+    "moment_range_Nm": 644.37472748,
+    "nrmse_pct": 11.480493034631369,
+    "nrmse_bound_pct": 2.0318743142267324,
+    "measured_work_J_m": 20.1952478874,
+    "measured_work_bound_J_m": 0.9438535718937899,
+    "measured_work_bound_pct": 4.673641923864023,
+    "measured_cycle_work_spread_J_m": [
+      19.6807486005,
+      20.7683694704
+    ],
+    "calculated_work_J_m": 30.7669052545,
+    "work_difference_pct": 52.3472523141
+  },
+  {
+    "range": "b",
+    "curvature_halfwidth_1_m": 0.0006914668300920986,
+    "moment_halfwidth_Nm": 4.149037502033733,
+    "loading_rmse_Nm": 26.462453553685307,
+    "loading_rmse_bound_Nm": 9.37906182644601,
+    "unloading_rmse_Nm": 37.6767613354403,
+    "unloading_rmse_bound_Nm": 9.559654489694907,
+    "all_rmse_Nm": 32.527959075618384,
+    "all_rmse_bound_Nm": 9.469328760996456,
+    "moment_range_Nm": 1028.224298498,
+    "nrmse_pct": 3.163508110354353,
+    "nrmse_bound_pct": 0.9209399908978005,
+    "measured_work_J_m": 62.3353706459,
+    "measured_work_bound_J_m": 3.0343757698176383,
+    "measured_work_bound_pct": 4.8678234177103095,
+    "measured_cycle_work_spread_J_m": [
+      62.2316888028,
+      62.4390524891
+    ],
+    "calculated_work_J_m": 70.3598427256,
+    "work_difference_pct": 12.8730638745
+  },
+  {
+    "range": "c",
+    "curvature_halfwidth_1_m": 0.0003630202117920018,
+    "moment_halfwidth_Nm": 2.7660250013558216,
+    "loading_rmse_Nm": 65.78653858818075,
+    "loading_rmse_bound_Nm": 7.6898701409969625,
+    "unloading_rmse_Nm": 77.06368889664185,
+    "unloading_rmse_bound_Nm": 7.190116179037891,
+    "all_rmse_Nm": 71.19104456809826,
+    "all_rmse_bound_Nm": 7.464368423722427,
+    "moment_range_Nm": 645.866869136,
+    "nrmse_pct": 11.022557119756453,
+    "nrmse_bound_pct": 1.1557131632572808,
+    "measured_work_J_m": 20.3668522145,
+    "measured_work_bound_J_m": 0.9636212560153228,
+    "measured_work_bound_pct": 4.731321491738822,
+    "measured_cycle_work_spread_J_m": [
+      20.0559119931,
+      20.5996261209
+    ],
+    "calculated_work_J_m": 30.5952945307,
+    "work_difference_pct": 50.2210268356
+  },
+  {
+    "range": "d",
+    "curvature_halfwidth_1_m": 0.0003630201172967561,
+    "moment_halfwidth_Nm": 2.7660247613406574,
+    "loading_rmse_Nm": 68.7758692220855,
+    "loading_rmse_bound_Nm": 7.462046736094207,
+    "unloading_rmse_Nm": 56.024408583455234,
+    "unloading_rmse_bound_Nm": 7.107199582036256,
+    "all_rmse_Nm": 62.02507654786454,
+    "all_rmse_bound_Nm": 7.26729322584747,
+    "moment_range_Nm": 682.944187173,
+    "nrmse_pct": 9.082012514758055,
+    "nrmse_bound_pct": 1.0641123187430477,
+    "measured_work_J_m": 22.5240457545,
+    "measured_work_bound_J_m": 0.9884860684760783,
+    "measured_work_bound_pct": 4.388581337695925,
+    "measured_cycle_work_spread_J_m": [
+      22.3684236809,
+      22.6445797641
+    ],
+    "calculated_work_J_m": 30.8143155294,
+    "work_difference_pct": 36.8063085344
+  },
+  {
+    "range": "e",
+    "curvature_halfwidth_1_m": 0.000708761618525432,
+    "moment_halfwidth_Nm": 4.148801700516181,
+    "loading_rmse_Nm": 37.33516163566401,
+    "loading_rmse_bound_Nm": 10.220360934222585,
+    "unloading_rmse_Nm": 44.35468139107799,
+    "unloading_rmse_bound_Nm": 11.129928405049272,
+    "all_rmse_Nm": 40.630985599980065,
+    "all_rmse_bound_Nm": 10.637577856655868,
+    "moment_range_Nm": 1020.687043765,
+    "nrmse_pct": 3.980748638691922,
+    "nrmse_bound_pct": 1.0421977942834586,
+    "measured_work_J_m": 64.957316546,
+    "measured_work_bound_J_m": 3.0371225505686716,
+    "measured_work_bound_pct": 4.675566529011264,
+    "measured_cycle_work_spread_J_m": [
+      63.8653603458,
+      65.7554155531
+    ],
+    "calculated_work_J_m": 68.9108917854,
+    "work_difference_pct": 6.08642020582
+  },
+  {
+    "range": "f",
+    "curvature_halfwidth_1_m": 0.000708769736392416,
+    "moment_halfwidth_Nm": 4.148801700516181,
+    "loading_rmse_Nm": 44.680395046849924,
+    "loading_rmse_bound_Nm": 12.277466576217133,
+    "unloading_rmse_Nm": 36.66227471369097,
+    "unloading_rmse_bound_Nm": 39.401104183380056,
+    "all_rmse_Nm": 40.53722221268142,
+    "all_rmse_bound_Nm": 30.158591506917578,
+    "moment_range_Nm": 1063.635166242,
+    "nrmse_pct": 3.811196122436058,
+    "nrmse_bound_pct": 2.8354263251254563,
+    "measured_work_J_m": 69.1540526067,
+    "measured_work_bound_J_m": 3.1043447689390016,
+    "measured_work_bound_pct": 4.489027977281894,
+    "measured_cycle_work_spread_J_m": [
+      68.7948727875,
+      69.7214165959
+    ],
+    "calculated_work_J_m": 69.2330024522,
+    "work_difference_pct": 0.114165175525
+  }
+]

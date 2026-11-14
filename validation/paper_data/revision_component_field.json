@@ -1,0 +1,337 @@
+{
+  "curvature_gradient_x_1_m": 0.02,
+  "true_tension_N": 100000.0,
+  "axial_strain": 0.00035688301868328187,
+  "contact_model": "bounded",
+  "wire_range_MPa": [
+    33.09287803310944,
+    100.19373462485325
+  ],
+  "components": [
+    {
+      "name": "cu_conductor",
+      "component_type": "conductor",
+      "material": "copper_menard2023",
+      "strain_min": 9.647331387974078e-05,
+      "strain_max": 0.0007670100303288319,
+      "sigma_local_min_Pa": 29569049.822467573,
+      "sigma_local_max_Pa": 47019234.973622315,
+      "sigma_stick_min_Pa": 10612064.526771486,
+      "sigma_stick_max_Pa": 84371103.33617151,
+      "sigma_equivalent_max_Pa": 84371103.33617151,
+      "temperature_C": 20.0,
+      "mechanical_utilization": null,
+      "failure_mode": "not assessed",
+      "evidence": "helical-core local and constrained kinematic assumptions"
+    },
+    {
+      "name": "xlpe_insulation",
+      "component_type": "insulation",
+      "material": "xlpe_menard2023",
+      "strain_min": -4.8283903851429145e-05,
+      "strain_max": 0.0009024414610814711,
+      "sigma_local_min_Pa": 43418.31413830553,
+      "sigma_local_max_Pa": 200271.6829401623,
+      "sigma_stick_min_Pa": -16899.3663480002,
+      "sigma_stick_max_Pa": 315854.5113785149,
+      "sigma_equivalent_max_Pa": 315854.5113785149,
+      "temperature_C": 20.0,
+      "mechanical_utilization": null,
+      "failure_mode": "not assessed",
+      "evidence": "helical-core local and constrained kinematic assumptions"
+    },
+    {
+      "name": "power_core_shield",
+      "component_type": "screen",
+      "material": "hdpe_menard2023",
+      "strain_min": -0.0001276029272657689,
+      "strain_max": 0.000976650464233602,
+      "sigma_local_min_Pa": 61731.957719244354,
+      "sigma_local_max_Pa": 899102.8879044289,
+      "sigma_stick_min_Pa": -176092.0396267611,
+      "sigma_stick_max_Pa": 1347777.6406423708,
+      "sigma_equivalent_max_Pa": 1347777.6406423708,
+      "temperature_C": 20.0,
+      "mechanical_utilization": null,
+      "failure_mode": "not assessed",
+      "evidence": "helical-core local and constrained kinematic assumptions"
+    },
+    {
+      "name": "inner_sheath",
+      "component_type": "polymer protection",
+      "material": "hdpe_menard2023",
+      "strain_min": -0.0003911169813167182,
+      "strain_max": 0.001104883018683282,
+      "sigma_local_min_Pa": -539741.4342170712,
+      "sigma_local_max_Pa": 1524738.565782929,
+      "sigma_stick_min_Pa": -539741.4342170712,
+      "sigma_stick_max_Pa": 1524738.565782929,
+      "sigma_equivalent_max_Pa": 1524738.565782929,
+      "temperature_C": 20.0,
+      "mechanical_utilization": null,
+      "failure_mode": "not assessed",
+      "evidence": "strain-compatible and local-bending kinematic assumptions"
+    },
+    {
+      "name": "inner_armour",
+      "component_type": "armour wire",
+      "material": "galvanised_steel_armour",
+      "strain_min": 0.00015747848217733063,
+      "strain_max": 0.00047711302202311075,
+      "sigma_local_min_Pa": 33070481.25723943,
+      "sigma_local_max_Pa": 100193734.62485325,
+      "sigma_stick_min_Pa": 33070481.25723943,
+      "sigma_stick_max_Pa": 100193734.62485325,
+      "sigma_equivalent_max_Pa": 100193734.62485325,
+      "temperature_C": 20.0,
+      "mechanical_utilization": 0.14520831105051196,
+      "failure_mode": "yielding",
+      "evidence": "wire-resolved contact and slip-front model"
+    },
+    {
+      "name": "bedding",
+      "component_type": "polymer protection",
+      "material": "pfr_menard2023",
+      "strain_min": -0.00048311698131671817,
+      "strain_max": 0.0011968830186832818,
+      "sigma_local_min_Pa": -247355.8944341597,
+      "sigma_local_max_Pa": 612804.1055658403,
+      "sigma_stick_min_Pa": -247355.8944341597,
+      "sigma_stick_max_Pa": 612804.1055658403,
+      "sigma_equivalent_max_Pa": 612804.1055658403,
+      "temperature_C": 20.0,
+      "mechanical_utilization": null,
+      "failure_mode": "not assessed",
+      "evidence": "strain-compatible and local-bending kinematic assumptions"
+    },
+    {
+      "name": "outer_armour",
+      "component_type": "armour wire",
+      "material": "galvanised_steel_armour",
+      "strain_min": 0.00021566210942405034,
+      "strain_max": 0.0004202796406502386,
+      "sigma_local_min_Pa": 45289042.97905057,
+      "sigma_local_max_Pa": 88258724.5365501,
+      "sigma_stick_min_Pa": 45289042.97905057,
+      "sigma_stick_max_Pa": 88258724.5365501,
+      "sigma_equivalent_max_Pa": 88258724.5365501,
+      "temperature_C": 20.0,
+      "mechanical_utilization": 0.1279111949805074,
+      "failure_mode": "yielding",
+      "evidence": "wire-resolved contact and slip-front model"
+    },
+    {
+      "name": "outer_sheath",
+      "component_type": "polymer protection",
+      "material": "hdpe_menard2023",
+      "strain_min": -0.0006531169813167182,
+      "strain_max": 0.0013668830186832819,
+      "sigma_local_min_Pa": -901301.4342170712,
+      "sigma_local_max_Pa": 1886298.565782929,
+      "sigma_stick_min_Pa": -901301.4342170712,
+      "sigma_stick_max_Pa": 1886298.565782929,
+      "sigma_equivalent_max_Pa": 1886298.565782929,
+      "temperature_C": 20.0,
+      "mechanical_utilization": null,
+      "failure_mode": "not assessed",
+      "evidence": "strain-compatible and local-bending kinematic assumptions"
+    }
+  ],
+  "field": "declared constrained helical-core bending with solved normal stress, native PDF shading on oblique cuts; signed selected-fibre armour stress",
+  "core_contact_equilibrium_solved": false,
+  "normal_state_shared_with_component_and_wire_calculations": true,
+  "fields": [
+    {
+      "layer_name": "inner_sheath",
+      "centre_mm": [
+        -0.0,
+        0.0
+      ],
+      "angle_rad": 1.5707963267948966,
+      "cosine": 1.0,
+      "inner_mm": 32.9,
+      "outer_mm": 37.400000000000006,
+      "centre_stress_mpa": 0.49249856578292894,
+      "gradient_mpa_per_mm": [
+        -0.0,
+        0.0276
+      ]
+    },
+    {
+      "layer_name": "bedding",
+      "centre_mm": [
+        -0.0,
+        0.0
+      ],
+      "angle_rad": 1.5707963267948966,
+      "cosine": 1.0,
+      "inner_mm": 41.4,
+      "outer_mm": 42.0,
+      "centre_stress_mpa": 0.18272410556584032,
+      "gradient_mpa_per_mm": [
+        -0.0,
+        0.01024
+      ]
+    },
+    {
+      "layer_name": "outer_sheath",
+      "centre_mm": [
+        -0.0,
+        0.0
+      ],
+      "angle_rad": 1.5707963267948966,
+      "cosine": 1.0,
+      "inner_mm": 46.0,
+      "outer_mm": 50.5,
+      "centre_stress_mpa": 0.49249856578292894,
+      "gradient_mpa_per_mm": [
+        -0.0,
+        0.0276
+      ]
+    },
+    {
+      "layer_name": "cu_conductor",
+      "centre_mm": [
+        -0.0,
+        17.666999999999998
+      ],
+      "angle_rad": 1.5707963267948966,
+      "cosine": 0.9876586905554362,
+      "inner_mm": 0.0,
+      "outer_mm": 4.0,
+      "centre_stress_mpa": 76.20811298943708,
+      "gradient_mpa_per_mm": [
+        -0.0,
+        2.040747586683604
+      ]
+    },
+    {
+      "layer_name": "cu_conductor",
+      "centre_mm": [
+        -15.300070808659678,
+        -8.833499999999995
+      ],
+      "angle_rad": 3.665191429188092,
+      "cosine": 0.9876586905554362,
+      "inner_mm": 0.0,
+      "outer_mm": 4.0,
+      "centre_stress_mpa": 19.337157102348883,
+      "gradient_mpa_per_mm": [
+        -0.06838508709548409,
+        2.159194032013005
+      ]
+    },
+    {
+      "layer_name": "cu_conductor",
+      "centre_mm": [
+        15.300070808659672,
+        -8.833500000000006
+      ],
+      "angle_rad": 5.759586531581287,
+      "cosine": 0.9876586905554362,
+      "inner_mm": 0.0,
+      "outer_mm": 4.0,
+      "centre_stress_mpa": 19.337157102348858,
+      "gradient_mpa_per_mm": [
+        0.0683850870954839,
+        2.159194032013006
+      ]
+    },
+    {
+      "layer_name": "xlpe_insulation",
+      "centre_mm": [
+        -0.0,
+        17.666999999999998
+      ],
+      "angle_rad": 1.5707963267948966,
+      "cosine": 0.9876586905554362,
+      "inner_mm": 4.0,
+      "outer_mm": 11.299999999999999,
+      "centre_stress_mpa": 0.24248035951184527,
+      "gradient_mpa_per_mm": [
+        -0.0,
+        0.0064932877758114675
+      ]
+    },
+    {
+      "layer_name": "xlpe_insulation",
+      "centre_mm": [
+        -15.300070808659678,
+        -8.833499999999995
+      ],
+      "angle_rad": 3.665191429188092,
+      "cosine": 0.9876586905554362,
+      "inner_mm": 4.0,
+      "outer_mm": 11.299999999999999,
+      "centre_stress_mpa": 0.06152731805292828,
+      "gradient_mpa_per_mm": [
+        -0.00021758891348563122,
+        0.006870162829132288
+      ]
+    },
+    {
+      "layer_name": "xlpe_insulation",
+      "centre_mm": [
+        15.300070808659672,
+        -8.833500000000006
+      ],
+      "angle_rad": 5.759586531581287,
+      "cosine": 0.9876586905554362,
+      "inner_mm": 4.0,
+      "outer_mm": 11.299999999999999,
+      "centre_stress_mpa": 0.061527318052928194,
+      "gradient_mpa_per_mm": [
+        0.00021758891348563062,
+        0.006870162829132291
+      ]
+    },
+    {
+      "layer_name": "power_core_shield",
+      "centre_mm": [
+        -0.0,
+        17.666999999999998
+      ],
+      "angle_rad": 1.5707963267948966,
+      "cosine": 0.9876586905554362,
+      "inner_mm": 11.299999999999999,
+      "outer_mm": 15.299999999999999,
+      "centre_stress_mpa": 0.956065417503847,
+      "gradient_mpa_per_mm": [
+        -0.0,
+        0.025602106087485213
+      ]
+    },
+    {
+      "layer_name": "power_core_shield",
+      "centre_mm": [
+        -15.300070808659678,
+        -8.833499999999995
+      ],
+      "angle_rad": 3.665191429188092,
+      "cosine": 0.9876586905554362,
+      "inner_mm": 11.299999999999999,
+      "outer_mm": 15.299999999999999,
+      "centre_stress_mpa": 0.24259342546583146,
+      "gradient_mpa_per_mm": [
+        -0.000857922001743346,
+        0.02708807058343588
+      ]
+    },
+    {
+      "layer_name": "power_core_shield",
+      "centre_mm": [
+        15.300070808659672,
+        -8.833500000000006
+      ],
+      "angle_rad": 5.759586531581287,
+      "cosine": 0.9876586905554362,
+      "inner_mm": 11.299999999999999,
+      "outer_mm": 15.299999999999999,
+      "centre_stress_mpa": 0.24259342546583113,
+      "gradient_mpa_per_mm": [
+        0.0008579220017433435,
+        0.02708807058343589
+      ]
+    }
+  ]
+}

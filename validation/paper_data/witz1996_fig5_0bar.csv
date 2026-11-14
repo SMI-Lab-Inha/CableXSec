@@ -1,0 +1,43 @@
+# Witz (1996) Marine Structures 9:885-904, Fig. 5 (0 bar), measured bending moment vs curvature
+# Source PDF SHA-256: 5a4ed4db27b5f3b432f53868a77829fc6d032fc2752ce52336d74afd7e78c456
+# Digitised from a 600 dpi render of PDF page 17 (CableXSec benchmark digitisation; matched-filter
+# marker centres, affine axis calibration); order follows the plotted polyline.
+# Reading resolution (half-width, NOT experimental uncertainty): kappa +-0.008 1/m, M +-10.0 N m; kappa scale +-0.5 %
+# branch: virgin = first loading from the plotted start, down = unloading from +kappa_max,
+# up = reloading from -kappa_max (rejoins the virgin curve)
+seq,branch,kappa_1_per_m,moment_Nm
+0,virgin,0.0020,23.3
+1,virgin,0.1175,408.5
+2,virgin,0.2481,478.3
+3,virgin,0.3621,722.8
+4,virgin,0.4630,868.9
+5,virgin,0.5827,1081.7
+6,virgin,0.6833,1111.8
+7,virgin,0.7982,1234.4
+8,virgin,0.9149,1399.2
+9,virgin,1.0167,1426.9
+10,down,0.9145,939.6
+11,down,0.6673,481.1
+12,down,0.4650,237.0
+13,down,0.3639,1.8
+14,down,0.1907,-52.6
+15,down,0.0583,-169.2
+16,down,0.0018,-314.3
+17,down,-0.1135,-360.7
+18,down,-0.2307,-504.4
+19,down,-0.3625,-625.8
+20,down,-0.4786,-766.0
+21,down,-0.5945,-841.7
+22,down,-0.6825,-985.5
+23,down,-0.9158,-1275.2
+24,down,-1.0175,-1537.4
+25,up,-0.9156,-671.5
+26,up,-0.7990,-572.3
+27,up,-0.6969,-408.6
+28,up,-0.5810,-313.0
+29,up,-0.4783,-123.5
+30,up,-0.3617,-2.1
+31,up,-0.1303,144.6
+32,up,0.0025,240.2
+33,up,0.0590,361.8
+34,up,0.1175,408.5

@@ -1,0 +1,520 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 Jae Hoon Seo, SMI Lab, Inha University
+"""CableDyn reader: deck parsing, file layouts and input checks (gap R8 stage 1).
+
+Each case corrupts one item of the synthetic run of ``test_cabledyn_reader``
+and checks that the reader refuses it with a message naming the item, or
+reads a documented variant correctly.
+"""
+
+from __future__ import annotations
+
+import dataclasses
+import math
+
+import numpy as np
+import pytest
+from test_cabledyn_reader import (
+    _bending_case,
+    _chord_tangent_channels,
+    _deck,
+    _fmt,
+    _write_case,
+)
+
+from cablexsec.exceptions import CableSchemaError
+from cablexsec.io.cabledyn import (
+    read_cabledyn_deck,
+    read_cabledyn_sections,
+    section_channels,
+)
+
+NT = 4
+
+
+def _case(tmp_path, nt=NT, **kwargs):
+    positions = _bending_case(np.full(nt, 0.02), np.zeros(nt), nt)
+    return _write_case(tmp_path, positions, **kwargs)
+
+
+def _read(root, deck, **kwargs):
+    kwargs.setdefault("pressure", "none")
+    return read_cabledyn_sections(root, deck, {"mid": 5.0}, **kwargs)
+
+
+def _edit(path, old, new):
+    text = path.read_text(encoding="utf-8")
+    assert old in text, old
+    path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+
+# --------------------------------------------------------------------------- #
+# Arguments                                                                   #
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize(
+    ("kwargs", "match"),
+    [
+        ({"frame": "global"}, "frame"),
+        ({"curvature_source": "spline"}, "curvature_source"),
+        ({"tension_source": "mean"}, "tension_source"),
+        ({"pressure": "flooded"}, "pressure"),
+        ({"window_nodes": 1}, "window_nodes"),
+        ({"window_nodes": True}, "window_nodes"),
+        ({"chunk_rows": 8}, "chunk_rows"),
+        ({"reference_vector": (0.0, 0.0, 0.0)}, "reference_vector"),
+        ({"reference_vector": (1.0, 0.0)}, "reference_vector"),
+    ],
+)
+def test_arguments_are_checked_before_any_file_is_read(tmp_path, kwargs, match):
+    with pytest.raises(CableSchemaError, match=match):
+        read_cabledyn_sections(
+            tmp_path / "none", tmp_path / "none.dat", {"s": 1.0}, **kwargs
+        )
+
+
+def test_at_least_one_section(tmp_path):
+    with pytest.raises(CableSchemaError, match="at least one section"):
+        read_cabledyn_sections(tmp_path / "none", tmp_path / "none.dat", {})
+
+
+# --------------------------------------------------------------------------- #
+# Deck                                                                        #
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize(
+    ("old", "new", "match"),
+    [
+        (
+            "--------------------- LINES ---\n",
+            "--------------------- WIRES ---\n",
+            "no LINES",
+        ),
+        ("BA EI Cd_n", "BA EX Cd_n", "lacks column 'ei'"),
+        ("cable 0.2 40.0", "cable abc 40.0", "not numeric"),
+        ("cable 0.2 40.0", "cable inf 40.0", "not finite"),
+        (
+            "--------------------- OPTIONS ---\n",
+            "--------------------- SECTIONS ---\n1 cable 10.0 100\n"
+            "--------------------- OPTIONS ---\n",
+            "duplicate deck section",
+        ),
+        (
+            "ID Type X Y Z\n(-) (-) (m) (m) (m)\n1 Coupled 0 0 -10\n2 Fixed 10 0 -12\n",
+            "",
+            "POINTS is empty",
+        ),
+        ("ID Type X Y Z", "ID Kind X Y Z", "POINTS needs ID and Type"),
+        (
+            "LineID LineType Length NumSegs",
+            "LineID LineType Length Segs",
+            "SECTIONS lacks 'numsegs'",
+        ),
+        ("1 cable 10.0 100\n", "2 cable 10.0 100\n", "line 1 has no sections"),
+        ("1 cable 10.0 100\n", "1 rope 10.0 100\n", "undefined type"),
+        ("1 cable 10.0 100\n", "1 cable 10.0 0\n", "invalid section"),
+        (
+            "--------------------- OUTPUTS ---",
+            "maybe adaptive_mesh - x\n--------------------- OUTPUTS ---",
+            "adaptive_mesh 'maybe'",
+        ),
+        (
+            "ID NodeA NodeB Outputs\n(-) (-) (-) (-)\n1 1 2 pt\n",
+            "ID LineType AttachA AttachB UnstrLen NumSegs Outputs\n1 cable 1 2 10.0 100 pt\n",
+            "7-column row and SECTIONS",
+        ),
+    ],
+)
+def test_deck_errors_name_the_item(tmp_path, old, new, match):
+    path = _deck(tmp_path / "d.dat")
+    _edit(path, old, new)
+    with pytest.raises(CableSchemaError, match=match):
+        read_cabledyn_deck(path)
+
+
+def test_missing_deck(tmp_path):
+    with pytest.raises(FileNotFoundError, match="deck not found"):
+        read_cabledyn_deck(tmp_path / "absent.dat")
+
+
+def test_seven_column_lines_comments_defaults_and_adaptive_flag(tmp_path):
+    path = _deck(tmp_path / "d.dat")
+    _edit(
+        path,
+        "ID NodeA NodeB Outputs\n(-) (-) (-) (-)\n1 1 2 pt\n",
+        "ID LineType AttachA AttachB UnstrLen NumSegs Outputs\n"
+        "1 cable 1 2 10.0 100 pt # one row per line\n",
+    )
+    _edit(
+        path,
+        "--------------------- SECTIONS ---\n",
+        "--------------------- UNUSED ---\n",
+    )
+    _edit(
+        path,
+        "9.81 g - gravity\n1025.0 rhoW - density\n",
+        "yes adaptive_mesh ! refine\n",
+    )
+    deck = read_cabledyn_deck(path)
+    line = deck.line(1)
+    assert (line.end_a, line.end_b, line.outputs) == ("1", "2", "pt")
+    assert line.n_elements == 100 and line.n_nodes == 101
+    assert deck.adaptive_mesh
+    assert set(deck.defaults_used) == {"g", "rhoW"}
+    assert (deck.g_m_s2, deck.rho_w_kg_m3) == (9.80665, 1025.0)  # documented defaults
+    with pytest.raises(CableSchemaError, match="no LINES row with id 7"):
+        deck.line(7)
+    with pytest.raises(CableSchemaError, match="line type 'rope'"):
+        deck.line_type("rope")
+
+
+def test_line_type_along_two_sections(tmp_path):
+    path = _deck(tmp_path / "d.dat")
+    _edit(
+        path,
+        "--------------------- POINTS ---\n",
+        "buoy 0.3 50.0 5.0e8 0.0 2.0e4 1.2 0.1 1.0 0.0\n--------------------- POINTS ---\n",
+    )
+    _edit(path, "1 cable 10.0 100\n", "1 cable 10.0 100\n1 buoy 5.0 10\n")
+    line = read_cabledyn_deck(path).line(1)
+    assert line.length_m == pytest.approx(15.0) and line.n_elements == 110
+    assert line.line_type_at(3.0) == "cable"
+    assert line.line_type_at(12.0) == "buoy"
+    assert line.line_type_at(40.0) == "buoy"  # beyond the end: last section
+
+
+def test_section_channels_lists_what_a_deck_must_write(tmp_path):
+    deck = _deck(tmp_path / "d.dat")
+    names = section_channels(deck, {"mid": 5.05})
+    assert names[:2] == ("L1N49Dec", "L1N49Azi")
+    assert {"Ten1N51", "Ten1N52", "Curv1N51", "L1N51px", "L1N52pz"} <= set(names)
+    assert len(names) == len(set(names))
+    bare = section_channels(deck, {"mid": 5.05}, positions=False, check_curvature=False)
+    assert not any(n.startswith("Curv") or n.endswith(("px", "py", "pz")) for n in bare)
+    torsion = section_channels(_deck(tmp_path / "t.dat", torsion=True), {"mid": 5.05})
+    assert {"Twist1N51", "Torq1N52"} <= set(torsion)
+    with pytest.raises(CableSchemaError, match="outside the line"):
+        section_channels(deck, {"far": 11.0})
+
+
+# --------------------------------------------------------------------------- #
+# Output files                                                                #
+# --------------------------------------------------------------------------- #
+def test_output_discovery(tmp_path):
+    root, deck = _case(tmp_path)
+    (tmp_path / "case.CD.out").write_text("Time\n(s)\n", encoding="utf-8")
+    with pytest.raises(CableSchemaError, match="name one output root"):
+        _read(root, deck)
+    with pytest.raises(FileNotFoundError, match="no CableDyn output"):
+        _read(tmp_path / "other", deck)
+
+
+def test_coupled_static_profile_is_recorded(tmp_path):
+    nt = 3
+    positions = _bending_case(np.full(nt, 0.02), np.zeros(nt), nt)
+    channels = _chord_tangent_channels(positions)
+    names = [f"L1N{j}{kind}" for j in range(48, 56) for kind in ("Dec", "Azi")]
+    names += ["Ten1N51", "Ten1N52"]
+    channels["Ten1N51"] = channels["Ten1N52"] = np.full(nt, 1000.0)
+    _deck(tmp_path / "of.dat", channels=names)
+    with open(tmp_path / "of.CD.out", "w", encoding="utf-8") as f:
+        f.write("\t".join(["Time", *names]) + "\n")
+        units = ["(deg)" if n.endswith(("Dec", "Azi")) else "(N)" for n in names]
+        f.write("\t".join(["(s)", *units]) + "\n")
+        for k in range(nt):
+            f.write(_fmt([0.1 * k, *[channels[n][k] for n in names]]) + "\n")
+    (tmp_path / "of.CD.static.out").write_text("static\n", encoding="utf-8")
+    read = read_cabledyn_sections(
+        tmp_path / "of",
+        tmp_path / "of.dat",
+        {"s": 5.05},
+        frame="section",
+        pressure="none",
+    )
+    assert {f.role for f in read.files} == {"main", "static", "deck"}
+
+
+@pytest.mark.parametrize(
+    ("text", "match"),
+    [
+        ("# CableDyn driver output\n", "incomplete CableDyn output table"),
+        ("# CableDyn driver output\nTime\n0.0\n", "first column must be Time"),
+        ("Time\tTen1N1\n(min)\t(N)\n0.0\t1.0\n", "OpenFAST CableDyn table"),
+    ],
+)
+def test_main_table_layout(tmp_path, text, match):
+    root, deck = _case(tmp_path)
+    (tmp_path / "case.out").write_text(text, encoding="utf-8")
+    with pytest.raises(CableSchemaError, match=match):
+        _read(root, deck)
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "match"),
+    [
+        ("# CableDyn finite-EI", "# Other finite-EI", "not a CableDyn per-line table"),
+        ("public node order EndA -> EndB", "public node order", "public order"),
+        (
+            "# CableDyn finite-EI Hermite line",
+            "# CableDyn static line",
+            "no time history",
+        ),
+    ],
+)
+def test_per_line_table_title(tmp_path, old, new, match):
+    root, deck = _case(tmp_path)
+    _edit(tmp_path / "case.Line1.p.out", old, new)
+    with pytest.raises(CableSchemaError, match=match):
+        _read(root, deck)
+
+
+def test_non_finite_history_row(tmp_path):
+    root, deck = _case(tmp_path)
+    path = tmp_path / "case.Line1.p.out"
+    lines = path.read_text(encoding="utf-8").splitlines()
+    cells = lines[3].split("\t")
+    cells[4] = "nan"
+    lines[3] = "\t".join(cells)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    with pytest.raises(CableSchemaError, match="non-finite row"):
+        _read(root, deck)
+
+
+def test_duplicated_channel(tmp_path):
+    positions = _bending_case(np.full(NT, 0.02), np.zeros(NT), NT)
+    root, deck = _write_case(
+        tmp_path, positions, channels=_chord_tangent_channels(positions)
+    )
+    _edit(tmp_path / "case.out", "\tL1N2Dec\t", "\tL1N1Dec\t")
+    with pytest.raises(CableSchemaError, match="L1N1Dec is duplicated"):
+        _read(root, deck)
+
+
+@pytest.mark.parametrize(
+    ("edit", "match"),
+    [
+        (lambda rows: rows[:3], "incomplete static profile"),
+        (
+            # Units row: LineID Node ArcLength X ...; X (column 4) in feet.
+            lambda rows: [
+                rows[0],
+                rows[1],
+                "\t".join(
+                    "(ft)" if i == 3 else u for i, u in enumerate(rows[2].split("\t"))
+                ),
+                *rows[3:],
+            ],
+            "static column X",
+        ),
+        (
+            lambda rows: [
+                *rows[:3],
+                *[r.replace("1\t1\t", "1\t0\t", 1) for r in rows[3:4]],
+                *rows[4:],
+            ],
+            "rows missing or unordered",
+        ),
+        (lambda rows: rows[:-1], "nodes, expected"),
+    ],
+)
+def test_static_profile(tmp_path, edit, match):
+    root, deck = _case(tmp_path)
+    path = tmp_path / "case.static.out"
+    rows = path.read_text(encoding="utf-8").splitlines()
+    path.write_text("\n".join(edit(rows)) + "\n", encoding="utf-8")
+    with pytest.raises(CableSchemaError, match=match):
+        _read(root, deck)
+
+
+def _elements(
+    path,
+    arcs,
+    *,
+    header="LineID\tElement\tReferenceArcStart\tReferenceArcEnd",
+    unit="(m)",
+    order=None,
+    gap=0.0,
+):
+    order = range(1, arcs.size) if order is None else order
+    rows = [
+        "CableDyn continuous Hermite-element extrema (public order End A -> End B)",
+        header,
+        f"(-)\t(-)\t{unit}\t(m)",
+    ]
+    for e in order:
+        start = arcs[e - 1] + (gap if e == 2 else 0.0)
+        rows.append(f"1\t{e}\t{float(start)!r}\t{float(arcs[e])!r}")
+    path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+
+
+def test_element_file_confirms_the_mesh(tmp_path):
+    root, deck = _case(tmp_path)
+    arcs = 10.0 * np.arange(101) / 100
+    _elements(tmp_path / "case.elements.out", arcs)
+    read = _read(root, deck)
+    assert read.checks["arc_lengths"] == "deck sections, confirmed by .elements.out"
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "match"),
+    [
+        (
+            {"header": "LineID\tElement\tStart\tReferenceArcEnd"},
+            "column ReferenceArcStart missing",
+        ),
+        ({"unit": "(ft)"}, "ReferenceArcStart must be in"),
+        ({"order": [1, 3, 2, *range(4, 101)]}, "unordered"),
+        ({"gap": 0.01}, "have gaps"),
+    ],
+)
+def test_element_file_layout(tmp_path, kwargs, match):
+    root, deck = _case(tmp_path)
+    _elements(tmp_path / "case.elements.out", 10.0 * np.arange(101) / 100, **kwargs)
+    with pytest.raises(CableSchemaError, match=match):
+        _read(root, deck)
+
+
+def test_mesh_change_needs_and_is_checked_by_the_element_file(tmp_path):
+    root, deck = _case(tmp_path)
+    _elements(tmp_path / "case.elements.out", 10.0 * np.arange(51) / 50)
+    with pytest.raises(CableSchemaError, match="differs from the deck sections"):
+        _read(root, deck)
+    (tmp_path / "case.elements.out").unlink()
+    _edit(
+        deck,
+        "--------------------- OUTPUTS ---",
+        "true adaptive_mesh - x\n--------------------- OUTPUTS ---",
+    )
+    with pytest.raises(CableSchemaError, match="elements.out file is needed"):
+        _read(root, deck)
+
+
+# --------------------------------------------------------------------------- #
+# Histories                                                                   #
+# --------------------------------------------------------------------------- #
+def test_segment_tensions_need_the_t_file(tmp_path):
+    root, deck = _case(tmp_path, outputs="p")
+    with pytest.raises(CableSchemaError, match="needs case.Line1.t.out"):
+        _read(root, deck, tension_source="segments")
+
+
+def test_per_line_files_must_match_the_main_table(tmp_path):
+    root, deck = _case(tmp_path)
+    path = tmp_path / "case.Line1.p.out"
+    rows = path.read_text(encoding="utf-8").splitlines()
+    path.write_text("\n".join(rows[:-1]) + "\n", encoding="utf-8")
+    with pytest.raises(CableSchemaError, match="different row counts"):
+        _read(root, deck)
+    _case(tmp_path)
+    shifted = [rows[0], rows[1]] + [
+        "\t".join([f"{float(r.split(chr(9))[0]) + 0.05: .16E}", *r.split("\t")[1:]])
+        for r in rows[2:]
+    ]
+    path.write_text("\n".join(shifted) + "\n", encoding="utf-8")
+    with pytest.raises(CableSchemaError, match="time columns"):
+        _read(root, deck)
+
+
+def test_deck_length_must_describe_the_output_mesh(tmp_path):
+    positions = _bending_case(np.full(NT, 0.02), np.zeros(NT), NT)
+    root, deck = _write_case(tmp_path, positions, deck_kwargs={"length": 5.0})
+    with pytest.raises(CableSchemaError, match="do not describe the output mesh"):
+        read_cabledyn_sections(root, deck, {"mid": 2.0}, pressure="none")
+
+
+@pytest.mark.parametrize(
+    ("time", "match"),
+    [
+        (np.array([0.0]), "fewer than two output rows"),
+        (np.array([0.0, 0.1, 0.1, 0.3]), "time does not increase"),
+        (np.array([0.0, 0.1, 0.25, 0.3]), "not uniform"),
+    ],
+)
+def test_output_time_axis(tmp_path, time, match):
+    positions = _bending_case(np.full(time.size, 0.02), np.zeros(time.size), time.size)
+    root, deck = _write_case(tmp_path, positions, time=time)
+    with pytest.raises(CableSchemaError, match=match):
+        _read(root, deck)
+
+
+def test_frame_seed_and_reversal(tmp_path):
+    root, deck = _case(tmp_path)
+    with pytest.raises(CableSchemaError, match="reference_vector"):
+        _read(root, deck, reference_vector=(1.0, 0.0, 0.0))  # along the tangent
+    positions = _bending_case(np.full(NT, 0.02), np.zeros(NT), NT)
+    flipped = positions.copy()
+    flipped[2:] = -positions[2:]  # point reflection: every tangent reverses
+    root, deck = _write_case(tmp_path, flipped, root="flip")
+    with pytest.raises(CableSchemaError, match="reverses"):
+        _read(root, deck, frame="section")
+
+
+def test_streamed_chunks_give_the_single_chunk_result(tmp_path):
+    nt = 40
+    kappa = 0.03 + 0.01 * np.sin(np.arange(nt) / 3.0)
+    positions = _bending_case(kappa, 0.2 * np.sin(np.arange(nt) / 5.0), nt)
+    root, deck = _write_case(tmp_path, positions, deck_kwargs={"t_max": 4.0})
+    for frame in ("section", "arc"):
+        one = _read(root, deck, frame=frame).histories["mid"]
+        many = _read(root, deck, frame=frame, chunk_rows=16).histories["mid"]
+        for item in ("rotation_curvature_x_1_m", "rotation_curvature_y_1_m"):
+            np.testing.assert_allclose(
+                getattr(many, item), getattr(one, item), rtol=0.0, atol=1e-12
+            )
+
+
+def test_hydrostatic_pressure_needs_an_elevation(tmp_path):
+    positions = _bending_case(np.full(NT, 0.02), np.zeros(NT), NT)
+    channels = _chord_tangent_channels(positions)
+    channels.update({f"Ten1N{j}": np.full(NT, 5000.0) for j in range(1, 102)})
+    root, deck = _write_case(
+        tmp_path, positions, channels=channels, outputs="-", static=False
+    )
+    with pytest.raises(
+        CableSchemaError, match="section elevation needs node positions"
+    ):
+        read_cabledyn_sections(
+            root, deck, {"mid": 5.05}, frame="section", curvature_source="tangent"
+        )
+
+
+def test_section_history_contract(tmp_path):
+    root, deck = _case(tmp_path)
+    history = _read(root, deck, pressure="hydrostatic").histories["mid"]
+    with pytest.raises(CableSchemaError, match="time must increase strictly"):
+        dataclasses.replace(history, time_s=history.time_s[::-1])
+    with pytest.raises(CableSchemaError, match="effective_tension_N must be finite"):
+        dataclasses.replace(
+            history, effective_tension_N=history.effective_tension_N[:-1]
+        )
+    with pytest.raises(CableSchemaError, match="no external pressure history"):
+        dataclasses.replace(history, external_pressure_Pa=None).true_tension_N(0.03)
+    with pytest.raises(CableSchemaError, match="fewer than two samples"):
+        history.window(start_time_s=10.0)
+    assert math.isclose(history.duration_s, 0.1 * (NT - 1))
+
+
+def test_section_history_exports(tmp_path):
+    root, deck = _case(tmp_path, nt=6)
+    dry = _read(root, deck).histories["mid"]
+    np.testing.assert_array_equal(dry.true_tension_N(0.03), dry.effective_tension_N)
+    columns = dry.to_columns(0.03)
+    assert {"time_s", "true_tension_N", "strain_gradient_x_1_m", "elevation_m"} <= set(
+        columns
+    )
+    assert "external_pressure_Pa" not in columns
+    wet = _read(root, deck, pressure="hydrostatic").histories["mid"]
+    np.testing.assert_allclose(
+        wet.to_columns(0.03)["true_tension_N"],
+        wet.effective_tension_N - wet.external_pressure_Pa * 0.03,
+    )
+    part = wet.window(0.1, 0.3)
+    np.testing.assert_allclose(part.time_s, [0.1, 0.2, 0.3])
+    assert part.external_pressure_Pa.shape == (3,)
+    with pytest.raises(CableSchemaError, match="before the requested"):
+        wet.window(0.0, 9.0)
+
+
+def test_non_numeric_axial_stiffness_token(tmp_path):
+    # A viscoelastic or Syrope constitutive token in the EA column.
+    path = _deck(tmp_path / "d.dat")
+    _edit(path, "cable 0.2 40.0 500000000.0", "cable 0.2 40.0 visco_table")
+    assert read_cabledyn_deck(path).line_type("cable").ea_N is None

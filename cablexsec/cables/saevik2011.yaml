@@ -1,0 +1,138 @@
+---
+# Saevik (2011) 8-inch non-bonded flexible riser with FBG-instrumented inner
+# tensile armour -- PUBLIC.
+#
+# Source: Saevik, Computers and Structures 89 (2011) 2273-2291, Table 1
+# (cross-section), Table 2 (test programme), Sec. 7.1 (rig, sensors), Figs
+# 17-23 (measured normalised stress ranges); the same cross-section and the
+# rig geometry in Gjosteen et al., Marine Structures 111 (2027) 104189,
+# Sec. 4.6 and Table 7, which states that the instrumented wires are of the
+# INNER tensile armour, with fibres in grooves on each side of the wire.
+# Measured data: validation/paper_data/saevik2011_*.csv. Benchmark rows
+# SV11-* in doc/benchmarks.md.
+#
+# Reported (Table 1): bore inside the seal layer (carcass excluded) 215.2 mm,
+# OD 300.0 mm, design pressure 5000 psi, two tensile armour layers of
+# 5 x 12.5 mm tendons, 55 + 57 tendons, inner armour mean diameter 264 mm,
+# pitch 1795 mm, seal layer 8.7 mm, pressure armour 10.5 mm2/mm, elastic
+# bending stiffness 72.8 kN m2 at 20 degC.
+#
+# Mapping and assumptions (stated, not hidden):
+# A1 Lay angle from the inner-armour pitch and mean diameter:
+#    tan(a) = pi 264 / 1795, a = 24.80 deg (fill 55 x 12.5 / (pi 264 cos a)
+#    = 0.913, the ~90 % of Saevik Sec. 3). The outer armour is ASSUMED to have
+#    the same angle magnitude, opposite hand (fill 0.902). Lay hands are not
+#    reported; the inner layer is taken right-hand. For a symmetric planar
+#    bending cycle the stress range does not depend on the hand.
+# A2 HelicalLayer has only a round wire (gap G1): every 5 x 12.5 mm tendon is
+#    an AREA-EQUIVALENT round wire, d = sqrt(4 x 62.5 / pi) = 8.921 mm, at the
+#    true mean radius. Axial stiffness, tension and the friction force per
+#    wire are kept; the individual bending inertia and the radial thickness
+#    are not, so the round wires overlap radially and the solved radial route
+#    rejects this definition. The bounded contact chain is used.
+# A3 Interlocked pressure armour: no layer type (gap G2). A near-hoop helix
+#    (one wire, 89.2 deg) between the seal layer and the inner anti-wear tape
+#    carries the internal pressure in the bounded chain; its 10.5 mm2/mm is
+#    kept (pitch 10.24 mm), its round section (11.7 mm) is nominal.
+# A4 Carcass omitted (its inner diameter is not reported). It is not fluid
+#    tight and carries no internal pressure: the bore pressure acts on the
+#    seal layer, which is the innermost layer here (the pressure_barrier of a
+#    model with a carcass).
+# A5 Anti-wear tapes (inner, between the armours, outer) 1.5 mm each and an
+#    outer sheath of 7.5 mm are ASSUMED (only the 300 mm OD is reported).
+#    Outer armour mean radius 138.5 mm follows from them.
+# A6 Moduli: steel 207 GPa (assumed). One polymer modulus for the seal layer,
+#    tapes and outer sheath, identified on the Table 1 bending stiffness
+#    (material polymer_saevik2011).
+# A7 No manufacturing clamping is reported. At the test loads (250-750 kN
+#    with 17-34 MPa) the armour contact pressure comes from tension and the
+#    closed-end thrust.
+cable:
+  name: "Saevik 2011 8-inch FBG flexible riser"
+  description: "Non-bonded 8-inch riser, two tensile armours, inner armour instrumented with fibre Bragg gratings"
+  manufacturer: "Public (pipe data published in Saevik 2011, Table 1)"
+  source_document: "Saevik, Comput. Struct. 89 (2011) 2273-2291, Table 1; Gjosteen et al., Mar. Struct. 111 (2027) 104189, Table 7"
+
+layers:
+  - name: pressure_sheath
+    layer_type: cylindrical
+    material: polymer_saevik2011
+    r_inner_m: 0.1076          # bore 215.2 mm (carcass excluded), [Saevik2011] Table 1
+    r_outer_m: 0.1163          # + seal layer 8.7 mm, [Saevik2011] Table 1
+    source: "[Saevik2011] Table 1 (seal layer)"
+
+  - name: pressure_armour
+    layer_type: helical
+    material: steel_saevik2011
+    structural: false
+    n_wires: 1
+    d_wire_m: 0.0117           # nominal: fills 116.3-128.0 mm (A3, A5)
+    r_helix_m: 0.12215
+    lay_angle_deg: 89.235      # pitch 10.24 mm: 107.5 mm2 / 10.24 mm = 10.5 mm2/mm
+    lay_direction: right_hand
+    manufacturing_clamping:
+      initial_contact_pressure_Pa: 0.0
+      basis: not_published
+      source: "[Saevik2011] reports no manufacturing clamping"
+    source: "[Saevik2011] Table 1 area 10.5 mm2/mm; near-hoop helix (A3)"
+
+  - name: antiwear_tape_inner
+    layer_type: cylindrical
+    material: polymer_saevik2011
+    r_inner_m: 0.1280
+    r_outer_m: 0.1295
+    source: "Assumed 1.5 mm (A5)"
+
+  - name: inner_tensile_armour
+    layer_type: helical
+    material: steel_saevik2011
+    n_wires: 55
+    d_wire_m: 0.0089206        # sqrt(4 x 5 x 12.5 mm2 / pi), area-equivalent (A2)
+    r_helix_m: 0.1320          # mean diameter 264 mm, [Saevik2011] Table 1
+    lay_angle_deg: 24.80       # atan(pi 264 / 1795) (A1)
+    lay_direction: right_hand
+    manufacturing_clamping:
+      initial_contact_pressure_Pa: 0.0
+      basis: not_published
+      source: "[Saevik2011] reports no manufacturing clamping"
+    bulk_sn: saevik_2011_flat_steel
+    source: "[Saevik2011] Table 1: 55 tendons 5 x 12.5 mm, mean diameter 264 mm, pitch 1795 mm; FBG layer per [Gjosteen2027] Sec. 4.6.1"
+
+  - name: antiwear_tape_middle
+    layer_type: cylindrical
+    material: polymer_saevik2011
+    r_inner_m: 0.1345
+    r_outer_m: 0.1360
+    source: "Assumed 1.5 mm (A5)"
+
+  - name: outer_tensile_armour
+    layer_type: helical
+    material: steel_saevik2011
+    n_wires: 57
+    d_wire_m: 0.0089206
+    r_helix_m: 0.1385          # 136.0 + 2.5 mm (A5)
+    lay_angle_deg: 24.80       # same magnitude as the inner armour (A1)
+    lay_direction: left_hand
+    manufacturing_clamping:
+      initial_contact_pressure_Pa: 0.0
+      basis: not_published
+      source: "[Saevik2011] reports no manufacturing clamping"
+    bulk_sn: saevik_2011_flat_steel
+    source: "[Saevik2011] Table 1: 57 tendons 5 x 12.5 mm; radius and angle assumed (A1, A5)"
+
+  - name: antiwear_tape_outer
+    layer_type: cylindrical
+    material: polymer_saevik2011
+    r_inner_m: 0.1410
+    r_outer_m: 0.1425
+    source: "Assumed 1.5 mm (A5)"
+
+  - name: outer_sheath
+    layer_type: cylindrical
+    material: polymer_saevik2011
+    r_inner_m: 0.1425
+    r_outer_m: 0.1500          # OD 300.0 mm, [Saevik2011] Table 1
+    source: "[Saevik2011] Table 1 OD; thickness assumed (A5)"
+
+aggregate_properties:
+  OD_mm: 300.0                 # [Saevik2011] Table 1

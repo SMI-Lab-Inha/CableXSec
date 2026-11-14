@@ -1,0 +1,47 @@
+{
+  "processor": "13th Gen Intel Core i9-13900K; Windows reports 24 cores/32 logical processors",
+  "python": "3.11.15 | packaged by conda-forge | (main, Mar  5 2026, 16:36:00) [MSC v.1944 64 bit (AMD64)]",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "numpy": "2.4.3",
+  "requested_thread_limits": {
+    "OMP_NUM_THREADS": "1",
+    "MKL_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1"
+  },
+  "affinity": "not pinned",
+  "timing_method": "one warm-up followed by five measured repetitions; serial work",
+  "section": {
+    "repeats_s": [
+      0.13574290000542533,
+      0.14385089999996126,
+      0.14003319999028463,
+      0.13815719999547582,
+      0.14340969998738728
+    ],
+    "minimum_s": 0.13574290000542533,
+    "median_s": 0.14003319999028463,
+    "maximum_s": 0.14385089999996126,
+    "physical_wires": 118,
+    "samples": 3601,
+    "cycles": 3
+  },
+  "stress_and_rainflow": {
+    "repeats_s": [
+      2.536545800001477,
+      2.5480647000076715,
+      2.5481966999941505,
+      2.517170299994177,
+      2.5402745999890612
+    ],
+    "minimum_s": 2.517170299994177,
+    "median_s": 2.5402745999890612,
+    "maximum_s": 2.5481966999941505,
+    "physical_wires": 228,
+    "history_samples": 42001,
+    "retained_samples": 36001,
+    "initialisation_s": 600,
+    "retained_s": 3600
+  },
+  "excluded": "YAML loading, native simulation loading/extraction and figure/export work",
+  "comparison_scope": "not a matched FE speedup experiment"
+}

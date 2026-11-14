@@ -1,0 +1,107 @@
+{
+  "status": "interface demonstration, not site validation",
+  "thread_count": 1,
+  "cable": "Three-core export 220 kV (public representative)",
+  "global_properties": {
+    "outer_diameter_m": 0.266,
+    "dry_mass_kg_m": 164.03676830925207,
+    "EA_N": 1575450216.5897093,
+    "EI_full_slip_Nm2": 53117.86378867745,
+    "GJ_Nm2": 1804303.9736222369
+  },
+  "model": {
+    "line_length_m": 180.0,
+    "target_segment_length_m": 10.0,
+    "wave_type": "Airy",
+    "wave_height_m": 2.1,
+    "wave_period_s": 5.3,
+    "dynamic_duration_s": 20.0,
+    "sample_arc_length_m": 90.0,
+    "screened_locations": [
+      {
+        "arc_length_m": 10.0,
+        "max_curvature_1_m": 0.00233508905567627
+      },
+      {
+        "arc_length_m": 20.0,
+        "max_curvature_1_m": 0.0028868754741970047
+      },
+      {
+        "arc_length_m": 30.0,
+        "max_curvature_1_m": 0.0037096609468653305
+      },
+      {
+        "arc_length_m": 40.0,
+        "max_curvature_1_m": 0.0048179993610962275
+      },
+      {
+        "arc_length_m": 50.0,
+        "max_curvature_1_m": 0.006512693222705906
+      },
+      {
+        "arc_length_m": 60.0,
+        "max_curvature_1_m": 0.009396532572916292
+      },
+      {
+        "arc_length_m": 70.0,
+        "max_curvature_1_m": 0.014358951863295919
+      },
+      {
+        "arc_length_m": 80.0,
+        "max_curvature_1_m": 0.022716777705676025
+      },
+      {
+        "arc_length_m": 90.0,
+        "max_curvature_1_m": 0.0349315033311644
+      },
+      {
+        "arc_length_m": 100.0,
+        "max_curvature_1_m": 0.028697680729573873
+      },
+      {
+        "arc_length_m": 110.0,
+        "max_curvature_1_m": 0.007965778892803782
+      },
+      {
+        "arc_length_m": 120.0,
+        "max_curvature_1_m": 6.39700535937456e-05
+      },
+      {
+        "arc_length_m": 130.0,
+        "max_curvature_1_m": 1.0117982692720936e-06
+      },
+      {
+        "arc_length_m": 140.0,
+        "max_curvature_1_m": 3.8234805586996485e-08
+      },
+      {
+        "arc_length_m": 150.0,
+        "max_curvature_1_m": 3.896224690256023e-06
+      },
+      {
+        "arc_length_m": 160.0,
+        "max_curvature_1_m": 0.00046389398680171423
+      },
+      {
+        "arc_length_m": 170.0,
+        "max_curvature_1_m": 0.0004599893769748613
+      }
+    ]
+  },
+  "history": {
+    "samples": 201,
+    "max_curvature_1_m": 0.0349315033311644,
+    "max_effective_tension_N": 25362.525939941406,
+    "min_effective_tension_N": 25074.005126953125
+  },
+  "local_response": {
+    "critical_layer": "outer_armour",
+    "max_block_damage": 2.14701732230652e-10
+  },
+  "files": {
+    "simulation": "global time-domain simulation file (not distributed)",
+    "SI_history": "validation/paper_data/global_demo/global_history_si.csv"
+  },
+  "curvature_map": "right_handed",
+  "curvature_map_note": "17 October 2026: the strain-gradient columns of global_history_si.csv were negated from the earlier mapping (k_y, -k_x) to the right-handed (-k_y, k_x) of the global model's sign probe (tests/data/curvature_sign_probe.json). Curvature magnitudes, tension and max_block_damage are unchanged by the conversion."
+}

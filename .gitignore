@@ -1,0 +1,61 @@
+# SPDX-License-Identifier: Apache-2.0
+# Research manuscripts, copyrighted literature, licensed standards and cable data
+# that may not be published are maintained separately. These directories must
+# never be committed to the software repository.
+papers/
+paper/
+publication/
+private/
+data/experimental/
+
+# Simulation files of commercial codes and office documents
+*.sim
+*.dat.bak
+*.docx
+*.xlsx
+
+# Python
+__pycache__/
+*.py[cod]
+*.nbi
+*.nbc
+.pytest_cache/
+.pytest-tmp/
+.mypy_cache/
+.ruff_cache/
+.benchmarks/
+*.egg-info/
+.eggs/
+validation/**/work/
+
+# Coverage
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Build / dist trees
+build/
+dist/
+dist*/
+wheel-test/
+
+# Sphinx documentation build output
+doc/_build/
+
+# Run output written by the examples and scripts
+examples/output/
+results/
+
+# Local environments and secrets
+.env
+.env.*
+.envrc
+venv/
+.venv/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

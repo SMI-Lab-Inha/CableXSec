@@ -1,0 +1,58 @@
+{
+  "cases": 102,
+  "friction": 0.2,
+  "steel_proof_stress_MPa": 690,
+  "proof_stress_source": "declared illustrative value, as public steel material library",
+  "temperature_C": 20,
+  "external_pressure_MPa": 0.3,
+  "geometry_source": "revision_concentric_thermal.json",
+  "pressure_comparison": "same coupled axial/twist/radial strain; clamping frozen at zero applied true tension versus updated with tension",
+  "scope": "monotonic armour axial-yield screen; no contact indentation, plasticity, buckling, conductor failure or design factors",
+  "maximum_frozen_pressure_curvature_overprediction_pct": 0.9917966390969646,
+  "endpoints": [
+    [
+      0.0,
+      1.0,
+      3.587763896064281e-05,
+      0.0,
+      -3.972758592131594,
+      0.35469207032713,
+      0.3246453134841891,
+      1.5651039192757337,
+      1.5651039192757337
+    ],
+    [
+      250.0,
+      1.0,
+      0.002585416195211513,
+      0.0,
+      -506.2297955528642,
+      10.47302713683478,
+      4.815727647199761,
+      1.034916493466833,
+      1.0381489637276167
+    ],
+    [
+      0.0,
+      0.0,
+      3.6262645485637244e-05,
+      0.00019211504127478895,
+      2.6645352591003757e-13,
+      0.35535222267721195,
+      0.3169015616250693,
+      1.5660372655471166,
+      1.5660372655471166
+    ],
+    [
+      250.0,
+      0.0,
+      0.002634782522780668,
+      0.02448140239039064,
+      -5.115907697472721e-12,
+      10.56092465167599,
+      3.8326290810881796,
+      0.9843598825955405,
+      0.9941227308277419
+    ]
+  ]
+}

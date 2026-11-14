@@ -1,0 +1,135 @@
+{
+  "source_sha256": "a43167817e38cd3316766b6e38e466b998154d316f44c0e57bd54156f79ae0b0",
+  "doi": "10.1016/j.marstruc.2023.103465",
+  "pdf_page": 14,
+  "figure": "16",
+  "method": "ordered native PDF polyline",
+  "cases": {
+    "a": {
+      "point_count": 656,
+      "axes_pdf_points": [
+        124.95600128173828,
+        79.12598419189453,
+        212.8800048828125,
+        167.04998779296875
+      ],
+      "curvature_limits": [
+        -0.05,
+        0.05
+      ],
+      "moment_limits": [
+        -400.0,
+        400.0
+      ],
+      "source_line_width_pt": 0.6079999804496765,
+      "analytical_slope_check_Nm2": 3597.015890232659,
+      "curvature_graphical_halfwidth_1_m": 0.0003457531251694777,
+      "moment_graphical_halfwidth_Nm": 2.7660250013558216
+    },
+    "b": {
+      "point_count": 589,
+      "axes_pdf_points": [
+        242.1929931640625,
+        79.12598419189453,
+        330.12200927734375,
+        167.04998779296875
+      ],
+      "curvature_limits": [
+        -0.1,
+        0.1
+      ],
+      "moment_limits": [
+        -600.0,
+        600.0
+      ],
+      "source_line_width_pt": 0.6079999804496765,
+      "analytical_slope_check_Nm2": 3593.284841911167,
+      "curvature_graphical_halfwidth_1_m": 0.0006914668300920986,
+      "moment_graphical_halfwidth_Nm": 4.149037502033733
+    },
+    "c": {
+      "point_count": 655,
+      "axes_pdf_points": [
+        359.4309997558594,
+        79.12598419189453,
+        447.3599853515625,
+        167.04998779296875
+      ],
+      "curvature_limits": [
+        -0.1,
+        0.005
+      ],
+      "moment_limits": [
+        -600.0,
+        200.0
+      ],
+      "source_line_width_pt": 0.6079999804496765,
+      "analytical_slope_check_Nm2": 3593.280498768937,
+      "curvature_graphical_halfwidth_1_m": 0.0003630202117920018,
+      "moment_graphical_halfwidth_Nm": 2.7660250013558216
+    },
+    "d": {
+      "point_count": 647,
+      "axes_pdf_points": [
+        124.95600128173828,
+        225.6729736328125,
+        212.885009765625,
+        313.59698486328125
+      ],
+      "curvature_limits": [
+        -0.005,
+        0.1
+      ],
+      "moment_limits": [
+        -200.0,
+        600.0
+      ],
+      "source_line_width_pt": 0.6079999804496765,
+      "analytical_slope_check_Nm2": 3593.2811223124772,
+      "curvature_graphical_halfwidth_1_m": 0.0003630201172967561,
+      "moment_graphical_halfwidth_Nm": 2.7660247613406574
+    },
+    "e": {
+      "point_count": 665,
+      "axes_pdf_points": [
+        242.1929931640625,
+        225.66798400878906,
+        330.1210021972656,
+        313.59698486328125
+      ],
+      "curvature_limits": [
+        -0.2,
+        0.005
+      ],
+      "moment_limits": [
+        -1000.0,
+        200.0
+      ],
+      "source_line_width_pt": 0.6079999804496765,
+      "analytical_slope_check_Nm2": 3593.2346803387795,
+      "curvature_graphical_halfwidth_1_m": 0.000708761618525432,
+      "moment_graphical_halfwidth_Nm": 4.148801700516181
+    },
+    "f": {
+      "point_count": 641,
+      "axes_pdf_points": [
+        359.4309997558594,
+        225.66798400878906,
+        447.3580017089844,
+        313.59698486328125
+      ],
+      "curvature_limits": [
+        -0.005,
+        0.2
+      ],
+      "moment_limits": [
+        -200.0,
+        1000.0
+      ],
+      "source_line_width_pt": 0.6079999804496765,
+      "analytical_slope_check_Nm2": 3593.1945665686035,
+      "curvature_graphical_halfwidth_1_m": 0.000708769736392416,
+      "moment_graphical_halfwidth_Nm": 4.148801700516181
+    }
+  }
+}

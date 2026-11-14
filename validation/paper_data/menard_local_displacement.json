@@ -1,0 +1,28 @@
+{
+  "doi": "10.1016/j.marstruc.2023.103465",
+  "figure": "18b",
+  "pdf_page": 16,
+  "source_sha256": "a43167817e38cd3316766b6e38e466b998154d316f44c0e57bd54156f79ae0b0",
+  "reference": "published three-dimensional FE, not a physical slip measurement",
+  "radius_m": 0.0394,
+  "lay_angle_deg": 20.1,
+  "geometric_factor_m2": 0.003983659483712225,
+  "cases": {
+    "005": {
+      "curvature_1_m": 0.05,
+      "points": 55,
+      "rmse_mm": 0.027824932215847524,
+      "range_normalised_rmse_pct": 8.596729137048023,
+      "calculated_peak_amplitude_mm": 0.19918297418561126,
+      "source_marker_radius_mm": 0.04148721889524944
+    },
+    "020": {
+      "curvature_1_m": 0.2,
+      "points": 55,
+      "rmse_mm": 0.055145005004588445,
+      "range_normalised_rmse_pct": 3.7952846284448993,
+      "calculated_peak_amplitude_mm": 0.796731896742445,
+      "source_marker_radius_mm": 0.04148721889524944
+    }
+  }
+}

@@ -1,0 +1,134 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
+# CableXSec verification and validation
+
+This is the validation record of CableXSec. It is for users and reviewers who need the
+evidence behind a CableXSec result: each case lists its reference, metric, measured result and
+acceptance value, and names the script or test that reproduces it. The table is generated from
+the live code by `python validation/scripts/run_validation.py`, which writes
+[`validation/validation_report.md`](https://github.com/SMI-Lab-Inha/CableXSec/blob/main/validation/validation_report.md);
+the benchmark definitions, registered targets and discussion are in the benchmark register of
+the manual ([Benchmarks](https://cablexsec.readthedocs.io/en/latest/benchmarks.html)), and the
+rules that govern targets and statuses in the
+[validation policy](https://cablexsec.readthedocs.io/en/latest/validation_policy.html).
+
+Case identifiers group the evidence into two tiers:
+
+| Tier | Evidence |
+|---|---|
+| 1 | Analytical verification, internal consistency and comparisons with independent numerical methods |
+| 2 | Comparisons with published measurements and published tabulated results |
+
+Every input is a published value or a file in this repository. The digitised measurements are
+in [`validation/paper_data/`](https://github.com/SMI-Lab-Inha/CableXSec/blob/main/validation/paper_data/README.md)
+with their sources. Targets were registered before the comparisons were run and are not relaxed
+afterwards: a comparison that misses its target is reported as failed.
+
+## Summary
+
+| ID | Case | Reference | Result | Acceptance | Status |
+|---|---|---|---|---|---|
+| **STATE-NQ** | Annulus extension and Saint-Venant twist | closed form | 6.7e-16; 0 | <1e-10 | Pass |
+| **STATE-P** | Closed-end thick tube, von Mises stress | Lamé solution | 7.3e-15 | <1e-10 | Pass |
+| **STATE-T** | Uniform free thermal expansion | closed form | strain 3.1e-15; stress 1.3e-6 Pa | <1e-10; <1e-5 Pa | Pass |
+| **A10, A10b** | Vector-slip rotation equivariance; vector and loxodromic contrast | identity | 3.8e-16; 1.2e-16 | <1e-12 | Pass |
+| **OvM, OvM-g** | Frictionless contact slip and geodesic transverse map | Out and von Morgen (1997), Eqs. 26–28 | ≤2.7e-15; exact geodesic 2.6e-4 to 3.8e-4 | <1e-12; <1e-3 at k = 1e-4 | Pass |
+| **Out89** | Contact plastic slip and damage ratios | Out (1989), Eqs. 1, A8, A11 | 9.6e-16; 5.0e-7 | <1e-12; <1e-4 | Pass |
+| **CF** | Laid-core friction limits | closed forms, rotation equivariance | ≤1.1e-4 | per check | Pass |
+| **FR** | Fretting regime: Mindlin energy, Fouvry transition, Cattaneo strip | closed forms, numerical Masing loop | ≤7.8e-12 | <1e-9 to <1e-12 | Pass |
+| **TQ** | Torque constant of a strand; coupled section; mirror lay | Feyrer, Example 2.8; Knapp (1981) | −0.11 %; −1.3e-6; 0 | ±0.2 %; <1e-4; <1e-9 | Pass |
+| **A11** | Moment–curvature energy closure | loop area against closed form | 0.082 % | <0.1 % | Pass |
+| **σ_B** | Radial-fibre bending stress | Ménard and Cartraud (2023), Eq. 14 | 0 | <1e-6 % | Pass |
+| **M-rec, M-rec-3core** | Assembled per-wire moment against the section engine | cross-engine | 0.000 % | <2 % | Pass |
+| **slip-onset** | First wire to slip lies at the neutral axis | Raoof; Papailiou | \|cos\| = 0.000 | \|cos\| < 0.2 | Pass |
+| **xsec-K** | Coupling tangent bounds | EI_max, EI_min limits | ≤6.3e-13 % | <0.01 % | Pass |
+| **QP-KKT, QP-Lamé** | Concentric contact complementarity; shrink-fit compliances | KKT conditions; compound cylinder | 1.9e-13 N; 1.3e-16 | <1e-8 N; <1e-6 | Pass |
+| **COMP-T, COMP-N, COMP-O, SH-AX** | Component thermal expansion, axial equilibrium, zero-offset bounds, sheath axial stress | closed forms | 0 | <1e-6 Pa; <1e-12 | Pass |
+| **io-known, io-global** | Reader to fatigue known answer; global time-domain history against its recorded run summary | closed-form Miner damage; recorded summary | 0 | <1e-10 | Pass |
+| **σ_c1** | Bird-caging stress cross-check | Chae et al., Eq. 17 | 0 | <1e-9 % | Pass |
+| **ST17-T3** | Lateral buckling lower bound, 6, 8 and 14 inch pipes | Sævik and Thorsen (2017), Table 3 | −2.03 / −0.45 / −1.34 % | ±3 % | Pass |
+| **FOU95** | Mindlin transition amplitude, 200–500 N | Fouvry et al. (1995), Table 4 | 3.25 / 4.17 / 4.63 / 5.25 µm vs 3.2 / 4.1 / 4.6 / 5.2 | ±0.1 µm | Pass |
+| **WEAR-CW** | Energy wear volume of crossed wires | Poon (2024), Cruzado (2013) | ratio 0.913 | 0.8–1.25 | Pass |
+| **LV21** | Single-wire limit; first slip at three friction coefficients | Li and Vaz, Eqs. 11, 15 | ≤1.57 % | ±0.1 %; ±2 % | Pass |
+| **ST17-P34** | Wire yield and hoop failure of the de Sousa pipe | Sævik and Thorsen (2017), Eqs. 33–34 | +0.04 / +4.43 / +3.76 % | ±0.5 %; ±6 % | Pass |
+| **YANG15** | Tape failure load | Yang et al., Eq. 9 | −1.27 % | ±3 % | Pass |
+| **ST17-SOUSA** | Radial bird-caging load against the de Sousa test | Sævik and Thorsen (2017), Eq. 35 | −1.35 % | ±10 % | Pass |
+| **OST12** | Fixed-free plateaus per armour layer | Østergaard, Fig. 14 | +1.01 / −0.06 / −0.03 % | ±5 % | Pass |
+| **TQ-KL** | Torque-balance helix angle, seven strand pairs | Kim and Lee (2017), beam FE | −0.26 to −0.06 deg | ≤0.3 deg | Pass |
+| **TQ-UJ** | Fixed-end torque per tension, six strands | Utting and Jones (1987), Table 1 | theory 1.051–1.059; test 1.067–1.136 | 1.04–1.07; 1.00–1.15 | Pass |
+| **BM1** | Full-slip bending stiffness EI_min, no calibration | Ménard and Cartraud (2023), Table 3 | 0.6 % (3571 N·m²) | <15 % | Pass |
+| **BM1-loop** | ±0.10 m⁻¹ moment–curvature loop after the published ±0.05 calibration, four-point arrangement | Ménard and Cartraud (2023), Fig. 16b | ordered RMSE 3.16 %; cycle work 70.4 vs 62.3 J/m (12.9 %) | RMSE <5 %; work within 10 % | **Fail** |
+| **BM1-loop-uniform** | Same comparison at uniform curvature | Ménard and Cartraud (2023), Fig. 16b | as BM1-loop | as BM1-loop | **Fail** |
+| **HU-3PB** | Conductor loop, third cycle, three-point arrangement | Hu et al. (2022) | loop area +36.7 % (Papailiou), +64.4 % (KH); transition share 32.8 % / 39.4 % | area ±15 %; share 34 ± 10 points | **Fail** |
+| **HU-uniform** | Same loop at uniform curvature | Hu et al. (2022) | area +4.9 % (Papailiou) | — | Not comparable |
+| **WITZ-EI** | Full-slip EI_min of a 2.5-inch flexible pipe, 0 bar, parameter-free | Witz (1996), measured gradients 1190 / 1014 N·m² | 1007 N·m² | 913–1309 N·m² | Pass |
+| **WITZ-ID** | 300-bar loop predicted after identifying the initial pressure at 0 bar | Witz (1996), Figs 5–6 | width 1383 N·m vs 1990–2164; energy −12.6 % | width 1692–2489 N·m; energy ±15 % | **Fail** |
+| **SV11-PLANE** | Inner-armour stress ranges at the bending-plane FBG stations, 14 load cases | Sævik (2011), Figs 17–23 | median ratio 1.65 (3 of 14 in band); sectional 1.03 (11 of 14) | median 0.85–1.18 and ≥12 of 14 in 0.70–1.43 | **Fail** |
+| **SV11-GJ** | Absolute stress ranges near the termination, load case 14 | Gjøsteen et al. (2027), Figs 27–35 | mean ratio 1.90 (sectional 1.32) | 0.72–1.38 | **Fail** |
+| **BM5** | Conductor temperature of the CIGRE TB 880 export cable | Poradowski tabulated thermal network; FEM 89.62 °C | 84.4 °C | ≤90 °C, about 5 K low | Partial |
+| **BM4** | Axial stiffness of a population of umbilicals | Sævik and Bruaseth (2005) | mean ratio about 1.45 | <1.25 | Not validated |
+
+**Pass** meets the registered target. **Fail** does not; the target is unchanged and the row
+names the discrepancy. **Partial** reproduces a stated part of the comparison. **Not comparable**
+records a comparison whose reference does not support the definition used. **Not validated**
+records a negative finding that limits the scope of the model. The values above are rounded from
+the generated report, which holds every digit.
+
+## Scope
+
+CableXSec is a local model: it takes a section load history (curvature components, tension,
+pressure, temperature) from a global analysis and resolves the cross-section. The validated
+quantities are those of the passing rows. In particular:
+
+- The full-slip bending stiffness and the analytical limits of the slip model are confirmed
+  against published data without calibration (BM1, WITZ-EI).
+- The friction work of the measured Ménard ±0.10 m⁻¹ loop is overestimated by 13 %, and the
+  300-bar Witz loop is too narrow after identification at 0 bar; absolute dissipation
+  predictions therefore carry the uncertainty shown by BM1-loop and WITZ-ID.
+- The termination-corrected (anchored-wire) armour stress is an upper estimate that the
+  published near-termination measurements do not support (SV11-PLANE, SV11-GJ); the sectional
+  result is the one that matches them.
+- Cyclic redistribution of three-core contact is not solved; contact stress functions use
+  prescribed tractions; fretting is excluded from the long-term fatigue projections.
+- BM4 shows that the axial stiffness of umbilicals with radial interaction is not reproduced
+  without that interaction.
+
+## Tier 1: analytical and consistency checks
+
+The rows are produced by `validation/scripts/run_validation.py`, and the tests marked
+`analytical_sanity` and `independent_method` check the same quantities in the test suite:
+
+```bash
+python -m pytest -q -m analytical_sanity
+python -m pytest -q -m independent_method
+```
+
+The independent references are the periodic friction and shear cells
+(`validation/scripts/periodic_friction_cell.py`, `periodic_shear_cell.py`), the finite-difference
+radial ring (`radial_foundation_fd.py`), the local Hertz reference
+(`helical_hertz_reference.py`), the exact path-work bounds of an elastic–Coulomb slider
+(`slider_initial_work.py`) and the NumPy reference of the compiled kernels.
+
+## Tier 2: published measurements
+
+```bash
+python -m pytest -q -m full_scale
+python validation/scripts/check_saevik2011.py
+python validation/scripts/check_t1_test_arrangement.py
+python validation/scripts/check_g8_gradual_reversal.py
+```
+
+The cases, their sources, the digitisation and the registered targets are described in the
+benchmark register. The Ménard and Cartraud (2023) ranges were extracted from the vector paths of
+the published figure (`validation/paper_data/menard_vector_extraction.json`); the other measured
+curves were digitised from the published figures.
+
+## Reproducing the report
+
+```bash
+python validation/scripts/run_validation.py          # rewrite validation/validation_report.md
+python validation/scripts/run_validation.py --check  # compare with the committed report
+```
+
+The script exits with status 1 while any row is **Fail** or **Review**. In 0.1.0 the failed rows
+are the registered comparisons listed above.

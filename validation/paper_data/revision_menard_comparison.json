@@ -1,0 +1,293 @@
+{
+  "source_sha256": "a43167817e38cd3316766b6e38e466b998154d316f44c0e57bd54156f79ae0b0",
+  "doi": "10.1016/j.marstruc.2023.103465",
+  "pdf_page": 14,
+  "figure": "16",
+  "method": "ordered native PDF polyline",
+  "cases": {
+    "a": {
+      "point_count": 656,
+      "axes_pdf_points": [
+        124.95600128173828,
+        79.12598419189453,
+        212.8800048828125,
+        167.04998779296875
+      ],
+      "curvature_limits": [
+        -0.05,
+        0.05
+      ],
+      "moment_limits": [
+        -400.0,
+        400.0
+      ],
+      "source_line_width_pt": 0.6079999804496765,
+      "analytical_slope_check_Nm2": 3597.015890232659,
+      "curvature_graphical_halfwidth_1_m": 0.0003457531251694777,
+      "moment_graphical_halfwidth_Nm": 2.7660250013558216,
+      "comparison": {
+        "branch_assignment": "major reversals of experimental curvature only",
+        "reversal_prominence_fraction": 0.25,
+        "initialisation": "one repetition of experimental curvature, no moment fit",
+        "experimental_cycle_energies_J_per_m": [
+          20.533263871166163,
+          19.79860960744311,
+          20.768369470441193,
+          19.68074860053487
+        ],
+        "model_cycle_energies_on_measured_curvature_J_per_m": [
+          30.912023478627475,
+          30.328092547102102,
+          31.551952052294013,
+          30.275552939883255
+        ],
+        "model_sampled_polygon_cycle_energies_J_per_m": [
+          30.8603726070166,
+          29.838838886413413,
+          31.45422301847867,
+          30.223177519635243
+        ],
+        "model_work_definition": "stored-energy change plus friction evaluated at inserted cycle crossings; fixed pressure and scalar curvature",
+        "source_tabulated_energy_reported_J": 21.92,
+        "note": "Source Table 3 prints J; plotted M-kappa work has units J/m. Values are separate; no length conversion is inferred."
+      }
+    },
+    "b": {
+      "point_count": 589,
+      "axes_pdf_points": [
+        242.1929931640625,
+        79.12598419189453,
+        330.12200927734375,
+        167.04998779296875
+      ],
+      "curvature_limits": [
+        -0.1,
+        0.1
+      ],
+      "moment_limits": [
+        -600.0,
+        600.0
+      ],
+      "source_line_width_pt": 0.6079999804496765,
+      "analytical_slope_check_Nm2": 3593.284841911167,
+      "curvature_graphical_halfwidth_1_m": 0.0006914668300920986,
+      "moment_graphical_halfwidth_Nm": 4.149037502033733,
+      "comparison": {
+        "branch_assignment": "major reversals of experimental curvature only",
+        "reversal_prominence_fraction": 0.25,
+        "initialisation": "one repetition of experimental curvature, no moment fit",
+        "experimental_cycle_energies_J_per_m": [
+          62.439052489069404,
+          62.23168880281882
+        ],
+        "model_cycle_energies_on_measured_curvature_J_per_m": [
+          70.44580510304723,
+          70.27388034814027
+        ],
+        "model_sampled_polygon_cycle_energies_J_per_m": [
+          69.78273572508532,
+          70.14040166656085
+        ],
+        "model_work_definition": "stored-energy change plus friction evaluated at inserted cycle crossings; fixed pressure and scalar curvature",
+        "source_tabulated_energy_reported_J": 61.6,
+        "note": "Source Table 3 prints J; plotted M-kappa work has units J/m. Values are separate; no length conversion is inferred."
+      }
+    },
+    "c": {
+      "point_count": 655,
+      "axes_pdf_points": [
+        359.4309997558594,
+        79.12598419189453,
+        447.3599853515625,
+        167.04998779296875
+      ],
+      "curvature_limits": [
+        -0.1,
+        0.005
+      ],
+      "moment_limits": [
+        -600.0,
+        200.0
+      ],
+      "source_line_width_pt": 0.6079999804496765,
+      "analytical_slope_check_Nm2": 3593.280498768937,
+      "curvature_graphical_halfwidth_1_m": 0.0003630202117920018,
+      "moment_graphical_halfwidth_Nm": 2.7660250013558216,
+      "comparison": {
+        "branch_assignment": "major reversals of experimental curvature only",
+        "reversal_prominence_fraction": 0.25,
+        "initialisation": "one repetition of experimental curvature, no moment fit",
+        "experimental_cycle_energies_J_per_m": [
+          20.521448930939798,
+          20.59962612092124,
+          20.055911993076073,
+          20.290421812972134
+        ],
+        "model_cycle_energies_on_measured_curvature_J_per_m": [
+          30.62560974295178,
+          30.982979390081255,
+          30.115067764777393,
+          30.65752122487146
+        ],
+        "model_sampled_polygon_cycle_energies_J_per_m": [
+          30.590258591566574,
+          30.761378879398734,
+          30.068864338606204,
+          30.60831904381088
+        ],
+        "model_work_definition": "stored-energy change plus friction evaluated at inserted cycle crossings; fixed pressure and scalar curvature",
+        "source_tabulated_energy_reported_J": 21.41,
+        "note": "Source Table 3 prints J; plotted M-kappa work has units J/m. Values are separate; no length conversion is inferred."
+      }
+    },
+    "d": {
+      "point_count": 647,
+      "axes_pdf_points": [
+        124.95600128173828,
+        225.6729736328125,
+        212.885009765625,
+        313.59698486328125
+      ],
+      "curvature_limits": [
+        -0.005,
+        0.1
+      ],
+      "moment_limits": [
+        -200.0,
+        600.0
+      ],
+      "source_line_width_pt": 0.6079999804496765,
+      "analytical_slope_check_Nm2": 3593.2811223124772,
+      "curvature_graphical_halfwidth_1_m": 0.0003630201172967561,
+      "moment_graphical_halfwidth_Nm": 2.7660247613406574,
+      "comparison": {
+        "branch_assignment": "major reversals of experimental curvature only",
+        "reversal_prominence_fraction": 0.25,
+        "initialisation": "one repetition of experimental curvature, no moment fit",
+        "experimental_cycle_energies_J_per_m": [
+          22.559133818533766,
+          22.3684236808524,
+          22.644579764146627
+        ],
+        "model_cycle_energies_on_measured_curvature_J_per_m": [
+          30.461501776300963,
+          30.974311088972854,
+          31.007133722795686
+        ],
+        "model_sampled_polygon_cycle_energies_J_per_m": [
+          30.41712824408025,
+          30.945054828374595,
+          30.962602801277697
+        ],
+        "model_work_definition": "stored-energy change plus friction evaluated at inserted cycle crossings; fixed pressure and scalar curvature",
+        "source_tabulated_energy_reported_J": 21.27,
+        "note": "Source Table 3 prints J; plotted M-kappa work has units J/m. Values are separate; no length conversion is inferred."
+      }
+    },
+    "e": {
+      "point_count": 665,
+      "axes_pdf_points": [
+        242.1929931640625,
+        225.66798400878906,
+        330.1210021972656,
+        313.59698486328125
+      ],
+      "curvature_limits": [
+        -0.2,
+        0.005
+      ],
+      "moment_limits": [
+        -1000.0,
+        200.0
+      ],
+      "source_line_width_pt": 0.6079999804496765,
+      "analytical_slope_check_Nm2": 3593.2346803387795,
+      "curvature_graphical_halfwidth_1_m": 0.000708761618525432,
+      "moment_graphical_halfwidth_Nm": 4.148801700516181,
+      "comparison": {
+        "branch_assignment": "major reversals of experimental curvature only",
+        "reversal_prominence_fraction": 0.25,
+        "initialisation": "one repetition of experimental curvature, no moment fit",
+        "experimental_cycle_energies_J_per_m": [
+          65.7554155530822,
+          65.60255216048694,
+          63.865360345830865,
+          64.6059381247205
+        ],
+        "model_cycle_energies_on_measured_curvature_J_per_m": [
+          68.59583733881783,
+          68.94026146915445,
+          68.95094876129565,
+          69.15651957251805
+        ],
+        "model_sampled_polygon_cycle_energies_J_per_m": [
+          68.48172825035114,
+          68.7144311949706,
+          68.53456503472005,
+          68.7446859673025
+        ],
+        "model_work_definition": "stored-energy change plus friction evaluated at inserted cycle crossings; fixed pressure and scalar curvature",
+        "source_tabulated_energy_reported_J": 52.25,
+        "note": "Source Table 3 prints J; plotted M-kappa work has units J/m. Values are separate; no length conversion is inferred."
+      }
+    },
+    "f": {
+      "point_count": 641,
+      "axes_pdf_points": [
+        359.4309997558594,
+        225.66798400878906,
+        447.3580017089844,
+        313.59698486328125
+      ],
+      "curvature_limits": [
+        -0.005,
+        0.2
+      ],
+      "moment_limits": [
+        -200.0,
+        1000.0
+      ],
+      "source_line_width_pt": 0.6079999804496765,
+      "analytical_slope_check_Nm2": 3593.1945665686035,
+      "curvature_graphical_halfwidth_1_m": 0.000708769736392416,
+      "moment_graphical_halfwidth_Nm": 4.148801700516181,
+      "comparison": {
+        "branch_assignment": "major reversals of experimental curvature only",
+        "reversal_prominence_fraction": 0.25,
+        "initialisation": "one repetition of experimental curvature, no moment fit",
+        "experimental_cycle_energies_J_per_m": [
+          68.79487278748688,
+          68.94586843661263,
+          69.7214165958695
+        ],
+        "model_cycle_energies_on_measured_curvature_J_per_m": [
+          68.51389924370312,
+          68.79780151633508,
+          70.38730659655334
+        ],
+        "model_sampled_polygon_cycle_energies_J_per_m": [
+          68.3794307984342,
+          68.0146510395978,
+          69.72618421722481
+        ],
+        "model_work_definition": "stored-energy change plus friction evaluated at inserted cycle crossings; fixed pressure and scalar curvature",
+        "source_tabulated_energy_reported_J": 52.98,
+        "note": "Source Table 3 prints J; plotted M-kappa work has units J/m. Values are separate; no length conversion is inferred."
+      }
+    }
+  },
+  "timing": {
+    "python": "3.11.15",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "nominal_loop_seconds": [
+      0.23931009997613728,
+      0.2538522999966517,
+      0.2508222999749705,
+      0.254756800015457,
+      0.2693491000100039,
+      0.26580490003107116
+    ],
+    "steps": 3601,
+    "note": "section integration only; no FE speedup inferred"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "description": "Mass assumptions for a mechanical application of the published Menard geometry, not measured specimen mass or identified polymer grades. Reference elastic properties and local contact inputs are unchanged. Filler occupies the residual interior bulk volume; its geometry and stiffness are not added to the reduced local model. The optical-fibre tube and unreported screen-wire geometry remain omitted, as in the reduced benchmark construction. No electrical power rating is inferred.",
+  "densities": {
+    "copper_menard2023": {
+      "rho_kg_m3": 8910.0,
+      "source": "Copper Development Association, C11000 ETP, specific gravity 8.91. Density proxy only, not identification of the tested conductor grade. https://alloys.copper.org/alloy/C11000"
+    },
+    "xlpe_menard2023": {
+      "rho_kg_m3": 922.0,
+      "source": "Borealis Borlink LE4201S, density 922 kg/m3. Density proxy only; the elastic modulus remains Menard Table 2. https://www.borealisgroup.com/products/product-catalogue/borlink-le4201s"
+    },
+    "hdpe_menard2023": {
+      "rho_kg_m3": 946.0,
+      "source": "Borealis Borstar HE6062 cable jacketing, density 946 kg/m3. Density proxy, not the identified specimen grade. https://www.borealisgroup.com/products/product-catalogue/borstar-he6062"
+    },
+    "pfr_menard2023": {
+      "rho_kg_m3": 2000.0,
+      "source": "3M Dyneon PFE 90Z safety data sheet, density 2.0 g/cm3. Perfluoroelastomer density proxy; the elastic modulus remains Menard Table 2. https://multimedia.3m.com/mws/mediawebserver?mwsId=SSSSSuUn_zu8l00xM8_SNx2ZPv70k17zHvu9lxtD7SSSSSS--"
+    }
+  },
+  "unmodelled_filler": {
+    "enclosing_layer": "inner_sheath",
+    "rho_kg_m3": 905.0,
+    "filled_fraction": 1.0,
+    "source": "Menard Section 2.2 identifies PP rope filler, but does not report packing or mass. Fully occupied residual bulk volume is an explicit mass assumption, not a response bound. PP density proxy 905 kg/m3 from Borealis HF955MO. https://www.borealisgroup.com/storage/Datasheets/HF955MO-PDS-REG_WORLD-EN-V7-PDS-WORLD-24785-PDS_HF955MO_7_22122022.pdf"
+  }
+}

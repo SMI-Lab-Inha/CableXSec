@@ -1,0 +1,44 @@
+CableXSec
+Copyright (c) 2026 Jae Hoon Seo, SMI Lab, Inha University
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+-------------------------------------------------------------------------------
+Name
+-------------------------------------------------------------------------------
+
+"CableXSec" identifies the official project maintained by SMI Lab, Inha
+University, at https://github.com/SMI-Lab-Inha/CableXSec. As Section 6 of the
+Apache License, Version 2.0 provides, the licence grants no permission to use
+the name except to describe the origin of the work. Modified versions may say
+that they are based on CableXSec, but may not use the name in a way that
+implies they are the official CableXSec or endorsed by its maintainers.
+
+-------------------------------------------------------------------------------
+Third-party material
+-------------------------------------------------------------------------------
+
+Published data
+
+  The bundled cable definitions (cablexsec/cables/) and the comparison data
+  in validation/paper_data/ are transcribed or digitised from the published
+  sources cited in each file (for example Menard and Cartraud, Marine
+  Structures 91 (2023) 103465; Witz, Marine Structures 9 (1996) 885-904; Saevik,
+  Computers and Structures 89 (2011) 2273-2291; Gjosteen et al., Marine Structures 111 (2027)
+  104189; Janocha et al. (2024) for IEA Wind Task 49; CIGRE TB 880). The
+  numerical values are facts reported in those publications; the
+  publications themselves are not redistributed. Cite the original sources
+  when you use these data.
+
+Global analysis results
+
+  validation/paper_data/global_demo/ and the floating-wind figure data are
+  reduced results of global time-domain simulations made by the maintainers
+  with a commercial global solver. No solver software, model or simulation
+  file is included.
+
+Contributor Covenant 2.1 (Creative Commons Attribution 4.0 International)
+  https://www.contributor-covenant.org/version/2/1/code_of_conduct.html
+
+  CODE_OF_CONDUCT.md reproduces the Contributor Covenant, version 2.1, by
+  Coraline Ada Ehmke and contributors, with the project contact added.

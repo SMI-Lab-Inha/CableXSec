@@ -1,0 +1,30 @@
+{
+  "cases": 18,
+  "seeds_per_state": 6,
+  "states_Hs_Tp": [
+    [
+      1.0,
+      6.0
+    ],
+    [
+      2.1,
+      7.5
+    ],
+    [
+      4.0,
+      10.0
+    ]
+  ],
+  "retained_duration_s": 3600,
+  "initialisation_s": 600,
+  "section_arc_m": 105,
+  "DEL_reference_frequency_Hz": 1.0,
+  "mean_interval": "Student t interval with five degrees of freedom; approximate seed-sampling uncertainty only",
+  "normal_contact": "prescribed two-face pressure 6 MPa; no coupled trefoil radial solution",
+  "curvature_profile": "range of native rotational x curvature; interpolate histories before taking range",
+  "local_source_sha256": "4387429f8409e0b55eb984e50e3476d18da024c5b996d5cfcce45dd2989a9da3",
+  "runtime_range_s": [
+    537.9726363999944,
+    558.8082995000004
+  ]
+}

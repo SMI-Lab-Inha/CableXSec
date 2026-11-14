@@ -1,0 +1,4 @@
+# Synthetic two-state scatter diagram for the CableXSec tests.
+Hs_m,Tp_s,probability
+2.0,8.0,0.75
+4.0,11.0,0.25
