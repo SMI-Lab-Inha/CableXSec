@@ -26,7 +26,7 @@ Every row is computed from published data or closed-form references in this repo
 | 1 | M-rec | Assembled per-wire moment vs compute_mkappa (cross-engine, single-core) | < 2% | 0.000% | PASS |
 | 1 | M-rec-3core | Cross-engine moment vs compute_mkappa with offset-core geometry and shared mean armour pressure | < 2% | 0.000% | PASS |
 | 1 | slip-onset | First-to-slip wire at neutral axis (|cos| → 0; Raoof/Papailiou, not extreme-fibre loop) | |cos| < 0.2 | |cos|=0.000 | PASS |
-| 1 | xsec-K | Coupling tangent bounds (κ→0=EI_max, κ→∞=EI_min); slip-front local slope | < 0.01% | κ0:0.00e+00% / κ∞:6.33e-13% | PASS |
+| 1 | xsec-K | Coupling tangent bounds (κ→0=EI_max, κ→∞=EI_min); slip-front local slope | < 0.01% | κ0:3.16e-14% / κ∞:5.99e-13% | PASS |
 | 1 | QP-KKT | Concentric contact max|normal line force times gap| (common extension, twist and radial equilibrium) | < 1e-8 N | 1.9e-13 (q>=0: True) | PASS |
 | 1 | QP-Lamé | Isolated cylinder surface compliances vs compound-cylinder shrink-fit closed form | < 1e-6 | 1.3e-16 | PASS |
 | 1 | COMP-T | Uniform free thermal expansion, all components | < 1e-6 Pa residual | 0.00e+00 Pa | PASS |
@@ -60,9 +60,9 @@ Every row is computed from published data or closed-form references in this repo
 
 ## Test taxonomy (full gate suite)
 
-- analytical_sanity: `939 passed, 3048 deselected`
-- independent_method: `68 passed, 3919 deselected`
-- full_scale: `26 passed, 3960 deselected`
+- analytical_sanity: `1025 passed, 3106 deselected`
+- independent_method: `68 passed, 4063 deselected`
+- full_scale: `26 passed, 4104 deselected`
 
 Run `pytest -m <marker>` to reproduce each group.
 

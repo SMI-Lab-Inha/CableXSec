@@ -23,7 +23,7 @@ for tension, pressure in ((100e3, 0.0), (100e3, 2e6)):
     print(
         f"T {tension / 1e3:.0f} kN, sealed p_ext {pressure / 1e6:.0f} MPa: "
         f"strain {state.result.axial_strain * 1e6:.0f} ue, "
-        f"open gaps {int(np.count_nonzero(state.result.interface_gap_m > 0))}"
+        f"open gaps {int(np.count_nonzero(state.result.interface_gap_m > 1e-9))}"
     )
     for name in contact:
         print(

@@ -196,8 +196,8 @@ pressure history of step 3:
 
 <!-- tutorial-output -->
 ```text
-inner_armour: full-slip amplitude up to 364 um, friction law up to 3.9 um (at 88 deg), stations slipping 0.2% of the time
-outer_armour: full-slip amplitude up to 402 um, friction law up to 134.2 um (at 85 deg), stations slipping 6.8% of the time
+inner_armour: full-slip amplitude up to 364 um, friction law up to 3.9 um, stations slipping 0.2% of the time
+outer_armour: full-slip amplitude up to 402 um, friction law up to 134.2 um, stations slipping 6.8% of the time
 ```
 
 ```{figure} figures/tutorial_04_slip_amplitude.png

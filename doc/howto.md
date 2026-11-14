@@ -67,7 +67,7 @@ radial section, from a cable definition or from layers given directly.
 
 <!-- howto-output: howto_02_contact_state.py -->
 ```text
-T 100 kN, sealed p_ext 0 MPa: strain 114 ue, open gaps 2
+T 100 kN, sealed p_ext 0 MPa: strain 114 ue, open gaps 1
   inner_armour  P1+P2  0.062 MPa, wire stress   21.0 MPa
   outer_armour  P1+P2  0.016 MPa, wire stress   21.7 MPa
 T 100 kN, sealed p_ext 2 MPa: strain 177 ue, open gaps 0

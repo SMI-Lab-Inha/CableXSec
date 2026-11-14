@@ -170,8 +170,7 @@ for field in history.layers:
     full = fretting.faces[faces[field.name]].max_amplitude_m
     print(
         f"{field.name}: full-slip amplitude up to {full.max() * 1e6:.0f} um, "
-        f"friction law up to {amplitude.max() * 1e6:.1f} um "
-        f"(at {np.degrees(field.azimuth_rad[np.argmax(amplitude)]):.0f} deg), "
+        f"friction law up to {amplitude.max() * 1e6:.1f} um, "
         f"stations slipping {field.slipping.mean():.1%} of the time"
     )
 # [step-index]
