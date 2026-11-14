@@ -19,6 +19,7 @@ import yaml
 from pydantic import ValidationError
 
 import cablexsec as cx
+from cablexsec._numba import HAVE_NUMBA
 from cablexsec.cables.schema import (
     CableData,
     CableMeta,
@@ -29,6 +30,11 @@ from cablexsec.cables.schema import (
 )
 from cablexsec.mechanics.section_geometry import filler_area, is_interstitial_filler
 from cablexsec.mechanics.stiffness import axial_stiffness_by_layer
+
+#: Long friction histories run pure Python without numba (minutes per case).
+needs_numba = pytest.mark.skipif(
+    not HAVE_NUMBA, reason="long friction histories need the compiled kernels"
+)
 
 # Published values ([Janocha2024] Sections 2.1, 2.4, 3.3; [IEATask49] Table 13).
 EA_PUBLISHED_N = 658.0e6
@@ -255,6 +261,7 @@ def test_capacity_against_published_armour_yield(cable) -> None:
     assert cap.kappa_max_1_m[2] < 0.01  # capacity practically exhausted at 1.1 MN
 
 
+@needs_numba
 def test_fatigue_runs_for_both_friction_and_contact_models(cable) -> None:
     rng = np.random.default_rng(66)
     n = 240

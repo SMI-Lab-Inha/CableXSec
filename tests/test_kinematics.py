@@ -19,6 +19,7 @@ import pytest
 from _bundled import bundled
 
 import cablexsec as cx
+from cablexsec._numba import HAVE_NUMBA
 from cablexsec.analysis.fatigue import wire_stress_field
 from cablexsec.analysis.kinematics import (
     armour_transverse_model,
@@ -32,6 +33,11 @@ from cablexsec.exceptions import CableInputError
 from cablexsec.materials import library
 from cablexsec.mechanics.distributed_friction import distributed_friction_history
 from cablexsec.mechanics.wire_stress import local_bending_fibre_stress
+
+#: Long friction histories run pure Python without numba (minutes per case).
+needs_numba = pytest.mark.skipif(
+    not HAVE_NUMBA, reason="long friction histories need the compiled kernels"
+)
 
 pytestmark = pytest.mark.filterwarnings("ignore::UserWarning")
 
@@ -157,6 +163,7 @@ def test_stress_is_that_of_the_stress_route(law: str) -> None:
         )
 
 
+@needs_numba
 def test_distributed_slip_is_the_law_s_own_field() -> None:
     history = kinematic_history(
         CABLE, CYCLE, np.zeros(SAMPLES), tension_N=60e3, friction_model="distributed"

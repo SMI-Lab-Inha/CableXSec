@@ -7,9 +7,17 @@ from dataclasses import replace
 import pytest
 import run_validation
 
+from cablexsec._numba import HAVE_NUMBA
+
+#: Long friction histories run pure Python without numba (minutes per case).
+needs_numba = pytest.mark.skipif(
+    not HAVE_NUMBA, reason="long friction histories need the compiled kernels"
+)
+
 pytestmark = pytest.mark.analytical_sanity
 
 
+@needs_numba
 def test_changed_wire_bending_fails_reported_comparison(monkeypatch):
     original = run_validation.cx.compute_stress
 
@@ -25,6 +33,7 @@ def test_changed_wire_bending_fails_reported_comparison(monkeypatch):
     assert float(row.value.rstrip("%")) == pytest.approx(100.0)
 
 
+@needs_numba
 def test_bending_work_report_compares_identical_measured_paths_and_units():
     row = next(r for r in run_validation._rows() if r.ident == "BM1-loop")
     assert "matched experimental" in row.target

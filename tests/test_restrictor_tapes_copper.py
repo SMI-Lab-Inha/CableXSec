@@ -41,6 +41,7 @@ from cablexsec.mechanics.bend_restrictor import (
     tensioned_beam_profile,
 )
 from cablexsec.mechanics.clamp_layer import (
+    HAVE_NUMBA,
     anchored_wire_field_response,
     anchored_wire_response,
 )
@@ -50,6 +51,11 @@ from cablexsec.provenance import Provenance
 pytestmark = pytest.mark.analytical_sanity
 
 THETA_L = math.radians(4.75)
+
+#: The anchored-wire solver runs pure Python without numba (minutes per case).
+needs_numba = pytest.mark.skipif(
+    not HAVE_NUMBA, reason="anchored-wire solver without numba is slow"
+)
 
 
 def _restrictor(**kw: object) -> ArticulatedRestrictor:
@@ -297,6 +303,7 @@ def test_field_kernel_equals_proportional_kernel():
     assert np.allclose(r_f, r_p, atol=1e-10)
 
 
+@needs_numba
 def test_rig_field_profile_reproduces_table_profile(thies):
     length = 5.4
     prot = cx.RigProtocol.cyclic(
@@ -358,6 +365,7 @@ def test_rig_field_profile_reproduces_table_profile(thies):
         )
 
 
+@needs_numba
 def test_rig_runs_on_a_restrictor_field(thies):
     r = ArticulatedRestrictor.from_mbr(
         2.54, pitch_m=0.36, n_elements=15, bore_diameter_m=0.1375
@@ -390,6 +398,7 @@ def test_rig_runs_on_a_restrictor_field(thies):
     assert any("non-proportional" in note for note in res.notes)
 
 
+@needs_numba
 def test_termination_with_uniform_field_equals_default():
     spec = HelicalLayerSpec(
         n_wires=40,

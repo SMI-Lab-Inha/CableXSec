@@ -20,6 +20,12 @@ import pytest
 import run_validation
 
 import cablexsec as cx
+from cablexsec._numba import HAVE_NUMBA
+
+#: Long friction histories run pure Python without numba (minutes per case).
+needs_numba = pytest.mark.skipif(
+    not HAVE_NUMBA, reason="long friction histories need the compiled kernels"
+)
 
 pytestmark = pytest.mark.full_scale
 
@@ -108,6 +114,7 @@ def test_load_case_table_and_rig_constants():
     assert len(sv.plane_stations()) == 8
 
 
+@needs_numba
 def test_registered_targets_and_results_are_pinned(rows):
     plane = rows["SV11-PLANE"]
     assert plane.target == (

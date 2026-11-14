@@ -17,6 +17,7 @@ import pytest
 from pydantic import ValidationError
 
 import cablexsec as cx
+from cablexsec._numba import HAVE_NUMBA
 from cablexsec.analysis.fatigue import wire_stress_field
 from cablexsec.analysis.termination import TerminationSpec
 from cablexsec.cable_adapters import cable_to_fatigue_layers
@@ -33,6 +34,11 @@ from cablexsec.mechanics.tendon_bending import (
     curvature_coefficients,
 )
 from cablexsec.mechanics.tendon_section import WireSection
+
+#: Long friction histories run pure Python without numba (minutes per case).
+needs_numba = pytest.mark.skipif(
+    not HAVE_NUMBA, reason="long friction histories need the compiled kernels"
+)
 
 
 def _strip(**extra):
@@ -228,6 +234,7 @@ def test_transverse_model_in_the_field_reaches_the_geodesic(strip_layer):
     assert np.array_equal(field.mean_Pa, plain.mean_Pa)
 
 
+@needs_numba
 def test_zero_demand_relief_is_bitwise_identity(strip_layer):
     spec = strip_layer.spec
     model = TransverseSlipModel(

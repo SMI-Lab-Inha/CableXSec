@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 
 import cablexsec as cx
+from cablexsec._numba import HAVE_NUMBA
 from cablexsec.analysis.beam_test import (
     BendingProtocol,
     Cantilever,
@@ -22,6 +23,11 @@ from cablexsec.analysis.beam_test import (
 )
 from cablexsec.exceptions import CableInputError
 from cablexsec.mechanics.core_lay import bending_factor
+
+#: Long friction histories run pure Python without numba (minutes per case).
+needs_numba = pytest.mark.skipif(
+    not HAVE_NUMBA, reason="long friction histories need the compiled kernels"
+)
 
 EI = 2.0e3
 L = 2.0
@@ -146,7 +152,7 @@ def test_four_point_zone_is_the_section_loop_bitwise(menard):
         {},
         {"friction_model": "progressive"},
         {"core_friction": True},
-        {"friction_model": "distributed"},
+        pytest.param({"friction_model": "distributed"}, marks=needs_numba),
     ],
 )
 def test_leg_property_and_energy(menard, kw):

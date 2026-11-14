@@ -15,6 +15,7 @@ import pytest
 from test_cabledyn_reader import _bending_case, _write_case
 
 import cablexsec as cx
+from cablexsec._numba import HAVE_NUMBA
 from cablexsec.analysis.sea_state_batch import (
     SeaStateBatchOptions,
     SeaStateRun,
@@ -26,6 +27,11 @@ from cablexsec.analysis.termination import TerminationSpec
 from cablexsec.analysis.thermal_coupling import ThermalState
 from cablexsec.cli import batch_main
 from cablexsec.exceptions import CableInputError, CableSchemaError
+
+#: Long friction histories run pure Python without numba (minutes per case).
+needs_numba = pytest.mark.skipif(
+    not HAVE_NUMBA, reason="long friction histories need the compiled kernels"
+)
 
 YEAR = 365.25 * 24 * 3600
 # Coarse clamp solver settings: the test checks the plumbing, not the clamp law.
@@ -184,6 +190,7 @@ def test_flooded_cable_takes_effective_tension(tmp_path, cable, stiffness):
     assert np.array_equal(history.true_tension_N(1.0), history.effective_tension_N)
 
 
+@needs_numba
 def test_local_options_termination_thermal_fretting(tmp_path, cable, stiffness):
     runs = _runs(tmp_path, stiffness)
     temperatures = {layer.name: 35.0 for layer in cable.layers}
@@ -253,6 +260,7 @@ def test_worker_cap(cable):
         SeaStateBatchOptions(workers=99)
 
 
+@needs_numba
 def test_json_specification_and_command_line(tmp_path, cable, stiffness):
     runs = _runs(tmp_path, stiffness)
     spec = {
