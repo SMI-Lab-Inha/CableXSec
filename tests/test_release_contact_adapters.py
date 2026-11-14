@@ -105,11 +105,18 @@ def test_structural_armour_filters_incomplete_nonstructural_and_unknown_material
         r_helix_m=0.01,
         lay_angle_deg=20,
     )
+    # Distinct radii: layers at one radius would overlap and are refused.
     layers = [
         complete,
-        complete.model_copy(update={"name": "inactive", "structural": False}),
-        complete.model_copy(update={"name": "incomplete", "n_wires": None}),
-        complete.model_copy(update={"name": "unknown", "material": "missing"}),
+        complete.model_copy(
+            update={"name": "inactive", "structural": False, "r_helix_m": 0.012}
+        ),
+        complete.model_copy(
+            update={"name": "incomplete", "n_wires": None, "r_helix_m": 0.014}
+        ),
+        complete.model_copy(
+            update={"name": "unknown", "material": "missing", "r_helix_m": 0.016}
+        ),
     ]
     assert structural_armour_layers(cable_with(*layers)) == [complete]
     cable = cable_with(complete)

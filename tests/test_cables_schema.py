@@ -19,6 +19,7 @@ from cablexsec.cables.schema import (
 from cablexsec.cables.schema import (
     load_cable as load_cable_direct,
 )
+from cablexsec.exceptions import CableSchemaError
 
 MINIMAL_CABLE = textwrap.dedent(
     """
@@ -60,10 +61,10 @@ def test_lay_angle_radians_helper() -> None:
         name="a", material="galvanised_steel_armour", lay_angle_deg=None
     )
     assert layer.lay_angle_rad is None
-    layer90 = HelicalLayer(
-        name="b", material="galvanised_steel_armour", lay_angle_deg=90.0
+    layer45 = HelicalLayer(
+        name="b", material="galvanised_steel_armour", lay_angle_deg=45.0
     )
-    assert layer90.lay_angle_rad == pytest.approx(1.5707963267948966)
+    assert layer45.lay_angle_rad == pytest.approx(0.7853981633974483)
 
 
 def test_unknown_key_is_rejected(tmp_path: Path) -> None:
@@ -130,6 +131,8 @@ def test_geometry_override_fills_withheld_values(tmp_path: Path) -> None:
 
 
 def test_override_does_not_introduce_new_layers(tmp_path: Path) -> None:
+    # A layer name that matches no layer is refused, not dropped: it is
+    # usually a misspelt name whose values would otherwise never apply.
     cable_path = _write(tmp_path, "cable.yaml", MINIMAL_CABLE)
     override = textwrap.dedent(
         """
@@ -139,8 +142,8 @@ def test_override_does_not_introduce_new_layers(tmp_path: Path) -> None:
         """
     )
     ov_path = _write(tmp_path, "override.yaml", override)
-    merged = load_cable_direct(cable_path, geometry_override=ov_path)
-    assert {layer.name for layer in merged.layers} == {"filler", "armour"}
+    with pytest.raises(CableSchemaError, match="'phantom' is not a layer"):
+        load_cable_direct(cable_path, geometry_override=ov_path)
 
 
 def test_round_trip_dump_and_reload(tmp_path: Path) -> None:
@@ -201,7 +204,7 @@ def test_override_identity_must_match_target(tmp_path: Path) -> None:
         layers: []
         """
     )
-    with pytest.raises(ValueError, match="identity"):
+    with pytest.raises(CableSchemaError, match="identity"):
         load_cable_direct(
             cable_path,
             geometry_override=_write(tmp_path, "override.yaml", override),
@@ -247,3 +250,18 @@ def test_full_construction_variant_beside_the_benchmark_input(tmp_path: Path) ->
     merged = load_cable(folder / "menard2023.yaml", geometry_override=override)
     assert merged.get_layer("inner_armour").n_wires == 54
     assert plain.get_layer("inner_armour").n_wires == 55
+
+
+@pytest.mark.parametrize("key", ["enviroment", "aggregate_property", "notes"])
+def test_unknown_top_level_key_is_refused(tmp_path: Path, key: str) -> None:
+    from cablexsec.exceptions import CableSchemaError
+
+    text = MINIMAL_CABLE + f"{key}:\n  value: 1\n"
+    with pytest.raises(CableSchemaError, match="unknown top-level key"):
+        load_cable(_write(tmp_path, "typo.yaml", text))
+
+
+def test_every_bundled_cable_has_only_known_top_level_keys() -> None:
+    folder = Path(menard2023_yaml_path()).parent
+    for path in sorted(folder.glob("*.yaml")):
+        load_cable(path, geometry_override=None)

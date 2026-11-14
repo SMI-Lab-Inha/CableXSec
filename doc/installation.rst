@@ -48,8 +48,9 @@ Optional extras
        NumPy reference to floating-point round-off and rainflow counts are bitwise equal;
        ``CABLEXSEC_DISABLE_NUMBA=1`` selects the reference path.
    * - ``contact``
-     - ``clarabel``: the contact quadratic programme of concentric sections
-       (``cablexsec.solve_contact_qp``).
+     - ``clarabel``: an independent conic solver used only by the cross-check script
+       ``validation/scripts/concentric_conductor_bend.py`` and its test; the package's own
+       contact solvers do not need it.
    * - ``dev``
      - test, lint, type-check and build tools.
 

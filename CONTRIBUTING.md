@@ -100,8 +100,9 @@ who wrote them.
 - **Python**: `ruff` for linting and formatting, `mypy --strict` for types, `pytest` for
   tests; line and branch coverage of the package stays at or above the threshold set in
   CI.
-- **Other codes**: describe differences from Helica, UFLEX, BFLEX, or any other
-  code neutrally and with the evidence, and cite them as listed in the manual.
+- **Other models**: compare only with published measurements, closed forms and published
+  models, cited as listed in the manual; CableXSec is not compared with commercial
+  software.
 
 ## Repository contents
 

@@ -2,8 +2,7 @@
 # Copyright (c) 2026 Jae Hoon Seo, SMI Lab, Inha University
 """Matched in-process fatigue timings with unreduced and reduced cycle counting.
 
-Run as ``python validation/scripts/benchmark_fatigue_counter.py``. No HELICA outputs are
-involved. Each pair uses the same mechanics and parameters; only turning-point
+Run as ``python validation/scripts/benchmark_fatigue_counter.py``. Each pair uses the same mechanics and parameters; only turning-point
 reduction changes. All fibre damage and legacy damage fields must match exactly.
 """
 

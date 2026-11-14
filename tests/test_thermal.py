@@ -247,7 +247,14 @@ def _concentric_cable(*, voltage_kV: float | None = 70.0) -> CableData:
 def test_compute_thermal_reduces_to_primitive_single_core() -> None:
     """At n_cores=1 (no dielectric, λ1=0) the wrapper == 1-D primitive + W_c·T4."""
     cable = _concentric_cable(voltage_kV=70.0)  # < 100 kV: W_d = 0
-    res = compute_thermal(cable, current_A=600.0, conductor_area_m2=300e-6, n_cores=1)
+    # The cable has no conductor layer: the conductor material is given.
+    res = compute_thermal(
+        cable,
+        current_A=600.0,
+        conductor_area_m2=300e-6,
+        n_cores=1,
+        conductor_material="copper_stranded",
+    )
 
     # Rebuild the primitive on the same annuli with the surface raised by W_c·T4.
     layers = [

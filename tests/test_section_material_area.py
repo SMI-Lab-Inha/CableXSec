@@ -6,6 +6,7 @@ import math
 
 import pytest
 from fowt_construction import _global_properties
+from pydantic import ValidationError
 from scipy.integrate import quad
 
 import cablexsec as cx
@@ -126,10 +127,15 @@ def test_partial_envelope_intersection_against_independent_polar_quadrature(
 
 
 def test_concentric_single_core_is_not_counted_as_three_cores():
-    cable = _filler_case(count=1, offset=0)
+    cable = _filler_case(count=1, offset=0, inner=0.022)
     assert filler_area(cable.layers[1], cable) == pytest.approx(
         math.pi * (0.1**2 - 0.022**2)
     )
+
+
+def test_filler_through_a_concentric_core_is_refused():
+    with pytest.raises(ValidationError, match="overlaps or lies inside"):
+        _filler_case(count=1, offset=0)
 
 
 def test_nested_offset_annuli_form_one_core_envelope():
@@ -149,10 +155,9 @@ def test_nested_offset_annuli_form_one_core_envelope():
     )
 
 
-def test_overlapping_cores_are_not_hidden_by_clamping_negative_filler_area():
-    cable = _filler_case(offset=0.01)
-    with pytest.raises(CableSchemaError, match="overlapping"):
-        filler_area(cable.layers[1], cable)
+def test_overlapping_cores_are_refused_before_any_filler_area():
+    with pytest.raises(ValidationError, match="cores overlap"):
+        _filler_case(offset=0.01)
 
 
 def test_resolved_ring_mass_is_sum_of_actual_wire_lengths():

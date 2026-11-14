@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 Jae Hoon Seo, SMI Lab, Inha University
-"""User S-N curves, mean-stress corrections and component SCFs (parity item 1).
+"""User S-N curves, mean-stress corrections and component SCFs.
 
 Verification: closed-form Miner sums, the published mean-stress statements of
 DNV-RP-C203 (2024) Sec. 2.5, the textbook mean-stress identities (Goodman,
@@ -234,7 +234,7 @@ def test_round_trip_at_the_curve_test_condition(curve_R):
             kw = {**kw, "compressive_mean": "signed"}
         value = _eq(method, 2 * amplitude, mean, curve_R=curve_R, **kw)
         assert value == pytest.approx(2 * amplitude, rel=1e-12), method
-        # Constant-mean curves (BFLEX IGERB 21/22) round trip the same way.
+        # Constant-mean curves round trip the same way.
         value = _eq(method, 2 * amplitude, mean, reference_mean_stress_Pa=mean, **kw)
         assert value == pytest.approx(2 * amplitude, rel=1e-9), method
 

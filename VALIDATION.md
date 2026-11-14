@@ -19,7 +19,7 @@ Case identifiers group the evidence into two tiers:
 | 1 | Analytical verification, internal consistency and comparisons with independent numerical methods |
 | 2 | Comparisons with published measurements and published tabulated results |
 
-Every input is a published value or a file in this repository. The digitised measurements are
+Every input is a published value, a file in this repository or a declared assumption. The digitised measurements are
 in [`validation/paper_data/`](https://github.com/SMI-Lab-Inha/CableXSec/blob/main/validation/paper_data/README.md)
 with their sources. Targets were registered before the comparisons were run and are not relaxed
 afterwards: a comparison that misses its target is reported as failed.
@@ -65,7 +65,7 @@ afterwards: a comparison that misses its target is reported as failed.
 | **WITZ-ID** | 300-bar loop predicted after identifying the initial pressure at 0 bar | Witz (1996), Figs 5–6 | width 1383 N·m vs 1990–2164; energy −12.6 % | width 1692–2489 N·m; energy ±15 % | **Fail** |
 | **SV11-PLANE** | Inner-armour stress ranges at the bending-plane FBG stations, 14 load cases | Sævik (2011), Figs 17–23 | median ratio 1.65 (3 of 14 in band); sectional 1.03 (11 of 14) | median 0.85–1.18 and ≥12 of 14 in 0.70–1.43 | **Fail** |
 | **SV11-GJ** | Absolute stress ranges near the termination, load case 14 | Gjøsteen et al. (2027), Figs 27–35 | mean ratio 1.90 (sectional 1.32) | 0.72–1.38 | **Fail** |
-| **BM5** | Conductor temperature of the CIGRE TB 880 export cable | Poradowski tabulated thermal network; FEM 89.62 °C | 84.4 °C | ≤90 °C, about 5 K low | Partial |
+| **BM5** | Conductor temperature of the CIGRE TB 880 export cable, from the source's tabulated network inputs (`compute_thermal` on the cable itself is not yet comparable) | Poradowski tabulated thermal network; FEM 89.62 °C | 84.4 °C | ≤90 °C, about 5 K low | Partial |
 | **BM4** | Axial stiffness of a population of umbilicals | Sævik and Bruaseth (2005) | mean ratio about 1.45 | <1.25 | Not validated |
 
 **Pass** meets the registered target. **Fail** does not; the target is unchanged and the row

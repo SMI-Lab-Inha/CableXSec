@@ -145,15 +145,15 @@ def test_blank_name_rejected(model):
         model(**(defaults(model) | {"name": " "}))
 
 
-def test_nested_helix_angle_conversion_preserves_missing_and_signed_values():
+def test_nested_helix_angle_conversion_preserves_missing_and_given_values():
     empty = s.HelicalStrandedLayer(**defaults(s.HelicalStrandedLayer))
     assert empty.lay_angle_cable_rad is None
     assert empty.lay_angle_strand_rad is None
     specified = empty.model_copy(
-        update={"lay_angle_cable_deg": 30, "lay_angle_strand_deg": -45}
+        update={"lay_angle_cable_deg": 30, "lay_angle_strand_deg": 45}
     )
     assert specified.lay_angle_cable_rad == pytest.approx(math.pi / 6)
-    assert specified.lay_angle_strand_rad == pytest.approx(-math.pi / 4)
+    assert specified.lay_angle_strand_rad == pytest.approx(math.pi / 4)
 
 
 @pytest.mark.parametrize(

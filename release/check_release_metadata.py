@@ -102,7 +102,7 @@ def main() -> int:
     checks = {
         "CITATION.cff version": citation_version == version,
         "Python runtime version": f'__version__ = "{version}"'
-        in read("cablexsec/__init__.py"),
+        in read("src/cablexsec/__init__.py"),
         "CHANGELOG release heading": f"## [{version}] - {release_date}" in changelog,
         "CHANGELOG link target": "https://github.com/SMI-Lab-Inha/CableXSec"
         in changelog,

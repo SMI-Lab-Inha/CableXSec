@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 Jae Hoon Seo, SMI Lab, Inha University
-"""Sea-state batch over CableDyn runs (gap R8 stage 1)."""
+"""Sea-state batch over CableDyn runs."""
 
 from __future__ import annotations
 

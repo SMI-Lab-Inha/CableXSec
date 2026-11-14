@@ -77,11 +77,11 @@ def test_A7_ea_fixed_and_schur_free() -> None:
 def test_A8c_eimin_has_no_parallel_axis_term() -> None:
     """A8c: EI_min must not contain any A*r_offset^2 parallel-axis term."""
     lo = ei_min_slip(_cable(r_offset=0.02))
-    hi = ei_min_slip(_cable(r_offset=0.08))
+    hi = ei_min_slip(_cable(r_offset=0.055))
     # Changing the trefoil offset must NOT change EI_min (no parallel axis):
     assert lo == pytest.approx(hi, rel=1e-12)
     # But EI_max (stuck) MUST change with offset (parallel-axis belongs there):
-    assert ei_max_stuck(_cable(r_offset=0.08)) > ei_max_stuck(_cable(r_offset=0.02))
+    assert ei_max_stuck(_cable(r_offset=0.055)) > ei_max_stuck(_cable(r_offset=0.02))
 
 
 def test_A8_eimin_below_eimax() -> None:
@@ -203,7 +203,8 @@ def test_metals_only_excludes_polymers() -> None:
         name="bedding", material="hdpe", r_inner_m=0.0745, r_outer_m=0.0770
     )
     cable = _cable()
-    with_poly = CableData(cable=cable.cable, layers=(*cable.layers, poly))
+    core, *armour = cable.layers  # the bedding lies between the cores and the armour
+    with_poly = CableData(cable=cable.cable, layers=(core, poly, *armour))
     assert ea_fixed(with_poly, metals_only=True) < ea_fixed(with_poly)
     # metals-only equals the all-layers value when there is no polymer present
     assert ea_fixed(cable, metals_only=True) == pytest.approx(ea_fixed(cable))

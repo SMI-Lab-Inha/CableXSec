@@ -4,7 +4,7 @@ include LICENSE NOTICE README.md CHANGELOG.md CITATION.cff
 include ARCHITECTURE.md CONTRIBUTING.md CODE_OF_CONDUCT.md DEVELOPMENT.md
 include RELEASE.md SECURITY.md SUPPORT.md VALIDATION.md VALIDATION_SPEC.md
 include environment.yml .readthedocs.yaml .pre-commit-config.yaml
-recursive-include cablexsec *.py *.yaml py.typed
+recursive-include src/cablexsec *.py *.yaml py.typed
 recursive-include tests *.py
 recursive-include tests/data *
 recursive-include examples *.py *.json *.md

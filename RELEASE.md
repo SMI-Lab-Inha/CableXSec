@@ -14,7 +14,7 @@ run this procedure on the resulting `main` commit.
 ## 1. Set and check the release metadata
 
 Update the version and date in `CHANGELOG.md`, `pyproject.toml`,
-`cablexsec/__init__.py` and `CITATION.cff`, and add the release record
+`src/cablexsec/__init__.py` and `CITATION.cff`, and add the release record
 `validation/RELEASE_MAJOR_MINOR_PATCH.md`. Move every release note from
 `[Unreleased]` to the new dated heading. Then run:
 

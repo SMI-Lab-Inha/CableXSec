@@ -193,8 +193,10 @@ def test_axis_disc_is_not_a_filler_in_a_single_core_cable() -> None:
         r_outer_m=0.02,
         structural=False,
     )
-    single = CableData(cable=CableMeta(name="single"), layers=(core, disc))
-    assert not is_interstitial_filler(disc, single)
+    # A disc from the axis through a concentric core is not a filler: the
+    # cable is refused when it is built.
+    with pytest.raises(ValidationError, match="overlaps or lies inside"):
+        CableData(cable=CableMeta(name="single"), layers=(core, disc))
 
 
 # --------------------------------------------------------------------------- #
@@ -202,10 +204,10 @@ def test_axis_disc_is_not_a_filler_in_a_single_core_cable() -> None:
 # --------------------------------------------------------------------------- #
 def test_section_stiffness_against_published_values(cable) -> None:
     s = cx.compute_stiffness(cable)
-    # EA: within 5 % of 658 MN (UFLEX, end-twist condition not stated).
+    # EA: within 5 % of the published 658 MN (end-twist condition not stated).
     assert s.ea_fixed_N == pytest.approx(EA_PUBLISHED_N, rel=0.05)
     assert s.ea_free_N < s.ea_fixed_N
-    # GJ here is the extension-only lay term: below the UFLEX value, which
+    # GJ here is the extension-only lay term: below the published value, which
     # also contains polymer and core torsion, but of the same size.
     assert 0.75 * GJ_PUBLISHED_NM2 < s.gj_Nm2 < GJ_PUBLISHED_NM2
     # Full-slip EI is a lower bound of the published slipping stiffness.
@@ -224,7 +226,7 @@ def test_moment_curvature_loop(cable, contact_model) -> None:
     second = slice(len(kappa) // 2, None)
     zero = np.flatnonzero(np.abs(kappa[second]) < 1e-12)
     assert np.ptp(loop.moment_Nm[second][zero]) > 0.0
-    # Peak moment below the published UFLEX loop (about 6.8 kNm, Fig. 6): the
+    # Peak moment below the published loop (about 6.8 kNm, Fig. 6): the
     # friction of the cores, fillers and conductor wires is not modelled.
     assert 3.0e3 < loop.moment_Nm.max() < 6.8e3
 

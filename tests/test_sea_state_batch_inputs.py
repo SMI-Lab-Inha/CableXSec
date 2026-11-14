@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 Jae Hoon Seo, SMI Lab, Inha University
-"""Sea-state batch: input checks, specification entries and records (gap R8)."""
+"""Sea-state batch: input checks, specification entries and records."""
 
 from __future__ import annotations
 

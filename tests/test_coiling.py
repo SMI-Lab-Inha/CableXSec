@@ -1,13 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 Jae Hoon Seo, SMI Lab, Inha University
-"""Coiling into a static tank (parity item 3).
+"""Coiling into a static tank.
 
 Verification of :func:`cablexsec.compute_coiling` on the packaged cable of
 Chae, Nam and Shim (2023): tank-to-load mapping, twist sense, closed-form
 limits (pure twist, frictionless rotating bending), torque control, the
-capacity formulas and the input checks. The model-to-model comparison with
-CableCAD, UFLEX 2D and Helica is ``scripts/check_chae_coiling.py``
-(doc/benchmarks.md, CH-*).
+capacity formulas and the input checks (doc/benchmarks.md, CH-CR).
 """
 
 from __future__ import annotations
@@ -98,9 +96,6 @@ def test_frictionless_rotating_bending_is_local_bending(cable: cx.CableData) -> 
     assert layer.friction_max_Pa == 0.0
     assert layer.fibre_min_Pa == pytest.approx(-amplitude, rel=1e-3)
     assert layer.fibre_max_Pa == pytest.approx(amplitude, rel=1e-3)
-    # UFLEX 2D under the same pure bending at pitch 1.8 m: -71.8 MPa
-    # ([ChaeNamShim2023] Table 7, in the slip range where friction is small).
-    assert layer.fibre_min_Pa == pytest.approx(-71.8e6, rel=0.01)
 
 
 def test_torque_control_round_trip(cable: cx.CableData) -> None:

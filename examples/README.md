@@ -9,7 +9,7 @@ illustrations, not site or design data.
 
 ```powershell
 python examples/demo_02_mkappa_validation.py
-python examples/project_workflow.py --output my_project.cxsproj
+python examples/project_workflow.py --output my_project.cxproj
 ```
 
 | Script | What it shows | Run time |

@@ -24,7 +24,7 @@ the equations describe a real cable.
 **Validation** asks whether the model describes a physical cable. It requires a
 comparison with measured data for a stated construction, loading path and output
 quantity. A comparison with another model (a published finite-element
-calculation, an analytical result from a paper, or a commercial program) is a
+calculation or an analytical result from a paper) is a
 **model-to-model comparison**. It can expose errors and confirm that two
 formulations agree at matched inputs, but it is not validation, and the other
 model is a reference, not ground truth.
@@ -47,8 +47,8 @@ every comparison explicitly as one of:
 
 - **Analytical**: closed form or exact limit.
 - **Measured**: physical test data.
-- **Model-to-model**: published FE, published analytical model or commercial
-  program at matched inputs.
+- **Model-to-model**: published FE or published analytical model at matched
+  inputs.
 - **Internal**: two CableXSec formulations of different fidelity on the same
   inputs (for example section law against spatial armour model).
 

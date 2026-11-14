@@ -61,7 +61,8 @@ Changelog = "https://github.com/SMI-Lab-Inha/CableXSec/blob/main/CHANGELOG.md"
 Releases = "https://github.com/SMI-Lab-Inha/CableXSec/releases"
 
 [project.optional-dependencies]
-# Concentric contact quadratic programme (cablexsec.mechanics.contact_qp).
+# Independent conic solver for the cross-check script
+# validation/scripts/concentric_conductor_bend.py; the package does not import it.
 contact = ["clarabel>=0.11,<0.12"]
 # Compiled slip-stress and rainflow kernels (cablexsec._numba); without them the
 # results agree to round-off, only slower. The lower bound is the tested release.
@@ -79,6 +80,7 @@ dev = [
 cablexsec-batch = "cablexsec.cli:batch_main"
 
 [tool.setuptools.packages.find]
+where = ["src"]
 include = ["cablexsec*"]
 
 [tool.setuptools.package-data]
@@ -120,20 +122,20 @@ select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM", "NPY"]
 known-first-party = ["cablexsec"]
 
 [tool.ruff.lint.per-file-ignores]
-"cablexsec/cables/schema.py" = ["N802", "N815"]
-"cablexsec/clamping.py" = ["N815"]
-"cablexsec/materials/sn_curves.py" = ["N803", "N815"]
-"cablexsec/materials/mean_stress.py" = ["N803", "N815"]
-"cablexsec/materials/strain_life.py" = ["N802", "N803", "N815"]
-"cablexsec/materials/wear.py" = ["N802", "N803", "N815"]
-"cablexsec/api.py" = ["N802", "N803", "N806", "N815"]
-"cablexsec/project.py" = ["N815"]
-"cablexsec/cable_adapters.py" = ["N802", "N803", "N806", "N815"]
-"cablexsec/mechanics/*.py" = ["N802", "N803", "N806", "N815"]
-"cablexsec/analysis/*.py" = ["N802", "N803", "N806", "N815"]
-"cablexsec/io/*.py" = ["N802", "N803", "N806", "N815"]
-"cablexsec/coupling.py" = ["N802", "N803", "N806", "N815"]
-"cablexsec/plotting/*.py" = ["N802", "N803", "N806", "N815"]
+"src/cablexsec/cables/schema.py" = ["N802", "N815"]
+"src/cablexsec/clamping.py" = ["N815"]
+"src/cablexsec/materials/sn_curves.py" = ["N803", "N815"]
+"src/cablexsec/materials/mean_stress.py" = ["N803", "N815"]
+"src/cablexsec/materials/strain_life.py" = ["N802", "N803", "N815"]
+"src/cablexsec/materials/wear.py" = ["N802", "N803", "N815"]
+"src/cablexsec/api.py" = ["N802", "N803", "N806", "N815"]
+"src/cablexsec/project.py" = ["N815"]
+"src/cablexsec/cable_adapters.py" = ["N802", "N803", "N806", "N815"]
+"src/cablexsec/mechanics/*.py" = ["N802", "N803", "N806", "N815"]
+"src/cablexsec/analysis/*.py" = ["N802", "N803", "N806", "N815"]
+"src/cablexsec/io/*.py" = ["N802", "N803", "N806", "N815"]
+"src/cablexsec/coupling.py" = ["N802", "N803", "N806", "N815"]
+"src/cablexsec/plotting/*.py" = ["N802", "N803", "N806", "N815"]
 "examples/*.py" = ["N802", "N803", "N806", "E501"]
 "validation/**/*.py" = ["N802", "N803", "N806", "E501"]
 "release/*.py" = ["E501"]
@@ -142,6 +144,7 @@ known-first-party = ["cablexsec"]
 
 [tool.mypy]
 python_version = "3.11"
+mypy_path = "src"
 packages = ["cablexsec"]
 strict = true
 warn_unreachable = false

@@ -234,7 +234,7 @@ def test_birdcage_critical_force_infinite_at_zero_lay_angle() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Direct thermal stress contribution vs isothermal (BM2b invariant)          #
+# Direct thermal stress contribution vs isothermal (isothermal invariant)          #
 # --------------------------------------------------------------------------- #
 def test_tensile_thermal_stress_reduces_curvature_capacity() -> None:
     cable = _synthetic_cable()
@@ -245,7 +245,7 @@ def test_tensile_thermal_stress_reduces_curvature_capacity() -> None:
 
 
 def test_zero_thermal_stress_recovers_isothermal_exactly() -> None:
-    """Zero thermal stress recovers the I=0 / BM2b isothermal invariant."""
+    """Zero thermal stress recovers the isothermal invariant."""
     cable = _synthetic_cable()
     tensions = np.linspace(0.0, 3.0e5, 7)
     iso = compute_capacity(cable, tensions)

@@ -5,6 +5,7 @@
 import math
 
 import pytest
+from pydantic import ValidationError
 
 from cablexsec.cables.schema import (
     CableData,
@@ -74,13 +75,23 @@ def test_filler_subtracts_core_envelopes_once(offset):
     [
         ([core(r_outer_m=None), filler()], "complete core"),
         ([core(), filler(r_outer_m=None)], "complete radii"),
-        ([core(), core(name="other", r_offset_m=0.04), filler()], "core family"),
-        ([core(r_offset_m=0.001), filler()], "overlapping"),
     ],
 )
 def test_ambiguous_filler_geometry_rejected(layers, match):
     with pytest.raises(CableSchemaError, match=match):
         filler_area(layers[-1], cable(*layers))
+
+
+@pytest.mark.parametrize(
+    "layers,match",
+    [
+        ([core(), core(name="other", r_offset_m=0.04), filler()], "one core family"),
+        ([core(r_offset_m=0.001), filler()], "cores overlap"),
+    ],
+)
+def test_impossible_core_geometry_is_refused_when_the_cable_is_built(layers, match):
+    with pytest.raises(ValidationError, match=match):
+        cable(*layers)
 
 
 def test_resolved_ring_volume_includes_helix_length():
@@ -100,11 +111,11 @@ def test_volume_for_shell_wire_and_solid():
         material="galvanised_steel_armour",
         n_wires=8,
         d_wire_m=0.001,
-        r_helix_m=0.01,
+        r_helix_m=0.0105,
         lay_angle_deg=30,
     )
     solid = CylindricalLayer(name="solid", material="hdpe", r_inner_m=0, r_outer_m=0.01)
-    section = cable(shell, wire, solid)
+    section = cable(solid, wire, shell)  # from the axis outwards, no overlap
     assert material_volume_per_length(shell, section) == pytest.approx(
         2 * math.pi * 0.03 * 0.001
     )

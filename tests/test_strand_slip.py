@@ -196,7 +196,7 @@ def test_hu_conductor_loop_against_the_test():
     assert outer["EI_full_slip"] == pytest.approx(12.9, abs=0.1)  # test 14.4
     assert outer["M_max"] == pytest.approx(7.58, abs=0.05)  # test 8.18
     assert outer["loop_area"] == pytest.approx(4.08, abs=0.05)  # test 3.185
-    assert outer["EI_stick"] == pytest.approx(793, abs=1)  # UFLEX 1705
+    assert outer["EI_stick"] == pytest.approx(793, abs=1)
     everywhere = check.hu_loop("all_interfaces")
     assert everywhere["M_max"] > 1.5 * check.NAM_M_MAX
 

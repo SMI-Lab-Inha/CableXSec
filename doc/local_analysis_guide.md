@@ -192,8 +192,10 @@ print(stiffness.xi_per_layer)          # Yun shear coefficient per armour layer
 
 `geometry_override` defaults to `None` (no override). A cable definition may
 write withheld geometry as `null` and supply it from a separate YAML file,
-merged by layer name, with `geometry_override=path`. A file that is not UTF-8 YAML with a mapping
-at its root and a list of layers raises `CableSchemaError`; schema violations
+merged by layer name, with `geometry_override=path`. An override layer that
+matches no layer, an unknown key or a changed `layer_type` is refused. A file
+that is not UTF-8 YAML with a mapping at its root and a list of layers raises
+`CableSchemaError`; schema violations
 in the fields raise `pydantic.ValidationError`. The manufacturing clamping
 (Section 4.4) sets the contact pressure that drives friction at zero tension;
 without it there is no
@@ -319,15 +321,14 @@ cx.unregister_sn_curve("partner_d_seawater")
   `walker_source`), and the DNV-RP-C203 range factors `"dnv_base"` (Eq. 2.15)
   and `"dnv_pwht"` (Eq. 2.16). Every rainflow cycle is converted to the curve's
   test condition: its `R_ratio`, or a constant mean
-  (`reference_mean_stress_Pa`), as the BFLEX `IGERB` options. A compressive
+  (`reference_mean_stress_Pa`). A compressive
   mean is taken as zero in Goodman, Gerber and Soderberg unless
   `compressive_mean="signed"`. A method name in `compute_fatigue` reads the
   strength of the layer's library material with its citation.
 - `ComponentSCF`: separate factors on the axial part (tension or solved normal
   stress and thermal stress), the friction stress (with any termination
   increment), and the local bending at the outer face and at the edge, each
-  for the mean over the record and for the fluctuation about it (the BFLEX
-  `SCFMAX`–`SCFDBZ` factors with friction as a fourth part). A `source` is
+  for the mean over the record and for the fluctuation about it. A `source` is
   required when a factor differs from one.
 - The same options exist in `compute_conductor_fatigue` (axial factors on the
   axial wire stress, friction factors on the stick–slip strain of the
@@ -381,7 +382,7 @@ Readers:
 
 | Function | Source | Notes |
 | --- | --- | --- |
-| `read_time_history_csv(path, ...)` | Time-history CSV export | Header substrings, case-insensitive, must match one column. Defaults: `x curvature`, `y curvature`, `Wall tension` (kN, scale 1e3), strain in percent (scale 0.01) |
+| `read_time_history_csv(path, ...)` | Time-history CSV export | Whole words of the heading, case-insensitive, exact heading first; must match one column; magnitude headings refused for curvature; row length checked. Defaults: `x curvature`, `y curvature`, `Wall tension` (kN, scale 1e3), strain in percent (scale 0.01) |
 | `read_riflex_ascii(path, ...)` | RIFLEX ASCII | Positional columns; declare `tension_kind` and `curvature_convention` |
 | `read_cabledyn_sections(out_root, deck, sections, ...)` | CableDyn driver or OpenFAST module files | Returns `CableDynSectionHistory` per section; curvature vector reconstructed from tangent channels or positions; `.to_load_case_series(A_o)` gives the true-force series |
 | `read_series_csv` / `write_series_csv` | Canonical CSV | Round trip preserves kinds |
@@ -1272,10 +1273,9 @@ strain-life route (`method="strain_life"`, Section 13.3) accepts it.
 ### 8.1 Capacity check of global time series
 
 A global history (time-history CSV, RIFLEX or CableDyn) is placed sample by sample on
-the tension–curvature envelope, as the capacity post-processing of Helica
-(utilisation time series against the capacity curve, statistical extreme
-utilisation; Sesam Helica flier 2018, p. 2; utilisation levels of Skeie et al.
-2012, Fig. 11).
+the tension–curvature envelope: a utilisation time series against the capacity
+curve and its statistical extreme (utilisation levels as in Skeie et al. 2012,
+Fig. 11).
 
 ```python
 import numpy as np
@@ -1604,7 +1604,6 @@ tested in `tests/test_strand_slip.py`); nothing below is fitted:
 | Hu et al. (2022) | full-slip bending stiffness | 14.4 N·m² (test) | 12.9 N·m² (−10%) |
 | Hu / Nam et al. (2024) Table 3 | maximum moment at 0.37 1/m | 8.18 N·m (test) | 7.58 N·m (−7%) |
 | Hu et al. (2022) | loop area | 3.185 N·m/m (test) | 4.08 N·m/m (+28%) |
-| Nam et al. (2024) Table 4 | stick stiffness | 1705 N·m² (UFLEX 2D) | 793 N·m² (plane sections) |
 | Utting and Jones (1987) Part II Table 2 | strand V wire strain per kN | 62.9 µε/kN (test) | 65.6 µε/kN (+4%) |
 | Utting and Jones (1987) Part II Table 1 | fixed-end torque per kN, six strands | 0.47–0.86 N·m/kN | 6–12% higher |
 | Nasution et al. (2014) Table 5 | 2nd-layer friction stress range | 117 MPa (analytical) | 107 MPa (−9%) |
@@ -1631,10 +1630,9 @@ same quarter-pitch capacity. With it the three-point loop has area +37%,
 maximum moment 8.11 N·m (−0.9%) and transition share 32.1%; at uniform
 curvature the area is +4.9%, but that is not the test's reduction. The
 default stays Eq. 4. The plane-section stick
-stiffness, 793 N·m², is half the UFLEX value of Nam et al. (2024, 1705 N·m²),
-but that value exceeds the bending stiffness of a solid copper rod of the
-conductor's outer diameter (1159 N·m² at 118 GPa), which no stick state can
-reach; Papailiou's (1997) stick term gives 790 N·m², as here. The only
+stiffness is 793 N·m², below the bending stiffness of a solid copper rod of the
+conductor's outer diameter (1159 N·m² at 118 GPa), as a stick state must be;
+Papailiou's (1997) stick term gives 790 N·m², as here. The only
 measured tangent is 196.5 N·m² at reversal (Hu et al. 2022, Fig. 9), which
 Hu et al. place in the slip-transition zone, not in stick. The Mindlin
 compliance of the trellis crossings (gap G8) lowers the stick

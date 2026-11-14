@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 Jae Hoon Seo, SMI Lab, Inha University
-"""Section properties per load case (Helica-parity item A2): engine checks.
+"""Section properties per load case: engine checks.
 
 Public cables only. Every value is checked against a hand calculation or
 against the engine function it comes from.

@@ -30,7 +30,7 @@ FORBIDDEN_ROOTS = {
     "scratchpad",
 }
 # The desktop application is not part of the public package.
-FORBIDDEN_PREFIXES = ("cablexsec/app/", "cablexsec/gui/")
+FORBIDDEN_PREFIXES = ("src/cablexsec/app/", "src/cablexsec/gui/")
 FORBIDDEN_SUFFIXES = {
     ".aux",
     ".bbl",
@@ -57,7 +57,7 @@ REQUIRED_PATHS = {
     "RELEASE.md",
     "SECURITY.md",
     "VALIDATION.md",
-    "cablexsec/__init__.py",
+    "src/cablexsec/__init__.py",
     "doc/index.rst",
     "pyproject.toml",
     "validation/README.md",

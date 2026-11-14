@@ -11,9 +11,7 @@ read from the cited public source; nothing is fitted to the compared value.
    (Table 1 geometry, Table 2 materials, friction and sheath pressure from
    Section 3): full-slip bending stiffness 14.4 N m^2, loop area 3.185 N m/m,
    maximum moment 8.18 N m (Nam et al. 2024, Table 3).
-3. Nam et al. (2024) Table 4: UFLEX 2D stick stiffness 1705 N m^2 of the same
-   conductor.
-4. Utting and Jones (1987) seven-wire strands: wire strain per unit tension
+3. Utting and Jones (1987) seven-wire strands: wire strain per unit tension
    (Part II Table 2, Strand V) and fixed-end torque per unit tension
    (Part II Table 1).
 5. Nasution et al. (2014) 300 mm^2 conductor under 30 kN and reversed
@@ -68,7 +66,7 @@ HU_LAYERS = ((6, 3.7), (12, -7.4), (18, 11.2), (24, -15.0))  # Table 1
 HU_E, HU_SHEATH_E, HU_SHEATH_T = 118e9, 0.42e9, 1.5e-3  # Table 2, Table 1
 HU_MU_WIRE, HU_MU_SHEATH, HU_PRESSURE = 0.2, 0.3, 0.542e6  # Section 3
 HU_KAPPA = 12 * 6e-3 / 0.44**2  # Eq. 2, w = 6 mm, L = 440 mm
-HU_EI_SLIP, HU_AREA, NAM_M_MAX, NAM_EI_STICK = 14.4, 3.185, 8.18, 1705.0
+HU_EI_SLIP, HU_AREA, NAM_M_MAX = 14.4, 3.185, 8.18
 
 UJ_DC, UJ_DH, UJ_E = 3.94e-3, 3.73e-3, 197.9e9  # Part I Table 1
 #: Part II Table 1: helix angle [deg], measured fixed-end torque [N m/kN].
@@ -294,7 +292,7 @@ def main() -> None:
         hu = hu_loop(transmission)
         print(f"Hu (2022) loop, sheath pressure to {transmission}")
         print(f"  EI full slip {hu['EI_full_slip']:.3g} (test {HU_EI_SLIP})")
-        print(f"  EI stick     {hu['EI_stick']:.4g} (Nam UFLEX {NAM_EI_STICK})")
+        print(f"  EI stick     {hu['EI_stick']:.4g}")
         print(f"  M max        {hu['M_max']:.3g} (test {NAM_M_MAX})")
         print(f"  loop area    {hu['loop_area']:.3g} (test {HU_AREA})")
     print("Utting and Jones (1987)")

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 Jae Hoon Seo, SMI Lab, Inha University
-"""CableDyn output reader (gap R8 stage 1): frames, signs, units, failures.
+"""CableDyn output reader: frames, signs, units, failures.
 
 Synthetic files follow the layouts of CableDyn's standalone driver
 (doc/outputs.rst): known centrelines with analytic curvature vectors are

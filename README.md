@@ -12,7 +12,7 @@ power cables. It resolves what happens inside the cable at every point of a glob
 the helical armour wires sticking and slipping against their neighbours, the hysteretic
 moment–curvature response that follows, the stress of every wire and component at fixed
 material points, the contact pressures that set the friction, the temperatures, and the fatigue
-damage of the armour, the conductor and the sheaths.
+damage of the armour, the conductor and the metallic sheaths.
 
 It reads the results of global analyses (CableDyn, RIFLEX, and time-history CSV exports such as
 those of OrcaFlex) and turns them into local stresses and damage, and it exports a hysteretic
@@ -37,7 +37,9 @@ current release is `v0.1.0`; interfaces are versioned and may change before `1.0
   screen, sheath and tape strains.
 - **Contact and fretting.** Hertz contact with subsurface stress tensors, Mindlin partial slip,
   fretting regime maps, wear and SWT critical-plane recovery.
-- **Thermal response.** IEC 60287 conductor temperature, a transient thermal network,
+- **Thermal response.** An IEC 60287 thermal ladder for the conductor temperature (for
+  three-core cables without the geometric factor and the sheath eddy loss, which makes it
+  conservative), a transient thermal network,
   frictional heating, and the thermal change of the armour clamping.
 - **Fatigue and limit states.** Rainflow counting and Miner damage per wire and fibre; long-term
   damage over a scatter of sea states; termination-adjusted fatigue; armour compression,
@@ -48,7 +50,7 @@ current release is `v0.1.0`; interfaces are versioned and may change before `1.0
 
 ## Evidence
 
-Every capability is tested (3,809 tests), and the comparisons with published data are
+Every capability is tested (about 4,000 tests), and the comparisons with published data are
 recorded with their targets, data and scripts in the
 [validation record](VALIDATION.md). A selection:
 
@@ -144,7 +146,7 @@ in [`validation/`](validation/README.md), including the data of the companion jo
 
 | Directory | Contents |
 |---|---|
-| `cablexsec/` | Python package: cable definitions, mechanics, analyses, readers, plotting |
+| `src/cablexsec/` | Python package: cable definitions, mechanics, analyses, readers, plotting |
 | `tests/` | pytest unit, integration and benchmark tests |
 | `doc/` | Sphinx manual |
 | `examples/` | Runnable example scripts |
@@ -184,7 +186,7 @@ CableXSec builds on published work on helical structures, flexible pipes and pow
 in the code, the cable definitions and the manual. We are grateful to the authors whose
 published data make the comparisons in [VALIDATION.md](VALIDATION.md) possible.
 
-## License and name
+## Licence and name
 
 CableXSec is distributed under the Apache License 2.0. See [LICENSE](LICENSE) and
 [NOTICE](NOTICE).

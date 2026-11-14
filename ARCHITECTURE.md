@@ -19,13 +19,13 @@ a cross-section tangent stiffness for a rod solver (`coupling.py`).
 
 Python 3.11/3.12 (`requires-python = ">=3.11,<3.13"`). Runtime dependencies:
 NumPy, SciPy, Matplotlib, pandas, Pydantic 2, PyYAML, `rainflow`.
-Optional: `clarabel` (extra `contact`) and `numba` (extra `fast`, compiled
-kernels; see the kernel section).
+Optional: `numba` (extra `fast`, compiled kernels; see the kernel section) and
+`clarabel` (extra `contact`, used only by a validation cross-check script).
 
 ## Package layout
 
 ```
-cablexsec/
+src/cablexsec/
   __init__.py          public re-exports, __version__
   api.py               stiffness, M-kappa, shell stress/fatigue, fatigue front door
   project.py           CableModel, settings, AnalysisRunner, AnalysisRecord, Project
@@ -83,7 +83,7 @@ It is immutable; edits produce a new validated object.
   rather than silently used.
 - `mean_stress.py`: `MeanStressSpec` and `equivalent_range`: Goodman,
   Gerber, Soderberg, SWT and Walker corrections to the curve's test R ratio
-  or constant mean (the BFLEX `IGERB` options), with an explicit UTS or
+  or constant mean, with an explicit UTS or
   yield source, and the DNV-RP-C203 Eq. 2.15/2.16 range factors.
 - `strain_life.py`: Coffin–Manson–Basquin constants of metallic sheaths,
   foils and tapes with their basis (published, derived, assumed), Masing
@@ -310,7 +310,7 @@ compiles the window slip amplitude of each stress cycle and the per-cycle
 knocked-down Miner sum; `tests/test_fretting_regime.py` compares the table
 with `rainflow_cycles` cycle for cycle, including plateaus and short records.
 
-Both modules take `njit`/`prange` from `cablexsec/_numba.py`, a typed wrapper
+Both modules take `njit`/`prange` from `src/cablexsec/_numba.py`, a typed wrapper
 that is the identity when `numba` is absent or `CABLEXSEC_DISABLE_NUMBA=1`, so
 the NumPy/Python path remains the reference implementation and the fallback.
 `numba` is the optional extra `fast` (`numba>=0.65`), and project engine

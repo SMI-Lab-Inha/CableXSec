@@ -23,8 +23,8 @@ pre-commit install
 ```
 
 The extras are optional at run time: `fast` adds `numba` for the compiled slip-stress
-and rainflow kernels, `contact` adds `clarabel` for the concentric contact quadratic
-programme. Setting `CABLEXSEC_DISABLE_NUMBA=1` selects the NumPy reference path even
+and rainflow kernels, `contact` adds `clarabel`, an independent solver used only by the
+cross-check script `validation/scripts/concentric_conductor_bend.py` and its test. Setting `CABLEXSEC_DISABLE_NUMBA=1` selects the NumPy reference path even
 when `numba` is installed.
 
 ## Tests
@@ -68,12 +68,13 @@ rows of the 0.1.0 report are registered, unresolved discrepancies (see
 
 ```powershell
 pre-commit run --all-files
-python -m ruff check cablexsec tests examples validation release
-python -m ruff format --check cablexsec tests examples validation release
+python -m ruff check src tests examples validation release doc
+python -m ruff format --check src tests examples validation release doc
 python -m mypy
 ```
 
-`mypy` is configured in `pyproject.toml` (`strict = true`, package `cablexsec`).
+`mypy` is configured in `pyproject.toml` (`strict = true`, package `cablexsec` under
+`src/`).
 
 ## Documentation
 

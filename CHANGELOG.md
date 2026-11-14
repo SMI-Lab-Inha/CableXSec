@@ -23,6 +23,13 @@ generated table is reproduced by `python validation/scripts/run_validation.py`.
   property. A value that cannot be shared may be written as `null` and supplied from a
   separate file (`load_cable(..., geometry_override=...)`); an incompletely specified
   cable is refused by every calculation with the missing fields named.
+- Geometry that cannot exist is refused when a cable is built, with the item named:
+  layers out of radial order or overlapping, cores that overlap or form more than one
+  family, wires larger than their radial room, lay angles outside [0, 90) degrees
+  (handedness is given by `lay_direction` only), non-integer counts, temperatures below
+  absolute zero and termination factors below one. Unknown keys are refused at every
+  level of a definition and of a geometry override. Round wires that do not fit side by
+  side at their helix radius give a `WireFillWarning`.
 - Bundled public cables: the three-core cable of Ménard and Cartraud (2023), with and
   without fillers; the IEA Wind Task 49 66 kV reference cable (Janocha et al., 2024) and a
   300 mm² variant; the CIGRE TB 880 220 kV export cable; the flexible pipes of Witz (1996)
@@ -37,7 +44,10 @@ generated table is reproduced by `python validation/scripts/run_validation.py`.
 
 - Axial, torsional and bending stiffness: fixed-radius axial–torsional Schur complement,
   full-slip and no-slip bending bounds, plane-section and shear-compliant no-slip bending,
-  load sharing between layers, and the neutral axes of an offset-core section.
+  load sharing between layers, the neutral axes of the section under a biaxial curvature
+  history (bending direction, strain neutral axis and the stress neutral axis of each
+  armour layer), and the slip onset and full-slip curvature of each armour layer against
+  tension (`armour_slip_curvatures`).
 - Solved radial contact state: thick-cylinder compliances of every layer, a contact
   quadratic programme for concentric sections, winding (manufacturing) clamping on both
   armour faces, tension- and pressure-induced contact, effective and true tension, sealed
@@ -51,8 +61,10 @@ generated table is reproduced by `python validation/scripts/run_validation.py`.
   section stress field; transverse slip and its work on the geodesic.
 - Contact mechanics: elliptical Hertz contact with subsurface stress tensors, Mindlin
   partial slip, fretting regime maps (Fouvry), energy wear and SWT critical-plane recovery.
-- Thermal analysis: IEC 60287 steady conductor temperature with the cited loss factors, a
-  thermal network, frictional heating and the thermal change of the clamping.
+- Thermal analysis: an IEC 60287 thermal ladder for the steady conductor temperature with
+  the cited loss factors (for three-core cables without the geometric factor and the sheath
+  eddy loss, which makes it conservative), a transient thermal network, frictional heating
+  and the thermal change of the clamping.
 - Capacity and ultimate limit states: armour yield and sheath strain envelopes, armour
   compression (lateral and radial bird-caging), coiling into a static tank, cable over a
   sheave, critical curvature and the capacity check of time series with Gumbel extremes.
@@ -62,8 +74,10 @@ generated table is reproduced by `python validation/scripts/run_validation.py`.
 #### Fatigue and global-to-local post-processing
 
 - Rainflow counting with residual half cycles and Miner damage at fixed material fibres of
-  every wire, for bulk, contact (fretting) and conductor fatigue; sheath, tape, core-screen
-  and thermal fatigue; electrical life screening.
+  every wire, for bulk and conductor fatigue; contact (fretting) fatigue where a contact
+  curve is available (copper through SWT, steel with a user-registered slip-amplitude curve;
+  the bundled cables use bulk fatigue only); metallic sheath (no lead curve), tape,
+  core-screen and thermal fatigue; electrical life screening.
 - Probability-weighted long-term fatigue over a scatter of sea states.
 - Readers for CableDyn section tables and curvature components, time-history CSV exports
   of global analyses, RIFLEX ASCII results and generic CSV series, with recorded sign conventions; a synthetic JONSWAP-type load series.
@@ -77,6 +91,14 @@ generated table is reproduced by `python validation/scripts/run_validation.py`.
 - Optional compiled kernels (`numba`, the `fast` extra) for per-wire slip stress and rainflow
   counting; results agree with the NumPy reference to floating-point round-off and rainflow
   counts are bitwise equal.
+
+#### Documentation
+
+- A concepts page, four tutorials (a first cable; bending hysteresis against measurements;
+  from a global time history to armour fatigue; contact loading and fretting), how-to
+  recipes for the remaining capabilities, a file-formats reference and a glossary. Every
+  tutorial and recipe is a script whose printed output is checked against its page in the
+  test suite.
 
 ### Known limitations
 

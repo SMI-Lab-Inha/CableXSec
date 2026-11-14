@@ -30,9 +30,8 @@ COMP-O unchanged. The capacity check now never reports a utilisation below
 the wire usage at zero curvature.
 
 **Coiling capacity repair.** The Chae, Nam and Shim (2023)
-rows CH-GJ, CH-EI, CH-P, CH-D and CH-CR were rerun after the coiling capacity
-repair and are unchanged (the repair changes only the capacities and the
-utilisation, not the stresses). The coiling request now states its capacities
+row CH-CR was rerun after the coiling capacity repair and is unchanged (the
+repair changes only the capacities and the utilisation, not the stresses). The coiling request now states its capacities
 as wire stresses, P/(n A cos a): the source's Eqs. 17 to 19 divide by n A and
 give the axial-direction component, cos a times the wire stress (535.4 MPa in
 Table 6 is 555.1 MPa as a wire stress at pitch 1.8 m). CH-CR still checks the
@@ -55,7 +54,7 @@ model) is the full construction.
 | Area | Class | Status |
 | --- | --- | --- |
 | Tier-1 analytical and engine-consistency gates (25 rows) | A, I | All PASS |
-| Coiling of a single-armour cable, Chae, Nam and Shim (2023) (CH-GJ, CH-EI, CH-P, CH-D, CH-CR) | MM, A | CH-CR PASS; CH-GJ, CH-EI, CH-P, CH-D FAIL (trends reproduced; levels depend on the unpublished core lay) |
+| Coiling capacity formulas, Chae, Nam and Shim (2023) (CH-CR) | A | PASS |
 | User S–N data and capacity check of time series (13 rows) | A, I | All PASS (verification only) |
 | Out and von Morgen (1997) frictionless slip bounds; Out (1989) effective curvature change | A | PASS; geodesic transverse map reproduces the frictionless slip vector; legacy transverse map in quadrature with it (stated) |
 | Armour compression: Sævik and Thorsen (2017), Østergaard et al. (2012), Li and Vaz (2021a, b), Yang et al. (2015) | MM | PASS (published closed-form values and model plateaus reproduced) |
@@ -69,7 +68,6 @@ model) is the full construction.
 | Sævik and Bruaseth (2005) umbilical axial stiffness | M | NOT VALIDATED |
 | CIGRE TB880 conductor temperature | MM | PARTIAL |
 | Global–local consistency, floating-wind application | I | Full-slip results are upper estimates |
-| Laid-core friction (gap R1b), Janocha et al. (2024) 66 kV UFLEX loops | MM | FAIL (loop and slopes far below the source) |
 | Laid-core friction (gap R1b), Ménard and Cartraud (2023) six ranges | M | Moment and work errors increase; BM1-loop still FAIL |
 | Fretting regime and wear (gap 3.1): Mindlin/Cattaneo closed forms, Fouvry ratios, limits, rotation | A | PASS |
 | Fretting transition, Fouvry et al. (1995) Table 4 | MM | PASS with the printed shear moduli; 1.6–1.7 × the measurements with G = E/2(1 + ν) (stated) |
@@ -880,8 +878,7 @@ shows 1.7%. With the arrangement reproduced, the remaining discrepancy is
 the loop area (+37% with the Papailiou cap) at the right maximum moment
 (8.11 against 8.18 N·m): the section's friction work, not its transition,
 is too large. The earlier +28% (uniform curvature) compared different
-quantities; the Hu BFLEX model, reduced the same way as the test, gives
-−9.7%.
+quantities.
 
 **Asymmetric and offset loops.** The progressive law is a parallel-Jenkins
 population, so loops of offset or one-sided cycles (Ménard ranges (c)–(f))
@@ -1057,8 +1054,8 @@ displacement, the test's moment formula and its curvature definition).
 
 The Ménard positions of the three LVDTs are not reported; quarter points of
 the uniform-moment zone were used, and any positions inside the zone give
-the same curvature. Nam et al. (2024) is the UFLEX companion of the Hu test
-and enters only through the measured maximum moment. The three-point
+the same curvature. Nam et al. (2024) enters only through the measured
+maximum moment of the Hu test. The three-point
 reduction is independent of the span for an Euler–Bernoulli beam, so the
 Witz sensitivity needs no assumed dimension.
 
@@ -1477,85 +1474,20 @@ statement for that cable: the Ménard YAML gives no MBR and the hang-off
 utilisation is far from one. Interpolation between level curves is the
 resolution limit; finer `levels` reduce it.
 
-## Coiling of a single-armour cable (CH-GJ, CH-EI, CH-P, CH-D)
+## Coiling capacity formulas (CH-CR)
 
-Registered before any run. Source: Chae, Nam and Shim
-(2023), Ocean Eng. 288, 116014, read from the PDF page images because the
-text extraction misaligns Tables 1, 2 and 5. Model-to-model (MM): the source
-gives results of CableCAD, UFLEX 2D and DNV Helica for an artificial
-three-core cable; there is no measurement, and the three tools differ by up
-to 33% among themselves. Agreement with one tool is therefore not a target.
-
-Inputs taken from the source: Table 1 (dimensions), Table 2 (materials),
-the equivalent core of Sec. 2.1.2 (rod 39.8 mm, E 77 GPa, ν 0.43; tube to
-70.8 mm, E 506 MPa, ν 0.47), μ = 0.2 between helical layers, coiling
-curvature 0.14 1/m with twist 7.8°/m in the 14.4 m tank (Sec. 2.1.3), the
-four tank cases of Table 9 (curvature and twist as tabulated), left-hand
-armour and core lay, armour pitches 1800–3000 mm. Read from the figures: 94
-armour wires (Fig. 6, counted from the image, uniform 3.83° spacing).
-Assumed, because the source does not give them: armour helix radius at the
-wire centres, 81.0 mm (157/2 + 2.5); touching cores (r_offset 70.8/√3 mm);
-the yarns and the circular fillers as continuous annuli; zero manufacturing
-clamping (the tools start from a stress-free state, Sec. 2.4); core lay
-straight in the reference case, with a laid-core sensitivity. Source
-inconsistencies recorded, not resolved: one cable turn per tank winding
-gives 2/D = 0.139 rad/m (7.96°/m) at D = 14.4 m, against 7.8°/m in
-Sec. 2.1.3 and 0.125 rad/m in Table 4; Table 6 uses a lay angle from a
-78.5 mm helix radius (tan α = 2π·78.5/L).
-
-Boundary conditions as UFLEX 2D and Helica (Secs. 2.2.2, 2.3.1): free axial
-displacement and zero tension; twist prescribed (CH-P, CH-D) or torque
-prescribed at the Table 3 values (sensitivity). CableCAD's end-fixed
-condition is not reproduced; its columns are shown, not used as targets.
+Source: Chae, Nam and Shim (2023), Ocean Eng. 288, 116014. The coiling request
+(`cablexsec.compute_coiling`) states the radial-buckling capacity of the armour
+in the source's closed form. The check below evaluates that form from the
+source's own inputs. No measured coiling stress exists for the source's cable,
+so the coiling stresses themselves are not benchmarked.
 
 | ID | Class | Check | Target (registered before running) | Result | Status |
 | --- | --- | --- | --- | --- | --- |
-| CH-GJ | MM | Torsional stiffness at the five pitches (Table 5), small twist, free axial | Decreases monotonically with pitch; every value within 0.8·min and 1.2·max of UFLEX 2D and Helica | 106.5, 98.7, 91.3, 81.9, 70.5 kN·m² (monotone) against UFLEX 59.6–34.3 and Helica 69.2–44.5; 1.54–1.58× Helica, above the band at every pitch | FAIL |
-| CH-EI | MM | Full-slip bending stiffness at the five pitches (Table 5) | Varies by < 1% over the pitches; within 0.85·UFLEX and 1.15·Helica | 47.29–47.33 kN·m² (0.1%) against the upper bound 46.06–46.07 | FAIL |
-| CH-P | MM | Most compressive armour axial stress (wire section, 32 fibres) under twist 7.8°/m and curvature 0.14 1/m, rotated through one full turn, at the five pitches (Table 8) | Magnitude decreases monotonically with pitch; every value within 0.8·min and 1.2·max of UFLEX 2D and Helica | −296.0, −290.1, −280.4, −263.4, −236.5 MPa (monotone); band −282.4 to −174.3 at 1.8 m, −207.7 to −133.9 at 3.0 m; 1.26–1.41× UFLEX 2D and Helica | FAIL |
-| CH-D | MM | As CH-P at pitch 1800 mm for the four tank diameters (Table 9) | Magnitude decreases monotonically with diameter; every value within 0.8·min and 1.2·max of UFLEX 2D and Helica | −427.7, −357.3, −270.6, −237.8 MPa at D 10, 12, 16, 18 m (monotone); each 1.05–1.08× the band limit | FAIL |
 | CH-CR | A | Critical radial-buckling stress σ_cr = (1/σ_c1 + 1/σ_c2)⁻¹ (Eqs. 17–19) from the source's own n R and α (Table 6) | Table 6 rounding (0.5 MPa) | largest difference 0.3 MPa (σ_c1 at 2.2 m) | PASS |
 
-Run after registration; request `cablexsec.compute_coiling`
-(`cablexsec/analysis/coiling.py`), cable `cablexsec/cables/chae2023_coiling.yaml`,
-tests `tests/test_coiling.py`. Four of the five registered checks fail;
-the targets are not changed.
-
-Reading of the failures (diagnosis, not a correction):
-
-* The wire-centre stress (twist plus friction, without the local bending of
-  the wire) lies within 11% of UFLEX 2D and Helica at every pitch
-  (−240.8 against −235.3 and −217.9 MPa at 1.8 m; −172.3 against −167.4 and
-  −173.1 MPa at 3.0 m). The registered quantity adds the local bending of
-  the wire, about 55–65 MPa here; UFLEX 2D reports −71 MPa for the same
-  curvature without twist (Table 7, E·r·κ), so the tools' minima include it.
-  The excess is therefore in the twist response: about 220 MPa of twist
-  stress in CableXSec at 1.8 m against roughly 150–165 MPa implied by the
-  tools, consistent with the 1.5× torsional stiffness (CH-GJ).
-* The core lay pitch, which the source does not give (it states only that the
-  cores have the same S lay as the armour), controls both. With laid cores at
-  pitches 1.5–4.0 m (sensitivity, not targets) the free torsional stiffness
-  falls to 71.9–92.8 kN·m² at 1.8 m and 47.2–60.3 kN·m² at 3.0 m, and the
-  most compressive stress to −223.7 to −270.8 MPa and −149.9 to −204.6 MPa,
-  inside the CH-P band at both pitches. Laid cores of the same lay unwind
-  with the armour and share the shortening, so the armour carries less
-  compression. The registered reference (straight cores) is kept.
-* Twist definition: one cable turn per winding gives 0.1389 rad/m at
-  D = 14.4 m (stress −300.8 MPa at 1.8 m), the source's 7.8°/m 0.1361 rad/m
-  (−296.0) and its Table 4 0.125 rad/m (−277.4). Helica was run under torque
-  control (Table 3); 8631 N·m divided by Helica's own GJ gives 0.125 rad/m,
-  but in CableXSec it gives 0.081 rad/m (−204.8 MPa), because the torsional
-  stiffness differs.
-* CH-EI: the full-slip stiffness is flat over the pitches, as in all three
-  tools; its level (47.3 kN·m²) is 2.7% above the upper band limit and
-  includes the bending of the yarn annuli, which UFLEX 2D models as shells.
-* With the Table 6 lay angles (78.5 mm helix radius) instead of 81.0 mm, the
-  stresses change by 0.4–2.3%.
-
-No measured coiling stress exists for this cable; the comparison shows that
-the coiling request reproduces the trends of all three tools and the
-source's capacity formulas, and that the absolute stresses depend on the
-core lay, which must be stated with any coiling result.
+Request `cablexsec.compute_coiling`, tests `tests/test_coiling.py`. Any coiling
+result depends on the core lay, which must be stated with it.
 
 ## Planned benchmarks
 
@@ -1571,7 +1503,6 @@ quoted.
 | Karlsen-Husøy et al. (2026), Adaptive Hysteresis Model | MM | Conductor strain under identical tension and biaxial curvature histories; projection onto eight fixed orientations with a multilinear operator (Eqs. 6–10, Tables 3–4) | Rebuild the model from the published parameters; comparison of reversal laws only, since the calibration is to a proprietary cross-section model |
 | Cen et al. (2026), cable recovery | MM | Slip stiffness against tension and armour and lead-sheath stress laws (Table 4, Figs. 12–16) | Construction from Tables 1–2; quasi-static, no fatigue |
 | Kwon et al. (2026), 66 kV stress factors | MM | Trend of armour and conductor stress factors under tension only (Fig. 12) | Qualitative only: the 66 kV geometry appears only as a drawing |
-| Matched HELICA, UFLEX or BFLEX comparison | MM | Section properties and local stress histories at identical inputs | Collaboration supplying input files, program version and outputs for a public or shareable construction |
 | Strain-gauged armour test | M | Measured armour wire stress under combined tension and cyclic bending | Test with instrumented armour wires, measured clamping state and sensor definitions; required before any wire-stress or fatigue-life claim |
 
 Further candidates from the literature review. Each is listed only because
@@ -1590,7 +1521,6 @@ cases test the armour stick–slip stress mechanism, not power-cable specifics.
 | Sævik and Gjøsteen (2012), umbilicals 1–8 | M | Axisymmetric stiffness of eight umbilicals with full parameters (Tables 4–12) against tests (Tables 2–3) | Coupled radial–axial–torsional section equilibrium (BM4 shows the radial-free assembly fails) |
 | Su, Zhao and Zhu (2026), 35 kV and 36 kV cable sections | MM | Tensile, compressive and bidirectional torsional stiffness against FE (sections Tables 1–2, FE Tables 6–8) | Compression branch and interlayer separation |
 | Poon et al. (2023), floating-wind conductor fretting chain | MM | Contact slip, pressure and fretting lives for DLC 1.1 and 1.6 (loads Table 3, 7-wire geometry Table 4, lives Table 10) | Conductor contact output; CableDyn global loads for the VolturnUS-S case |
-| Janocha et al. (2024) with Beier et al. (2023), UFLEX stress factors | MM | Tension and curvature stress factors of 66 kV reference cables (Janocha layer data Tables 1, 3 and factors Fig. 20; Beier cable Tables 2–3 and UFLEX factors Table 8) | Layer geometry taken from Janocha; friction-free stress-factor definition matched, since the sources omit friction stress |
 | Li et al. (2026, 2027), thermo-mechanical helical cable | MM | Closed-form thermal response (materials Table 1) and thermal-bending stick–slip loops at 30, 60 and 90 °C against FE (Table 1, Figs 13–20) | Uniform-temperature state as in the sources; heating mode declared |
 | Fang et al. (2026), thermo-electro-mechanical RUC | MM | Bending moment against heating with separated expansion and softening (Tables 1–3, Figs 3–4, 16; public code) | Equivalent residual-stress calibration as in the source; heating mode declared |
 | Poradowski and Anders (2025), corrugated-sheath thermal resistance | MM | Equivalent thermal resistivity of the corrugated sheath and air layer for 72 geometries and the CIGRE TB 880 400 kV cable | Corrugated-sheath air-gap resistance implemented |

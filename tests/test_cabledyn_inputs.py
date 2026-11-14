@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 Jae Hoon Seo, SMI Lab, Inha University
-"""CableDyn reader: deck parsing, file layouts and input checks (gap R8 stage 1).
+"""CableDyn reader: deck parsing, file layouts and input checks .
 
 Each case corrupts one item of the synthetic run of ``test_cabledyn_reader``
 and checks that the reader refuses it with a message naming the item, or

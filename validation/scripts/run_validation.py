@@ -1672,6 +1672,19 @@ def main() -> None:
         print(f"core lay stage sensitivity run ({len(stale)} report(s) differ)")
     elif check_only and stale:
         names = ", ".join(str(path.relative_to(ROOT)) for path in stale)
+        # Show what differs, so a stale report can be diagnosed from the log.
+        import difflib  # noqa: PLC0415
+
+        diff = difflib.unified_diff(
+            (recorded or "").split("\n"),
+            text.split("\n"),
+            "recorded",
+            "live",
+            lineterm="",
+            n=0,
+        )
+        for line in list(diff)[:40]:
+            print(line)
         raise SystemExit(
             f"validation artefacts are stale: {names}; run validation/scripts/run_validation.py"
         )

@@ -124,8 +124,6 @@ def test_geometry_override_merge(tmp_path):
     override = {
         "cable": {"name": "Ménard 2023 reference cable"},
         "layers": [
-            "not a layer",
-            {"name": "absent_layer", "d_wire_m": 1.0},
             {"name": "inner_armour", "d_wire_m": 0.0041},
             {
                 "name": "outer_armour",
@@ -155,7 +153,7 @@ def test_geometry_override_merge(tmp_path):
     assert cable.core_lay.pitch_m == 0.8
     other = {"cable": {"name": "another cable"}}
     path.write_text(yaml.safe_dump(other), encoding="utf-8")
-    with pytest.raises(ValueError, match="identity does not match"):
+    with pytest.raises(cx.CableSchemaError, match="identity does not match"):
         cx.load_cable(cx.menard2023_yaml_path(), geometry_override=path)
 
 

@@ -247,7 +247,7 @@ def test_zero_probability_retains_no_damage():
 def test_overflow_is_explicit():
     with pytest.raises(ValueError, match="accumulation"):
         compute([case(values=((1e308, 0),))])
-    with pytest.raises(ValueError, match="design utilization"):
+    with pytest.raises(ValueError, match="design utilisation"):
         compute([case()], exposure_years=1e308)
 
 

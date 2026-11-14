@@ -34,7 +34,7 @@ def main() -> int:
     import cablexsec as cx
 
     location = Path(cx.__file__).resolve()
-    if location.is_relative_to(ROOT / "cablexsec"):
+    if location.is_relative_to(ROOT / "src" / "cablexsec"):
         print(f"smoke test: FAIL (imported the checkout: {location})", file=sys.stderr)
         return 1
     if cx.__version__ != args.version:
