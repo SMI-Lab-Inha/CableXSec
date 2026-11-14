@@ -104,5 +104,13 @@ def test_round_off_class_follows_the_paired_tolerance():
     assert run_validation._value_classes("4.8e-06", ">= 0") != (
         run_validation._value_classes("4.9e-06", ">= 0")
     )
+    # A 1e-12 target: a few machine epsilons are round-off on every platform
+    # (Linux and Windows printed 1.07e-15 and 9.48e-16), a change is not.
+    tight = "< 1e-12 relative; ratio <= 1"
+    linux = run_validation._value_classes("identity 9.48e-16; ratio 0.333", tight)
+    windows = run_validation._value_classes("identity 1.07e-15; ratio 0.333", tight)
+    changed = run_validation._value_classes("identity 3.00e-13; ratio 0.333", tight)
+    assert linux == windows
+    assert linux != changed
     # Inside-word digits (κ0, BM1) are text, not numbers.
     assert run_validation._value_classes("κ0 BM1", "< 0.01%") == ("κ0 BM1",)

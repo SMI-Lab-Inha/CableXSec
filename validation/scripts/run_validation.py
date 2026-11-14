@@ -83,8 +83,11 @@ class Row:
 # ceiling is round-off: its printed digits differ between machines (for
 # example 6.33e-13% and 7.39e-12% against < 0.01%). Such values are compared
 # by tolerance class; every other number, the text and the status are
-# compared exactly, so a real change still marks the report stale.
+# compared exactly, so a real change still marks the report stale. Values at
+# a few hundred machine epsilons (the floor) are round-off for any tolerance:
+# against < 1e-12, results of 1.07e-15 and 9.48e-16 differ only by platform.
 _ROUNDOFF_FRACTION = 1.0e-3
+_ROUNDOFF_FLOOR = 1.0e-13
 _ROUNDOFF_CEILING = 1.0e-9
 _NUMBER = re.compile(r"(?<![\w.])[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?(?![\w.])")
 
@@ -122,7 +125,7 @@ def _value_classes(value: str, target: str) -> tuple[str, ...]:
         if tol is None:
             classes.append(segment.strip())
             continue
-        limit = min(_ROUNDOFF_FRACTION * tol, _ROUNDOFF_CEILING)
+        limit = min(max(_ROUNDOFF_FRACTION * tol, _ROUNDOFF_FLOOR), _ROUNDOFF_CEILING)
 
         def classify(match: re.Match[str], limit: float = limit) -> str:
             number = match.group()
