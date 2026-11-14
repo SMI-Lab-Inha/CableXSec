@@ -41,6 +41,13 @@ def spec(menard):
     return cable_to_mkappa_specs(menard, 0.0, mu=0.2, contact_model="bounded")[0]
 
 
+def _same(a, b):
+    """Equal to rounding: two floating-point paths may differ in the last digit across platforms."""
+    a, b = np.asarray(a), np.asarray(b)
+    scale = float(np.abs(a).max()) if a.size else 0.0
+    np.testing.assert_allclose(b, a, rtol=1e-12, atol=1e-12 * scale)
+
+
 def _random_path(n: int = 1500, seed: int = 3, step: float = 0.002):
     rng = np.random.default_rng(seed)
     return np.cumsum(rng.normal(0, step, n)), np.cumsum(rng.normal(0, step, n))
@@ -58,19 +65,19 @@ def _rotate(x, y, angle):
     "settings",
     [ProgressiveFriction(n_elements=1), ProgressiveFriction("uniform", 8, 0.0)],
 )
-def test_zero_spread_is_the_default_law_bitwise(spec, settings):
+def test_zero_spread_is_the_default_law(spec, settings):
     kx, ky = _random_path()
     pressure = spec.contact_pressure_Pa * (1.0 + 0.3 * np.sin(np.arange(kx.size) / 50))
     ref = wire_slip_history(spec, kx, ky, contact_pressure_Pa=pressure)
     new = progressive_wire_history(
         spec, kx, ky, progressive=settings, contact_pressure_Pa=pressure
     )
-    assert np.array_equal(ref.stress_Pa, new.stress_Pa)
-    assert np.array_equal(ref.moment_Nm, new.moment_Nm)
+    _same(ref.stress_Pa, new.stress_Pa)
+    _same(ref.moment_Nm, new.moment_Nm)
     assert np.array_equal(ref.slipping_count, new.slipping_count)
     if settings.n_elements == 1:
-        assert np.array_equal(ref.work.friction_J_per_m, new.work.friction_J_per_m)
-        assert np.array_equal(ref.work.stored_J_per_m, new.work.stored_J_per_m)
+        _same(ref.work.friction_J_per_m, new.work.friction_J_per_m)
+        _same(ref.work.stored_J_per_m, new.work.stored_J_per_m)
     else:  # identical sub-elements: work sums differ by rounding only
         for a, b in (
             (ref.work.friction_J_per_m, new.work.friction_J_per_m),
@@ -252,7 +259,7 @@ def test_compiled_kernel_matches_reference(spec):
     one = progressive_wire_friction_stress(
         spec, kx, ky, progressive=ProgressiveFriction(n_elements=1)
     )
-    assert np.array_equal(one, fast_slip.wire_friction_stress(spec, kx, ky))
+    _same(one, fast_slip.wire_friction_stress(spec, kx, ky))
 
 
 def test_settings_validation():
@@ -280,8 +287,8 @@ def test_compute_mkappa_progressive(menard):
         friction_model="progressive",
         progressive=cx.ProgressiveFriction(n_elements=1),
     )
-    assert np.array_equal(base.moment_Nm, one.moment_Nm)
-    assert np.array_equal(base.work.friction_J_per_m, one.work.friction_J_per_m)
+    _same(base.moment_Nm, one.moment_Nm)
+    _same(base.work.friction_J_per_m, one.work.friction_J_per_m)
     prog = cx.compute_mkappa(menard, kappa, friction_model="progressive")
     assert prog.W_diss_J_per_m < base.W_diss_J_per_m
     assert "progressive" in prog.provenance.method
@@ -304,7 +311,7 @@ def test_compute_fatigue_progressive(menard):
         progressive=cx.ProgressiveFriction(n_elements=1),
     )
     for name in base.D_bulk_per_wire:
-        assert np.array_equal(base.D_bulk_per_wire[name], one.D_bulk_per_wire[name])
+        _same(base.D_bulk_per_wire[name], one.D_bulk_per_wire[name])
     prog = cx.compute_fatigue(menard, kx, ky, n_fibres=8, friction_model="progressive")
     assert "progressive" in prog.provenance.method
     with pytest.raises(CableInputError):

@@ -73,9 +73,23 @@ def _annotations(cls: type[Any]) -> dict[str, Any]:
     return get_type_hints(cls)
 
 
+def _resolve_alias(annotation: Any) -> Any:
+    """Expand a PEP 695 type alias (numpy >= 2.5 defines ``NDArray`` this way)."""
+    origin = get_origin(annotation)
+    value = getattr(origin, "__value__", None)
+    if value is None:
+        value = getattr(annotation, "__value__", None)
+        return annotation if value is None else _resolve_alias(value)
+    args = get_args(annotation)
+    if getattr(value, "__parameters__", ()):
+        value = value[args if len(args) > 1 else args[0]]
+    return _resolve_alias(value)
+
+
 def _matches(value: Any, annotation: Any) -> bool:
     if annotation is Any:
         return True
+    annotation = _resolve_alias(annotation)
     origin, args = get_origin(annotation), get_args(annotation)
     if origin in (Union, types.UnionType):
         return any(_matches(value, option) for option in args)
