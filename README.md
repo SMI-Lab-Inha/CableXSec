@@ -14,8 +14,9 @@ moment–curvature response that follows, the stress of every wire and component
 material points, the contact pressures that set the friction, the temperatures, and the fatigue
 damage of the armour, the conductor and the sheaths.
 
-It reads the results of global analyses (CableDyn, RIFLEX, CSV exports) and turns them into local
-stresses and damage, and it exports a hysteretic bending law for use in global analysis. The
+It reads the results of global analyses (CableDyn, RIFLEX, and time-history CSV exports such as
+those of OrcaFlex) and turns them into local stresses and damage, and it exports a hysteretic
+bending law for use in global analysis. The
 current release is `v0.1.0`; interfaces are versioned and may change before `1.0.0`.
 
 ## What CableXSec does
