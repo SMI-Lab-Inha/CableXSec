@@ -114,7 +114,10 @@ def test_compiled_kernel_is_the_reference():
     kx = 12 * kon * np.sin(1.3 * t) * np.cos(0.2 * t)
     ky = 7 * kon * np.sin(0.7 * t)
     reference = wire_slip_history(spec, kx, ky).stress_Pa
-    assert np.array_equal(wire_friction_stress(spec, kx, ky), reference)
+    # Round-off only: the reference's vectorised NumPy arithmetic and the
+    # scalar kernel differ by a few ulp on some builds (2e-15 of the peak).
+    fast = wire_friction_stress(spec, kx, ky)
+    assert np.abs(fast - reference).max() <= 1e-12 * np.abs(reference).max()
 
 
 def test_small_friction_limit_is_linear_coulomb():

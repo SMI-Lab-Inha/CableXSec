@@ -14,6 +14,7 @@ from cablexsec.cable_adapters import cable_to_mkappa_specs
 from cablexsec.exceptions import CableInputError, CableSchemaError
 from cablexsec.mechanics import fast_slip
 from cablexsec.mechanics.papailiou import (
+    _compression_onset_factor,
     slip_onset_curvature,
     wire_slip_history,
     wire_slip_stress_cap,
@@ -191,8 +192,11 @@ def test_transition_is_more_gradual_than_the_default(spec):
         spec, kappa, zeros, progressive=ProgressiveFriction()
     ).moment_Nm[:, 0]
     # Same stick branch, never above the pointwise law, strictly below it in
-    # the transition (friction continuity removes the KK overshoot).
-    stick = kappa <= k_on
+    # the transition (friction continuity removes the KK overshoot). The stick
+    # branch ends at the compression-side first slip m(lam) k_on, below k_on.
+    lam = spec.mu * abs(math.sin(spec.lay_angle_rad))
+    stick = kappa < _compression_onset_factor(lam) * k_on
+    assert np.count_nonzero(stick) > 3
     assert np.allclose(ref[stick], new[stick], rtol=1e-12, atol=0)
     assert np.all(new <= ref + 1e-9 * np.abs(ref).max())
     assert (ref - new)[kappa > 1.2 * k_on].min() > 0

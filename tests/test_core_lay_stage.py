@@ -29,7 +29,10 @@ from cablexsec.cable_adapters import cable_to_mkappa_specs
 from cablexsec.exceptions import CableSchemaError
 from cablexsec.io import global_export
 from cablexsec.mechanics.core_friction import build_core_friction
-from cablexsec.mechanics.papailiou import slip_onset_curvature
+from cablexsec.mechanics.papailiou import (
+    _compression_onset_factor,
+    slip_onset_curvature,
+)
 from cablexsec.mechanics.stiffness import bending_stiffness_by_layer
 
 pytestmark = [
@@ -184,7 +187,11 @@ def test_stage_passes_through_core_slip_and_ends_at_full_slip(
     core = with_cores.moment_Nm - without.moment_Nm
     model = build_core_friction(cable, RIGID, T)
     onset, full, moment = _closed_form(model)
-    stick = kappa <= onset
+    # Compression-side cores slip first, at m(a) onset (m = 1 - 3a^2/8): the
+    # grid node at the neutral-axis onset itself has already left the stick line.
+    a = model.mu_effective * math.sin(model.lay_angle_rad)
+    stick = kappa < _compression_onset_factor(a) * onset
+    assert np.count_nonzero(stick) > 3
     np.testing.assert_allclose(
         core[stick], model.core_stick_EI_Nm2 * kappa[stick], rtol=1e-9, atol=1e-9
     )
