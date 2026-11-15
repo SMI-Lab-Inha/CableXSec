@@ -127,6 +127,48 @@ def test_constant_tension_history_is_the_fixed_tension_law(cable: Any) -> None:
     assert "tension history through the bounded" in got.provenance.method
 
 
+def _touching_alternate_wires() -> Any:
+    """Three touching structural armour layers laid alternately: the middle one
+    has two crossing interfaces, which the crossed-wire line loads refuse."""
+    from cablexsec.cables.schema import CableData, CableMeta, HelicalLayer
+
+    layers = tuple(
+        HelicalLayer(
+            name=f"wire-{i}",
+            material="galvanised_steel_armour",
+            n_wires=12 * (i + 1),
+            d_wire_m=0.002,
+            r_helix_m=0.02 + 0.002 * i,
+            lay_angle_deg=20 + 10 * i,
+            lay_direction="left_hand" if i == 1 else "right_hand",
+        )
+        for i in range(3)
+    )
+    return CableData(cable=CableMeta(name="touching alternate wires"), layers=layers)
+
+
+# (the qp contact model does not factor this sheath-free synthetic section even
+# at a fixed tension, so it is not a case of this check)
+@pytest.mark.parametrize("contact_model", ["bounded", "solved"])
+def test_tension_history_needs_no_crossing_loads(contact_model: str) -> None:
+    cable = _touching_alternate_wires()
+    with pytest.raises(CableSchemaError):
+        cx.armour_contact_histories(cable, np.array([1.0e4]))
+    tension = 1.0e4
+    kappa = 0.05 * np.sin(np.linspace(0.0, 4.0 * np.pi, 121))
+    ref = cx.compute_mkappa(
+        cable, kappa, tension_N=tension, contact_model=contact_model
+    )
+    got = cx.compute_mkappa(
+        cable,
+        kappa,
+        contact_tension_history_N=np.full(kappa.size, tension),
+        contact_model=contact_model,
+    )
+    scale = float(np.max(np.abs(ref.moment_Nm)))
+    np.testing.assert_allclose(got.moment_Nm, ref.moment_Nm, rtol=0, atol=1e-12 * scale)
+
+
 def test_core_friction_keeps_its_reference_loads(cable: Any) -> None:
     """With laid-core friction only the armour bound follows the history."""
     tension = 2.0e4

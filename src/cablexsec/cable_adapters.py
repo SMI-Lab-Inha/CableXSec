@@ -909,6 +909,8 @@ class SolvedContactHistories:
 def solved_contact_histories(
     cable: CableData,
     tension_N: FloatArray,
+    *,
+    crossing_loads: bool = True,
     **radial_inputs: Any,
 ) -> SolvedContactHistories:
     """Solved radial contact over a tension history.
@@ -920,6 +922,9 @@ def solved_contact_histories(
     moduli, reference temperature) are passed to
     :func:`~cablexsec.mechanics.radial_cable.solve_cable_radial_states`; with
     none, every state is :func:`solve_cable_radial_state` at its tension.
+    ``crossing_loads=False`` skips the crossed-wire line loads (an empty
+    ``force`` map) for callers that need only the pressure; the crossing
+    representation refuses some geometries the pressure does not.
     """
     tension = np.asarray(tension_N, dtype=np.float64)
     unique, inverse = np.unique(tension, return_inverse=True)
@@ -936,10 +941,16 @@ def solved_contact_histories(
         armour_contact_pressure(cable, contact_model="solved", radial_state=state)
         for state in states
     ]
-    f_values = [
-        armour_crossing_line_loads(cable, contact_model="solved", radial_state=state)
-        for state in states
-    ]
+    f_values = (
+        [
+            armour_crossing_line_loads(
+                cable, contact_model="solved", radial_state=state
+            )
+            for state in states
+        ]
+        if crossing_loads
+        else []
+    )
 
     def history(samples: list[float]) -> FloatArray:
         values = np.asarray(samples, dtype=np.float64)
@@ -951,7 +962,8 @@ def solved_contact_histories(
         name: history([state[name] for state in p_values]) for name in p_values[0]
     }
     force = {
-        name: history([state[name][1] for state in f_values]) for name in f_values[0]
+        name: history([state[name][1] for state in f_values])
+        for name in (f_values[0] if f_values else ())
     }
     stress = {
         name: history([state.result.wire_stress_Pa[name] for state in states])

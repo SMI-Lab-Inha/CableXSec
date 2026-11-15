@@ -875,7 +875,10 @@ def compute_mkappa(
         progressive=progressive_settings,
     )
     if tension_history is not None:
-        histories, _ = _contact_histories(cable, tension_history, contact_model)
+        # pressure only: the crossing loads (unused here) refuse some layer stacks
+        histories, _ = _contact_histories(
+            cable, tension_history, contact_model, crossing_loads=False
+        )
         pressure_history = {name: histories[name] for name in names}
 
     # Soft guard: the linear-elastic wire-stress assumption holds below the
@@ -2530,7 +2533,7 @@ def _fatigue_from_section_states(
 
 
 def _solved_contact_histories(
-    cable: CableData, tension: FloatArray
+    cable: CableData, tension: FloatArray, *, crossing_loads: bool = True
 ) -> tuple[dict[str, FloatArray], dict[str, FloatArray]]:
     """Solved radial contact over a tension history.
 
@@ -2539,7 +2542,7 @@ def _solved_contact_histories(
     33 equally spaced exact solutions, which is exact except within one grid
     interval of an active-set change.
     """
-    histories = solved_contact_histories(cable, tension)
+    histories = solved_contact_histories(cable, tension, crossing_loads=crossing_loads)
     return histories.pressure_Pa, histories.crossing_line_load_N_per_m
 
 
@@ -2570,9 +2573,17 @@ def armour_contact_histories(
 
 
 def _contact_histories(
-    cable: CableData, tension_N: FloatArray, contact_model: str
+    cable: CableData,
+    tension_N: FloatArray,
+    contact_model: str,
+    *,
+    crossing_loads: bool = True,
 ) -> tuple[dict[str, FloatArray], dict[str, FloatArray]]:
     """Evaluate contact state over a non-negative tension history.
+
+    ``crossing_loads=False`` returns the pressures only (an empty force map):
+    the crossed-wire representation refuses a structural layer with two
+    crossing interfaces, which the pressure does not need.
 
     The bounded equilibrium chain is affine in tension while its non-negative
     contacts remain active, so two endpoint solves give the exact history. The
@@ -2581,13 +2592,23 @@ def _contact_histories(
     """
     tension = np.asarray(tension_N, dtype=np.float64)
     if contact_model == "solved":
-        return _solved_contact_histories(cable, tension)
+        return _solved_contact_histories(
+            cable, tension, crossing_loads=crossing_loads
+        )
     if contact_model == "bounded":
         scale = max(float(np.max(tension)), 1.0)
         p0 = armour_contact_pressure(cable, 0.0, contact_model=contact_model)
         p1 = armour_contact_pressure(cable, scale, contact_model=contact_model)
-        f0 = armour_crossing_line_loads(cable, 0.0, contact_model=contact_model)
-        f1 = armour_crossing_line_loads(cable, scale, contact_model=contact_model)
+        f0 = (
+            armour_crossing_line_loads(cable, 0.0, contact_model=contact_model)
+            if crossing_loads
+            else {}
+        )
+        f1 = (
+            armour_crossing_line_loads(cable, scale, contact_model=contact_model)
+            if crossing_loads
+            else {}
+        )
         pressure = {
             name: np.asarray(p0[name] + (p1[name] - p0[name]) * tension / scale)
             for name in p0
@@ -2605,10 +2626,16 @@ def _contact_histories(
         armour_contact_pressure(cable, float(value), contact_model=contact_model)
         for value in unique
     ]
-    f_values = [
-        armour_crossing_line_loads(cable, float(value), contact_model=contact_model)
-        for value in unique
-    ]
+    f_values = (
+        [
+            armour_crossing_line_loads(
+                cable, float(value), contact_model=contact_model
+            )
+            for value in unique
+        ]
+        if crossing_loads
+        else []
+    )
     names = p_values[0].keys() if p_values else ()
     pressure = {
         name: np.asarray([state[name] for state in p_values], dtype=np.float64)[inverse]
