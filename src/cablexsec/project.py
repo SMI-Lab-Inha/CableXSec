@@ -187,6 +187,14 @@ class BendingLawSettings(_Settings):
     mu: float | None = Field(default=None, ge=0)
     contact_model: Literal["bounded", "qp", "solved"] = "bounded"
     friction_model: Literal["direction_tied", "progressive"] = "direction_tied"
+    slip_scale: bool = False
+    slip_scale_reference_N: float | None = Field(default=None, ge=0, strict=False)
+    slip_scale_tensions_N: tuple[float, ...] | None = Field(
+        default=None, min_length=1, strict=False
+    )
+    slip_scale_external_pressure_Pa: tuple[float, ...] | None = Field(
+        default=None, min_length=1, strict=False
+    )
 
 
 AnalysisSettings = Annotated[
@@ -481,6 +489,10 @@ class CableModel:
             mu=options.mu,
             contact_model=options.contact_model,
             friction_model=options.friction_model,
+            slip_scale=options.slip_scale,
+            slip_scale_reference_N=options.slip_scale_reference_N,
+            slip_scale_tensions_N=options.slip_scale_tensions_N,
+            slip_scale_external_pressure_Pa=options.slip_scale_external_pressure_Pa,
         )
 
 

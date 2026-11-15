@@ -8,13 +8,17 @@ import json
 import math
 import types
 from collections.abc import Mapping
-from dataclasses import fields, is_dataclass
+from dataclasses import MISSING, fields, is_dataclass
 from functools import cache
 from typing import Any, Literal, Union, get_args, get_origin, get_type_hints
 
 import numpy as np
 
-from cablexsec.analysis.bending_law import BendingLawExport, IwanBendingLaw
+from cablexsec.analysis.bending_law import (
+    BendingLawExport,
+    IwanBendingLaw,
+    SlipScaleTable,
+)
 from cablexsec.analysis.capacity import CapacityResult
 from cablexsec.analysis.coiling import CoilingLayerResult, CoilingResult
 from cablexsec.analysis.conductor_fatigue import ConductorFatigueResult
@@ -64,6 +68,7 @@ _TYPES: dict[str, Any] = {
         StrandSlipParameters,
         BendingLawExport,
         IwanBendingLaw,
+        SlipScaleTable,
     )
 }
 
@@ -182,14 +187,26 @@ def unpack(value: Any) -> Any:
     if keys == {"type", "fields"} and isinstance(value["type"], str):
         cls = _TYPES.get(value["type"])
         payload = value["fields"]
+        # A field added later with a default may be absent from files written
+        # before it existed; every other field must be present.
+        names = {f.name for f in fields(cls)} if cls is not None else set()
+        required = (
+            {
+                f.name
+                for f in fields(cls)
+                if f.default is MISSING and f.default_factory is MISSING
+            }
+            if cls is not None
+            else set()
+        )
         if (
             cls is not None
             and isinstance(payload, dict)
-            and set(payload) == {f.name for f in fields(cls)}
+            and required <= set(payload) <= names
         ):
             decoded = {k: unpack(v) for k, v in payload.items()}
             for name, annotation in _annotations(cls).items():
-                if not _matches(decoded[name], annotation):
+                if name in decoded and not _matches(decoded[name], annotation):
                     raise CableInputError(
                         f"invalid project field {cls.__name__}.{name}"
                     )

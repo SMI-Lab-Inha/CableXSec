@@ -726,6 +726,110 @@ def _mkappa_tension_cycle(cable: CableData) -> tuple[float, float]:
     return deviation, balance
 
 
+def _slip_scale_identities(menard: CableData) -> tuple[float, float, float]:
+    """Slip scaling variable of the exported bending law (gap a2).
+
+    1. 66 kV template (no manufacturing clamping, so both armour layers and
+       the cores scale by T2/T1): compute_mkappa at 70 kN against
+       ``EI k + rho F(k / rho)`` from 20 kN over a loop history, cores
+       included; largest difference over the largest moment.
+    2. Menard, 10 and 60 kN (the layers scale by 1.40 and 2.06): every group
+       law decomposed at 60 kN on the grid ``rho_g kappa`` against the 10 kN
+       group law with fixed stiffnesses and yield curvatures times ``rho_g``;
+       largest relative difference.
+    3. Menard, bending at +-0.03 1/m with the tension 10 + 60 sin^2(pi t /
+       370) kN: largest difference of the scaled law from compute_mkappa with
+       the contact-tension history, over the larger fixed-tension residual of
+       the same Iwan law at 10 and 70 kN (the signed capstan bound makes each
+       wire's slip interval asymmetric, which no Masing element carries).
+    """
+    from cablexsec.analysis.bending_law import (  # noqa: PLC0415
+        _slip_scale_table,
+    )
+
+    def table(
+        cable: CableData, kappa: np.ndarray, reference: float, tensions: list[float]
+    ) -> cx.SlipScaleTable:
+        return _slip_scale_table(
+            cable,
+            kappa,
+            reference_N=reference,
+            candidates_N=np.array([reference]),
+            tensions_N=tensions,
+            external_pressure_Pa=None,
+            options={"core_friction": True} if cable is not menard else {},
+        )
+
+    iea = cx.load_cable(cx.iea_task49_66kv_yaml_path(), geometry_override=None)
+    rho = 7.0e4 / 2.0e4
+    kappa = (
+        4e-4
+        * np.sin(np.linspace(0.0, 5.0 * np.pi, 700) + 0.1)
+        * np.linspace(0.3, 1.0, 700)
+    )
+    high = cx.compute_mkappa(iea, kappa, tension_N=7.0e4, core_friction=True)
+    low = cx.compute_mkappa(iea, kappa / rho, tension_N=2.0e4, core_friction=True)
+    ei = high.EI_min_Nm2
+    scaled = ei * kappa + rho * (np.asarray(low.moment_Nm) - ei * kappa / rho)
+    homogeneity = float(
+        np.max(np.abs(scaled - high.moment_Nm)) / np.max(np.abs(high.moment_Nm))
+    )
+
+    grid = np.concatenate([[0.0], np.geomspace(1e-5, 0.3, 199)])
+    reference = table(menard, grid, 1.0e4, [1.0e4, 6.0e4])
+    group = 0.0
+    for g in range(len(reference.group_names)):
+        factor = float(reference.group_scale[g, 1, 0])
+        state = table(menard, grid * factor, 6.0e4, [6.0e4])
+        a, b = reference.group_laws[g], state.group_laws[g]
+        group = max(
+            group,
+            float(np.max(np.abs(a.stiffness_Nm2 - b.stiffness_Nm2)))
+            / float(np.max(a.stiffness_Nm2)),
+            float(
+                np.max(
+                    np.abs(factor * a.yield_curvature_1_m - b.yield_curvature_1_m)
+                    / b.yield_curvature_1_m
+                )
+            ),
+        )
+
+    t = np.arange(1200)
+    bending = 0.03 * np.sin(2.0 * np.pi * t / 200.0 + 0.1)
+    tension = 1.0e4 + 6.0e4 * np.sin(np.pi * t / 370.0) ** 2
+    export = cx.export_bending_law(
+        menard,
+        tensions_N=[1.0e4, 7.0e4],
+        kappa_max_1_m=0.036,
+        n_points=300,
+        slip_scale=True,
+        slip_scale_tensions_N=np.linspace(1.0e4, 7.0e4, 7),
+    )
+    law = export.slip_scale
+    assert law is not None
+    history = np.asarray(
+        cx.compute_mkappa(menard, bending, contact_tension_history_N=tension).moment_Nm
+    )
+    deviation = float(
+        np.max(np.abs(law.moment(bending, tension) - history)) / np.ptp(history)
+    )
+    residual = 0.0
+    for level in (1.0e4, 7.0e4):
+        fixed = np.asarray(
+            cx.compute_mkappa(menard, bending, tension_N=level).moment_Nm
+        )
+        residual = max(
+            residual,
+            float(
+                np.max(
+                    np.abs(law.moment(bending, np.full_like(bending, level)) - fixed)
+                )
+                / np.ptp(fixed)
+            ),
+        )
+    return homogeneity, group, deviation / residual
+
+
 def _rows() -> list[Row]:
     rows: list[Row] = _normal_state_rows()
     menard = cx.load_cable(cx.menard2023_yaml_path(), geometry_override=None)
@@ -1039,6 +1143,29 @@ def _rows() -> list[Row]:
             "< 1e-12 relative; < 1e-12 relative",
             f"{mk_dev:.1e}; {mk_balance:.1e}",
             "PASS" if mk_dev < 1e-12 and mk_balance < 1e-12 else "FAIL",
+        )
+    )
+
+    # Slip scaling variable of the exported bending law (gap a2): the section
+    # law is homogeneous in the friction bound; group yield curvatures scale
+    # exactly; a tension cycle inside the bending cycles adds nothing to the
+    # fixed-tension residual of the Iwan law.
+    sc_homog, sc_group, sc_ratio = _slip_scale_identities(menard)
+    rows.append(
+        Row(
+            "1",
+            "MX-scale",
+            "Exported law with a slip scaling variable: compute_mkappa at T2 vs "
+            "the T1 law with the bound scaled (66 kV, cores included); group "
+            "elements at T2 vs the T1 elements with yield curvatures scaled "
+            "(Menard, two layers); tension cycle inside the bending cycles, "
+            "scaled law vs the contact-tension history over the fixed-tension "
+            "Iwan residual",
+            "< 1e-12 relative; < 1e-12 relative; ratio <= 1.25",
+            f"{sc_homog:.1e}; {sc_group:.1e}; {sc_ratio:.2f}",
+            "PASS"
+            if sc_homog < 1e-12 and sc_group < 1e-12 and sc_ratio <= 1.25
+            else "FAIL",
         )
     )
 

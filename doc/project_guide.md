@@ -132,7 +132,7 @@ the installed registries, and new runs use the installed library.
 | `capacity` | `CapacitySettings` (tension sweep) | no | `CapacityResult` |
 | `coiling` | `CoilingSettings` (static tank) | no | `CoilingResult` |
 | `conductor_fatigue` | `ConductorFatigueSettings` (curvatures, true tension) | yes | `ConductorFatigueResult` |
-| `bending_law` | `BendingLawSettings` (export for global analysis) | no | `BendingLawExport` |
+| `bending_law` | `BendingLawSettings` (export for global analysis, optional slip scale) | no | `BendingLawExport` |
 
 ## Preflight report
 

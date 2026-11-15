@@ -104,7 +104,7 @@ model) is the full construction.
 | Along-wire redistribution (gap T2): periodic and clamp-layer limits, termination round-off, energy, refinement | A, I | PASS |
 | Gap T2 against Sævik (2011), Gjøsteen et al. (2027), Hu, Ménard and Witz | M | Not explained (former capstan bound throughout): Sævik near-bellmouth median ratio 3.36 (2.12 in the clamp convention) against 1.65 for the clamp correction and 1.03 sectional; Hu area +65%, share 11%; Ménard work −3 to +3 points by range; end conditions immaterial |
 | Two-way anchored termination: Sævik rig beam solved with the anchored along-wire chains of both armours | M | FAIL as registered (former capstan bound): median ratio 1.18 (9 of 14 in band), absolute 1.46; anchored over-prediction falls from 3.09 one-way (same stick setting) and 1.65 (clamp correction); curvature redistributes along the bellmouth instead of falling (TC-3 fails); hang-off rule stays sectional |
-| Hysteretic bending law for global analysis (gap MX): Iwan law from the exported backbone against `compute_mkappa` | I | MX-1 PASS (≤ 0.05 % of the moment range, work ≤ 0.02 %), MX-3 PASS; MX-2 FAIL (tension interpolation 3.9 % at 100 kN spacing; 0.27 % at 20 kN); MX-5 (global program) open |
+| Hysteretic bending law for global analysis (gap MX): Iwan law from the exported backbone against `compute_mkappa` | I | MX-1 PASS (≤ 0.05 % of the moment range, work ≤ 0.02 %), MX-3 PASS, MX-scale PASS (slip scaling variable); MX-2 FAIL (tension interpolation 3.9 % at 100 kN spacing; 0.27 % at 20 kN); MX-5 (global program) open |
 | Cable over a sheave (gap SH): Feyrer (2015) Examples 3.2 and 3.4, groove factors, consistency with the section analyses | A, I | SH-1, SH-2, SH-3 PASS; no measured cable-over-sheave data held |
 | Gap T1, benchmarks in their published arrangements | M | Hu three-point: transition share in its band (32.8–39.4% against 33.8%), loop area FAIL (+37% Papailiou cap, +64% Karlsen-Husøy; +4.9%/+28% at uniform curvature compared a different quantity); Ménard four-point unchanged; Witz arrangement not documented, basis unchanged |
 | Torque balance (gap 3.5): Feyrer (2015) and Knapp (1981) closed forms, mirror lay, `xsec_stiffness` consistency | A, I | PASS |
@@ -137,6 +137,7 @@ All rows are verification, not validation. Source: the scorecard
 | M-rec | I | Assembled per-wire moment vs `compute_mkappa`, single core | < 2% | 0.000% | PASS |
 | M-rec-3core | I | As M-rec, offset-core geometry | < 2% | 0.000% | PASS |
 | MK-Tcyc | I | `compute_mkappa` with a contact-tension history cycling inside the bending cycles vs the moment of the fatigue-path friction stress on the same history; work-balance residual over the friction work | < 1e-12 rel.; < 1e-12 rel. | 3.4e-16; 1.1e-15 | PASS |
+| MX-scale | I | Slip-scaled bending law: `compute_mkappa` at 70 kN vs the 20 kN law with the bound scaled (66 kV, cores); group elements at 60 kN vs the 10 kN elements with yield curvatures scaled (Ménard); tension cycle inside the bending cycles, scaled law vs the contact-tension history over the fixed-tension Iwan residual | < 1e-12 rel.; < 1e-12 rel.; ratio ≤ 1.25 | 4.1e-16; 8.3e-14; 1.02 | PASS |
 | slip-onset | A | First wire to slip lies at the neutral axis (with the signed bound on the compression side, ψ ≈ 3λ/2) | abs(cos) < 0.2 | 0.156 (0.000 with the former bound) | PASS |
 | xsec-K | A | Tangent bounds EI_max (κ→0) and EI_min (κ→∞) | < 0.01% | 0; 7.4e-12% | PASS |
 | QP-KKT | A | Concentric contact complementarity | < 1e-8 N | 1.9e-13 N | PASS |
@@ -659,10 +660,16 @@ guide [global_local_guide.md](global_local_guide.md), Section 8.
 | MX-3 | I | Stick tangent, full-slip slope and virgin backbone of the decomposition | 1e-16 to 2e-14 | PASS |
 | MX-4 | I | Progressive law, Ménard at 50 kN | ≤ 0.06 % of the range, work ≤ 0.02 % | reported |
 | MX-5 | MM | Hysteretic bending of a global program with the exported table | not run | open |
+| MX-scale | I | Slip scaling variable (`slip_scale=True`): bound homogeneity of `compute_mkappa` (66 kV, 20 → 70 kN, cores); group elements at 60 kN against the 10 kN elements with yield curvatures times `ρ_g` (Ménard); tension cycle 10–70 kN inside ±0.03 1/m bending, scaled law against the contact-tension history over the fixed-tension residual | 4.1e-16; 8.3e-14; 1.02 (symmetric wire bounds on a breakpoint grid: 8e-15, work 7e-15) | PASS |
+| MX-scale-1 | I | One scale for all groups against the per-group law, 10–150 kN (reference 10 kN), backbone and cycles to 1.5 times full slip | 66 kV 0; 33 kV three-core 0.10 % (0.29 % with cores); Ménard 12 %; with p_e 0–2 MPa: 66 kV 21 %, 33 kV 12 %, Ménard 19 % | reported |
 
-The law is exact for planar bending at fixed contact pressure because the armour laws are parallel spring–sliders;
-the only approximations are the backbone discretisation and the interpolation in tension. Biaxial bending is
-outside it (per-wire, direction-tied response in CableXSec).
+The armour laws are parallel spring–sliders at fixed contact pressure, so the Iwan law follows Masing's rules; it is
+exact when every wire's slip interval is symmetric. The signed capstan bound makes the interval asymmetric (the
+falling bound is the rising one times `exp(−λψ)`), and the MX-1 residual comes from that besides the backbone
+discretisation (bending at ±0.03 1/m on the Ménard cable: 0.14 % of the range at 10 kN with 300 points, 0.02 % with
+symmetric bounds). The interpolation in tension is the other approximation; the slip scale replaces it with the
+exact scaling of the friction caps (MX-scale; guide Section 8.1). Biaxial bending is outside it (per-wire,
+direction-tied response in CableXSec).
 
 ## Cable over a sheave (gap SH)
 

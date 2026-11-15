@@ -26,9 +26,38 @@ All notable changes to CableXSec are recorded in this file. The format follows
   moment) and closes the work balance (1.1e-15 of the friction work). `SectionLaw` and the bending-test simulator keep a
   fixed pressure (their leg solver evaluates trial curvatures without a sample time), and so
   does the exported bending law.
+- The exported bending law can carry a slip scaling variable: `export_bending_law(...,
+  slip_scale=True)` adds `BendingLawExport.slip_scale`, a `SlipScaleTable` with the law at a
+  reference tension split into friction groups (one per armour layer, `laid_cores` for the core
+  lay stage) and each group's scale `ρ_g = R_g/R_g,ref` of its full-slip friction moment over a
+  table of tensions and, optionally, external pressures (`slip_scale_tensions_N`,
+  `slip_scale_external_pressure_Pa`), with the single cap-weighted scale `s` and the derivatives
+  `∂/∂T` and `∂/∂p_e`. The friction bounds of the direction-tied law are proportional to `P1+P2`
+  at fixed stick stiffness, so a group's law at another state is the reference law with fixed
+  element stiffnesses and yield curvatures times `ρ_g`, and under a changing state every element
+  follows the return map with the new cap (`SlipScaleTable.moment`, `.law_at`,
+  `.dissipated_energy`). New validation row MX-scale: the section law is homogeneous in the
+  bound (4e-16), the group yield curvatures scale exactly (8e-14), and a tension cycle inside the
+  bending cycles adds nothing to the fixed-tension residual of the Iwan law (ratio 1.02; with
+  symmetric wire bounds the scaled law is the contact-tension history of `compute_mkappa` to
+  1e-14). One scale for all groups is exact when they scale alike (66 kV template, tension) and
+  misses the per-group law by up to 0.3 % (33 kV three-core), 12 % (Ménard) and 21 % (66 kV with
+  external pressure). The JSON law with a slip scale is format `cablexsec.bending_law/2` (a new
+  `slip_scale` object; version-1 fields unchanged); `SlipScaleTable.to_csv` writes the table.
+  Torque is not a table variable, and the internal-ring slip of resolved strands is refused.
+  Project files written before `BendingLawExport.slip_scale` existed still load: the project
+  codec accepts a missing field that has a default. `export_bending_law` refuses
+  `contact_pressure_Pa` and `contact_tension_history_N` as options.
 
 ### Fixed
 
+- The exported bending law no longer claims to follow `compute_mkappa` exactly. With the signed
+  capstan bound the slip interval of a wire is asymmetric (the falling bound is the rising one
+  times `exp(−λψ)`), which no Masing element carries; the Iwan law misses the section law's loops
+  by about 0.1 % of the moment range on bending cycles near full slip (0.08–0.26 % on the 66 kV,
+  Ménard and 33 kV three-core templates), and by 0.02 % at μ = 0.02. The provenance of
+  `export_bending_law` and `cabledyn_bending_law`, the module notes and the global–local guide
+  say so; the law itself is unchanged.
 - The frictional heat of `compute_thermal_fatigue` (`frictional_heat_W_m`, `pi2` and
   `friction_temperature_rise_K` of every block) is now the dissipation of the distributed
   helix friction law, whatever friction law the fatigue uses. It was the work of the

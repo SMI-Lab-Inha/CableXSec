@@ -18,7 +18,7 @@ and the rules it is checked against.
 | CableDyn 0.4.0 station table | `cablexsec.io.read_cabledyn_station_table` | CableDyn | CSV, tab or whitespace |
 | Sea-state batch specification | `cablexsec-batch`, `load_batch_spec` | (by hand) | JSON |
 | Project | `Project.load` | `Project.save` | JSON |
-| Hysteretic bending law | — | `BendingLawExport.to_csv`, `.to_json` | CSV, JSON |
+| Hysteretic bending law | — | `BendingLawExport.to_csv`, `.to_json`, `SlipScaleTable.to_csv` | CSV, JSON |
 
 ## Every file follows three rules
 
@@ -556,7 +556,8 @@ objects and the stale-result checks.
 
   The first column is the curvature [1/m]; each further column is the moment
   [N m] at the tension named in its heading (`M_<tension>N_Nm`).
-- `to_json(path)`: an object with `format` (`cablexsec.bending_law/1`),
+- `to_json(path)`: an object with `format` (`cablexsec.bending_law/1`; `/2`
+  with a slip scale, below),
   `hysteresis_rule` (`masing_iwan`), `planar_only`, `tension_N`, `kappa_1_m`,
   `moment_Nm` (one backbone per tension), `ei_slip_Nm2` (the full-slip
   stiffness per tension), `elements` (the stiffness and yield curvature of the
@@ -569,6 +570,47 @@ objects and the stale-result checks.
 The law is planar and its contact state is fixed at each tension. Between
 tensions it is interpolated linearly, as Section 8 of the
 [global–local guide](global_local_guide.md) explains.
+
+### Slip scale (format version 2)
+
+`export_bending_law(..., slip_scale=True)` adds the slip scaling variable
+(`BendingLawExport.slip_scale`, a `SlipScaleTable`; guide Section 8.1). The
+JSON law then has `format` `cablexsec.bending_law/2` and one more object,
+`slip_scale`; every version-1 field is unchanged, and a law without a slip
+scale is still written as version 1, byte for byte as before. The object holds:
+
+| Key | Content |
+| --- | --- |
+| `rule` | `yield_curvature_scaling` |
+| `variables` | `["tension_N"]`, or `["tension_N", "external_pressure_Pa"]` with a pressure axis |
+| `reference_tension_N`, `reference_external_pressure_Pa` | state of the reference law |
+| `tension_N`, `external_pressure_Pa` | table axes (`external_pressure_Pa` is `null` without a pressure axis) |
+| `ei_slip_Nm2` | full-slip stiffness [N m²] |
+| `reference_elements` | `stiffness_Nm2`, `yield_curvature_1_m` of all groups merged at the reference |
+| `scale` | single scale `s`, one row per tension, one column per pressure (one column without a pressure axis) |
+| `dscale_dtension_1_per_N` | `∂s/∂T` [1/N], same shape |
+| `dscale_dexternal_pressure_1_per_Pa` | `∂s/∂p_e` [1/Pa], same shape (pressure axis only) |
+| `groups` | one object per friction group: `name` (the armour layer, or `laid_cores`), `kind` (`armour_layer` or `laid_cores`), `reference_cap_Nm`, the group's `stiffness_Nm2` and reference `yield_curvature_1_m`, its `scale` `ρ_g` and the derivatives `dscale_dtension_1_per_N` and `dscale_dexternal_pressure_1_per_Pa` |
+
+At a state with group scales `ρ_g` the law is `M = ei_slip_Nm2 κ + Σ k_i e_i`
+over all group elements, with every element of group `g` updated by
+`e_i ← clip(e_i + Δκ, −ρ_g κ_y,i, ρ_g κ_y,i)` (the return map with the cap of
+the current state). A reader that carries one scale uses `reference_elements`
+and `scale` in place of `ρ_g`; that is exact only when the groups scale alike
+(guide Section 8.1). The table is interpolated linearly in tension and
+pressure; the derivatives are those of the contact model at the table states.
+
+`SlipScaleTable.to_csv(path)` writes the table as CSV, one row per state
+(tension, then pressure):
+
+```text
+tension_N,external_pressure_Pa,s,ds_dT_1_per_N,s_inner_armour,ds_dT_inner_armour_1_per_N,s_outer_armour,ds_dT_outer_armour_1_per_N
+2.000000000e+04,0.000000000e+00,1.000000000e+00,5.000000000e-05,...
+```
+
+With a pressure axis the columns `ds_dpe_1_per_Pa` and
+`ds_dpe_<group>_1_per_Pa` follow each `ds_dT` column. `Project` files store the
+table with the law; project files written before it existed still load.
 
 `cablexsec.io.global_export` also writes the section properties of a set of
 load cases as neutral CSV tables (`section_properties_csv`,

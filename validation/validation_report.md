@@ -26,6 +26,7 @@ Every row is computed from published data or closed-form references in this repo
 | 1 | M-rec | Assembled per-wire moment vs compute_mkappa (cross-engine, single-core) | < 2% | 0.000% | PASS |
 | 1 | M-rec-3core | Cross-engine moment vs compute_mkappa with offset-core geometry and shared mean armour pressure | < 2% | 0.000% | PASS |
 | 1 | MK-Tcyc | compute_mkappa with a tension history cycling within the bending cycles vs the fatigue-path friction stress on the same history; work balance under the changing friction bound | < 1e-12 relative; < 1e-12 relative | 3.4e-16; 1.1e-15 | PASS |
+| 1 | MX-scale | Exported law with a slip scaling variable: compute_mkappa at T2 vs the T1 law with the bound scaled (66 kV, cores included); group elements at T2 vs the T1 elements with yield curvatures scaled (Menard, two layers); tension cycle inside the bending cycles, scaled law vs the contact-tension history over the fixed-tension Iwan residual | < 1e-12 relative; < 1e-12 relative; ratio <= 1.25 | 4.1e-16; 8.3e-14; 1.02 | PASS |
 | 1 | slip-onset | First-to-slip wire at the neutral axis (|cos| → 0, compression side at psi ≈ 3 lam/2; Raoof/Papailiou, not extreme-fibre loop) | |cos| < 0.2 | |cos|=0.156 | PASS |
 | 1 | xsec-K | Coupling tangent bounds (κ→0=EI_max, κ→∞=EI_min); slip-front local slope | < 0.01% | κ0:3.16e-14% / κ∞:5.99e-13% | PASS |
 | 1 | QP-KKT | Concentric contact max|normal line force times gap| (common extension, twist and radial equilibrium) | < 1e-8 N | 1.9e-13 (q>=0: True) | PASS |
@@ -61,9 +62,9 @@ Every row is computed from published data or closed-form references in this repo
 
 ## Test taxonomy (full gate suite)
 
-- analytical_sanity: `1052 passed, 3111 deselected`
-- independent_method: `70 passed, 4093 deselected`
-- full_scale: `27 passed, 4136 deselected`
+- analytical_sanity: `1072 passed, 3111 deselected`
+- independent_method: `70 passed, 4113 deselected`
+- full_scale: `27 passed, 4156 deselected`
 
 Run `pytest -m <marker>` to reproduce each group.
 

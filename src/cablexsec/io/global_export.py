@@ -360,8 +360,8 @@ def cabledyn_bending_law(
             method=(
                 "virgin moment-curvature backbone of each load case "
                 "(compute_section_properties), decomposed into parallel elastic, "
-                "perfectly plastic elements (Iwan model, Masing's rules exact for "
-                "the planar direction-tied law)"
+                "perfectly plastic elements (Iwan model; Masing's rules, exact for "
+                "symmetric wire slip intervals)"
             ),
             citations=("[Iwan1966]", "[Papailiou1997]"),
             limitations=(
