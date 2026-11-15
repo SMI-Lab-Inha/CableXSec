@@ -121,7 +121,10 @@ def _closed_form(model: object) -> tuple[float, float, float]:
     onset = mu * q / (xi * ea * s * c)
     # [Papailiou1997] Eq. 15 at the extreme fibre (psi = pi/2).
     full = q * math.expm1(a * math.pi / 2) / (xi * ea * s * s * c)
-    integral = (a * math.exp(a * math.pi / 2) + 1.0) / (1.0 + a * a) - 1.0
+    # Full-slip moment with the signed capstan bound: tension-side cores at
+    # sigma0 expm1(a psi), compression-side cores at -sigma0 (1 - exp(-a psi)),
+    # int_0^{pi/2} sinh(a psi) sin(psi) dpsi = a cosh(a pi/2) / (1 + a^2).
+    integral = a * math.cosh(a * math.pi / 2) / (1.0 + a * a)
     moment = 2.0 / math.pi * n * q * r * r * c * c / (s * s) * integral
     return onset, full, moment
 

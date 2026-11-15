@@ -272,8 +272,21 @@ def test_stuck_core_adds_the_axis_strain_to_the_screen(thies):
 
 
 def test_thies_screen_reproduces_the_core_level_workaround(aligned):
-    """Aligned cores, free state: the hand core-level helical-screen numbers."""
+    """Aligned cores, free state: the hand core-level helical-screen numbers.
+
+    The hand calculation (254 MPa, 819 um, 7.2e-6 per cycle) used the former
+    symmetric friction cap. The screen ring is in full slip (kappa 0.39 1/m,
+    onset 0.059 1/m), so the signed bound lowers every fibre range by
+    ``2 sigma0 (cosh(lam pi/2) - 1)`` (6.07 MPa here, ``lam = mu sin(alpha)``),
+    leaves the slip amplitude unchanged and scales the bulk damage by the
+    range ratio to the slope ``m = 6.16`` of ``nasution_2014_copper``. The
+    fretting knock-down depends on the slip only, so the outer-face fretting
+    damage keeps its ratio to the plain-fatigue damage (97.75); its plain
+    damage falls with the face range and mean stress, to 37.4 from 43.0 (the
+    wire count above one is unchanged).
+    """
     from cablexsec.analysis.fretting_assessment import SECONDS_PER_YEAR
+    from cablexsec.materials.sn_curves import get_sn_curve
 
     t = np.linspace(0.0, 10.0, 961)
     k = KAPPA * np.sin(2 * np.pi * t)
@@ -286,14 +299,32 @@ def test_thies_screen_reproduces_the_core_level_workaround(aligned):
         mu_outer=0.25,
         n_stations=1,
     )
-    assert np.max(result.stress_range_Pa[0, :, 0]) / 1e6 == pytest.approx(
-        254.0, abs=1.0
+    ring = next(x for x in aligned.layers if x.name == "cu_screen_wires")
+    wire = ring.strand_layers[0]
+    area = math.pi * wire.d_wire_m**2 / 4
+    alpha = math.atan(2 * math.pi * wire.r_helix_m / wire.pitch_m)
+    lam = 0.2 * math.sin(alpha)
+    sigma0 = (
+        wire.r_helix_m
+        * 4.0e5  # P1 + P2: the declared outer-face pressure on both faces
+        * (2 * math.pi * wire.r_helix_m / wire.n_wires)
+        * math.cos(alpha)
+        / (area * math.sin(alpha) ** 2)
     )
+    shift = 2 * sigma0 * (math.cosh(lam * math.pi / 2) - 1) / 1e6
+    assert shift == pytest.approx(6.07, abs=0.01)
+    hand_range = 254.0
+    new_range = np.max(result.stress_range_Pa[0, :, 0]) / 1e6
+    assert new_range == pytest.approx(hand_range - shift, abs=1.0)
     assert np.max(result.slip_amplitude_m) * 1e6 == pytest.approx(819.0, rel=0.01)
-    assert np.max(result.D_bulk) / 10 == pytest.approx(7.2e-6, rel=0.01)
+    m = get_sn_curve("nasution_2014_copper").m1
+    expected = 7.2e-6 * ((hand_range - shift) / hand_range) ** m
+    assert np.max(result.D_bulk) / 10 == pytest.approx(expected, rel=0.01)
     face = result.faces[0]["outer_face"]
+    plain = np.where(face.D_plain_per_year > 0, face.D_plain_per_year, np.inf)
+    assert np.max(face.D_fretting_per_year / plain) == pytest.approx(97.75, rel=1e-3)
     fretting = face.D_fretting_per_year / (SECONDS_PER_YEAR / 10.0) / 10.0 * 76165
-    assert np.max(fretting) == pytest.approx(43.0, rel=0.01)
+    assert np.max(fretting) == pytest.approx(37.4, rel=0.01)
     assert int(np.sum(fretting >= 1.0)) == 4
 
 

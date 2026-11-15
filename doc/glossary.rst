@@ -191,9 +191,10 @@ Terms and abbreviations
    capstan effect
       The inward pressure that a tensioned helical layer exerts on what lies inside it, as a
       rope does on a capstan. In the :term:`bounded chain` each layer adds the jump
-      ``T tan²α/(2π r²)`` (Féret and Bournazel 1987, Eq. 5). The exponential growth of the
-      friction cap along the curved wire, ``expm1(μ |sin α| ψ)``, is called the capstan term of
-      the cap (``capstan=True`` in the along-wire model).
+      ``T tan²α/(2π r²)`` (Féret and Bournazel 1987, Eq. 5). The exponential change of the
+      friction cap along the curved wire with the wire's own force, ``expm1(μ |sin α| ψ)`` for
+      a rising and ``1 − exp(−μ |sin α| ψ)`` for a falling stress, is called the capstan term
+      of the cap (``capstan=True`` in the along-wire model).
 
    carcass
       The interlocked metal strip on the inside of a flexible pipe that resists collapse; it
@@ -523,9 +524,11 @@ Terms and abbreviations
 
    friction cap
       The largest friction stress a slipping armour wire can carry (Papailiou 1997):
-      proportional to the contact pressure and to ``expm1(μ |sin α| ψ)``, with ``ψ = asin c``
-      and ``c = |cos(φ − φ_b)|`` for a wire at azimuth ``φ`` and bending direction ``φ_b``. It is
-      zero at the neutral axis and largest at the extreme fibre; also called the Papailiou cap.
+      proportional to the contact pressure and to ``expm1(μ |sin α| ψ)`` for a rising stress
+      and ``1 − exp(−μ |sin α| ψ)`` for a falling one (signed capstan term), with
+      ``ψ = asin c`` and ``c = |cos(φ − φ_b)|`` for a wire at azimuth ``φ`` and bending
+      direction ``φ_b``. It is zero at the neutral axis and largest at the extreme fibre; also
+      called the Papailiou cap.
 
    friction coefficient
       The ratio ``μ`` of tangential to normal force at sliding. Library values are properties of
@@ -569,7 +572,7 @@ Terms and abbreviations
       against a test. A global model that uses it gives upper estimates of local damage.
 
    full-slip curvature
-      The curvature at which the last wire, on the extreme fibre, starts to slip,
+      The curvature at which the last wire, on the tension-side extreme fibre, starts to slip,
       ``κ_on expm1(μ |sin α| π/2)/(μ |sin α|)`` for a layer with slip onset ``κ_on``. Returned by
       ``full_slip_curvature`` of ``cablexsec.mechanics.papailiou`` and by
       ``armour_slip_curvatures``.

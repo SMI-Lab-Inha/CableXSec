@@ -22,7 +22,7 @@ the sense in which the wire turns along ``+x``)::
 
     n = e + du/dphi,      dn/dphi = t,      t = k_hat (u - p),     |t| <= b,
     e(x, t) = (kappa_x(x, t) cos theta(x) + kappa_y(x, t) sin theta(x)) / kappa_c,
-    b = rho(t) g(theta) + lam |n|,          dp/dt != 0 only where |t| = b,
+    b = rho(t) g(theta) + lam n,            dp/dt != 0 only where |t| = b,
 
 ``n`` the wire force above the pre-tension share in units of ``g_0``
 (stress ``sigma = sigma_u n``), ``u`` the axial displacement of the wire
@@ -83,7 +83,11 @@ prescribed (scaled in time by ``rho``; no bending-induced redistribution),
 Bernoulli kinematics of the core (``e`` from the local curvature only).
 :data:`RIGID_K_HAT` stands for the rigid interface (Lutchansky length
 ``1e-2`` rad, far-field stick factor ``0.9999``). The capstan term uses
-``|n|`` like the package cap (a compressive wire is not unloaded). The
+the signed force ``n``, like the package bounds of
+:func:`cablexsec.mechanics.papailiou.wire_slip_stress_bounds`: a wire whose
+force falls below its pre-tension share also loses normal load
+([Papailiou1997] Eq. 11 with the signed helix angle), and ``b`` is floored at
+zero. The
 increment must be small where slip directions reverse (near anchors under
 proportional loading): ``max_increment`` bounds it.
 """
@@ -492,11 +496,15 @@ def _solve_fixed_bound(
 def _bounds(
     nseg: FloatArray, gb: FloatArray, lam: float, m: int, out: FloatArray
 ) -> None:
-    """Node bounds ``gb + lam (|n_left| + |n_right|) / 2`` (ghost forces zero)."""
+    """Node bounds ``max(gb + lam (n_left + n_right) / 2, 0)`` (ghost forces zero).
+
+    Signed capstan: a falling wire force lowers its own normal load.
+    """
     for i in range(m + 1):
-        left = abs(nseg[i - 1]) if i > 0 else 0.0
-        right = abs(nseg[i]) if i < m else 0.0
-        out[i] = gb[i] + lam * 0.5 * (left + right)
+        left = nseg[i - 1] if i > 0 else 0.0
+        right = nseg[i] if i < m else 0.0
+        value = gb[i] + lam * 0.5 * (left + right)
+        out[i] = value if value > 0.0 else 0.0
 
 
 @njit(cache=True)

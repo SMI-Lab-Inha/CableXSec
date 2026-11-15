@@ -5,6 +5,12 @@
 Reference values marked "stick_check" are those recorded by a separate,
 independently verified solver of the same discrete problem: 256 nodes per
 pitch, segment midpoints at ``(j + 1/2) h``, backward Euler, the same paths.
+The capstan bound is that of the wire's signed force, ``b = rho g + lam n``
+([Papailiou1997] Eqs. 9-14 with the signed helix angle); the values with
+``lam > 0`` are recomputed by the NumPy port of that solver
+(:class:`_Reference`), which reproduces the external solver's recorded value
+for the former ``lam |n|`` bound (26.579392168691143) to 1e-15 when given
+that bound.
 """
 
 from __future__ import annotations
@@ -15,6 +21,7 @@ from dataclasses import replace
 import numpy as np
 import pytest
 from scipy.linalg import solve_banded
+from scipy.optimize import fsolve
 
 import cablexsec as cx
 from cablexsec.analysis.fatigue import compute_fatigue, wire_stress_field
@@ -83,7 +90,21 @@ def _cap(spec):
         / (spec.A_wire_m2 * sa**2)
     )
     psi = np.arcsin(np.clip(np.abs(np.cos(spec.phi_wires)), 0, 1))
-    return sigma0 * np.expm1(spec.mu * sa * psi) * np.sign(np.cos(spec.phi_wires))
+    # Signed capstan: sigma0 expm1(lam psi) on the tension side,
+    # -sigma0 (1 - exp(-lam psi)) = sigma0 expm1(-lam psi) on the other.
+    return sigma0 * np.expm1(spec.mu * sa * psi * np.sign(np.cos(spec.phi_wires)))
+
+
+def _sigma0(spec):
+    sa = abs(math.sin(spec.lay_angle_rad))
+    width = 2 * PI * spec.r_helix_m / spec.n_wires
+    return (
+        spec.r_helix_m
+        * spec.contact_pressure_Pa
+        * width
+        * math.cos(spec.lay_angle_rad)
+        / (spec.A_wire_m2 * sa**2)
+    )
 
 
 def _kappa_on(spec):
@@ -161,14 +182,14 @@ class _Reference:
         n = self.n.copy()
         v = np.zeros(self.N)
         for _ in range(100):
-            b = rho * self.g + self.lam * 0.5 * (np.abs(n) + np.abs(np.roll(n, 1)))
+            b = np.maximum(rho * self.g + self.lam * 0.5 * (n + np.roll(n, 1)), 0.0)
             v = self._newton(y, z0, b, v)
             n_new = y + (np.roll(v, -1) - v) / h
             done = np.abs(n_new - n).max() <= 1e-12 * max(1.0, np.abs(n_new).max())
             n = n_new
             if self.lam == 0.0 or done:
                 break
-        b = rho * self.g + self.lam * 0.5 * (np.abs(n) + np.abs(np.roll(n, 1)))
+        b = np.maximum(rho * self.g + self.lam * 0.5 * (n + np.roll(n, 1)), 0.0)
         tau = np.clip(k * (z0 + v), -b, b)
         self.p = self.u + v - tau / k
         self.u = self.u + v
@@ -210,11 +231,24 @@ def test_stick_check_rigid_limit_and_capstan_cases():
     ax, ay = _rotation(2.0 * 1.001, 3, 720)
     hist = _kernel(ax, ay, 1000.0, 0.0, 256)[1]
     assert hist[-1, 1] - hist[-721, 1] == pytest.approx(30.622844477479035, rel=1e-10)
+    # Capstan case, signed bound: the NumPy port of stick_check gives
+    # 29.42502785927062 (the former lam |n| bound: 26.579392168691143). The
+    # falling force of the compression side lowers its bound, so this partial
+    # slip rotation dissipates more than with the former bound.
     ax, ay = _rotation(1.3 / (0.33 / 1.33), 3, 720)
+    reference = _Reference(256, 0.33, 0.127)
+    dissipated = []
+    for x, y in zip(ax, ay, strict=True):
+        p_old = reference.p.copy()
+        reference.advance(x, y, 1.0)
+        tau = reference.k * (reference.u - reference.p)
+        dissipated.append(reference.h * float(np.sum(tau * (reference.p - p_old))))
+    d_ref = float(np.sum(dissipated[-720:]))
+    assert d_ref == pytest.approx(29.42502785927062, rel=1e-10)
     for newton in (True, False):
         hist = _kernel(ax, ay, 0.33, 0.127, 256, newton=newton)[1]
         d_rev = hist[-1, 1] - hist[-721, 1]
-        assert d_rev == pytest.approx(26.579392168691143, rel=1e-10)
+        assert d_rev == pytest.approx(d_ref, rel=1e-10)
 
 
 @compiled
@@ -236,14 +270,50 @@ def test_steady_rotation_tends_to_rigid_closed_form(a):
         assert errors[2] < 5e-3
 
 
+def _rigid_partial_slip(lam, a):
+    """Rigid-stick limit of monotonic planar loading, signed capstan bound.
+
+    With ``x = pi/2 - |phi|`` from the neutral axis toward the tension side
+    the stick zones carry ``n = a sin x``; the slip zone ``-x_c < x < x_t``
+    round the neutral axis has ``dn/dx = b = 1 + lam n``, so
+    ``n = C exp(lam x) - 1/lam``. ``n`` is continuous at both slip fronts,
+    and ``u`` vanishes in both stick zones, so the slip zone adds no net
+    displacement: ``int (n - a sin x) dx = 0`` over it. These three equations
+    fix ``C``, ``x_t`` and ``x_c``; the zone is asymmetric (it reaches
+    further into the compression side, whose bound falls with its force).
+    With the former ``lam |n|`` bound the solution was the pointwise
+    minimum of ``a |cos phi|`` and ``expm1(lam psi) / lam``.
+    """
+
+    def equations(v):
+        c, xt, xc = v
+        return [
+            c * math.exp(lam * xt) - 1 / lam - a * math.sin(xt),
+            c * math.exp(-lam * xc) - 1 / lam + a * math.sin(xc),
+            c * (math.exp(lam * xt) - math.exp(-lam * xc)) / lam
+            - (xt + xc) / lam
+            + a * (math.cos(xt) - math.cos(xc)),
+        ]
+
+    c, xt, xc = fsolve(equations, [1 / lam, 0.8, 0.8], xtol=1e-12)
+    assert np.abs(equations([c, xt, xc])).max() < 1e-12
+    # The stick zones are admissible: |dn/dx| = a cos x within the bound.
+    for side, edge in ((1.0, xt), (-1.0, xc)):
+        x = np.linspace(edge, PI / 2, 200)
+        assert np.all(a * np.cos(x) <= 1 + side * lam * a * np.sin(x))
+    return c, xt, xc
+
+
 @compiled
 def test_planar_capstan_limit_partial_slip():
-    """Monotonic planar loading -> Papailiou's exponential cap (pointwise min)."""
+    """Monotonic planar loading -> the rigid-stick partial-slip field."""
     lam, a = 0.127, 1.3
     nodes = 256
     phi = (np.arange(nodes) + 0.5) * 2 * PI / nodes
-    cap = np.expm1(lam * np.arcsin(np.clip(np.abs(np.cos(phi)), 0, 1))) / lam
-    ref = np.sign(np.cos(phi)) * np.minimum(a * np.abs(np.cos(phi)), cap)
+    c, xt, xc = _rigid_partial_slip(lam, a)
+    assert xc > xt
+    x = PI / 2 - np.abs(np.angle(np.exp(1j * phi)))
+    ref = np.where((x > -xc) & (x < xt), c * np.exp(lam * x) - 1 / lam, a * np.sin(x))
     errors = []
     for khat in (1e2, 1e3, 1e4):
         ax = np.linspace(0, a * (1 + khat) / khat, 401)[1:]
@@ -254,22 +324,32 @@ def test_planar_capstan_limit_partial_slip():
 
 
 @compiled
-def test_planar_full_slip_equals_package_cap():
-    """Physical units: full slip gives sigma_0 expm1(mu |sin a| psi) at every wire."""
+def test_planar_full_slip_closed_form():
+    """Physical units, full slip. With the signed bound ``dn/dphi = +-(g +
+    lam n)`` between the extreme fibres and the zero pitch mean of ``n``
+    (periodic ``u``) give ``sigma = sigma0 (C exp(lam x) - 1)``,
+    ``C = lam pi / (2 sinh(lam pi / 2))``, ``x = pi/2 - |phi|`` from the
+    geometric neutral axis toward tension; the direction-tied law holds every
+    wire at its own bound, ``sigma0 expm1(+-lam psi)``."""
     spec = _layers()[0].spec
-    cap = _cap(spec)
+    assert spec.shape_g is None
+    lam = spec.mu * abs(math.sin(spec.lay_angle_rad))
+    x = PI / 2 - np.abs(np.angle(np.exp(1j * spec.phi_wires)))
+    c = lam * PI / (2 * math.sinh(lam * PI / 2))
+    closed = _sigma0(spec) * (c * np.exp(lam * x) - 1)
     kappa = np.linspace(0, 1000 * _kappa_on(spec), 301)[1:]
     errors = []
     for per_wire in (4, 8):
         stress = dfm.distributed_wire_friction_stress(
             spec, kappa, np.zeros_like(kappa), nodes_per_pitch=per_wire * spec.n_wires
         )
-        errors.append(np.abs(stress[:, -1] - cap).max() / np.abs(cap).max())
-    assert errors[0] < 1e-6
+        errors.append(np.abs(stress[:, -1] - closed).max() / np.abs(closed).max())
+    assert errors[1] < 1e-6
     assert errors[0] / errors[1] == pytest.approx(4.0, rel=0.05)  # second order
+    cap = _cap(spec)
     direction_tied = wire_friction_stress(spec, kappa, np.zeros_like(kappa))
     np.testing.assert_allclose(
-        direction_tied[:, -1], cap, rtol=0, atol=1e-9 * cap.max()
+        direction_tied[:, -1], cap, rtol=0, atol=1e-9 * np.abs(cap).max()
     )
 
 
@@ -296,16 +376,34 @@ def test_planar_stick_agrees_with_direction_tied(abar):
 @compiled
 @pytest.mark.parametrize(
     ("abar", "range_ratio"),
-    [(1.2, 0.9513), (1.5, 0.8430), (3.0, 0.8917), (10.0, 0.9696), (30.0, 0.9900)],
+    [(1.2, 0.9425), (1.5, 0.8266), (3.0, 0.9042), (10.0, 0.9719), (30.0, 0.9896)],
 )
 def test_planar_partial_slip_stick_representation_effect(abar, range_ratio):
     """Documented difference (not forced to agree): with the shear-lag interface
     the slip front and the elastic zone at the extreme fibre differ from the
     pointwise xi-reduced spring slider. Ratio = largest per-wire stress range,
-    distributed / direction-tied, Menard inner armour, default N."""
+    distributed / direction-tied, Menard inner armour, default N. Recorded with
+    the signed capstan bound (the former bound: 0.9513, 0.8430, 0.8917,
+    0.9696, 0.9900); the full-slip limit is the closed form of the next test."""
     dist, tied = _planar(_layers()[0].spec, abar)
     ratio = np.ptp(dist, axis=1).max() / np.ptp(tied, axis=1).max()
     assert ratio == pytest.approx(range_ratio, abs=2e-3)
+
+
+@compiled
+def test_full_slip_range_ratio_is_x_over_sinh_x():
+    """Full-slip limit of the ratio above. The extreme-fibre wire reverses
+    between its own bounds in the direction-tied law, ``2 sigma0 sinh(x)``,
+    ``x = lam pi / 2``, and over ``2 sigma0 C sinh(x) = sigma0 lam pi`` in the
+    distributed one (the closed form of the full-slip field): the ratio is
+    ``x / sinh(x)``. With the former ``lam |n|`` bound both ranges were
+    ``2 sigma0 expm1(x)`` and the ratio tended to one."""
+    spec = _layers()[0].spec
+    x = spec.mu * abs(math.sin(spec.lay_angle_rad)) * PI / 2
+    dist, tied = _planar(spec, 100.0)
+    ratio = np.ptp(dist, axis=1).max() / np.ptp(tied, axis=1).max()
+    assert ratio == pytest.approx(x / math.sinh(x), rel=1e-9)
+    assert ratio < 1.0 - 1e-3
 
 
 # --------------------------------------------------------------------------- #

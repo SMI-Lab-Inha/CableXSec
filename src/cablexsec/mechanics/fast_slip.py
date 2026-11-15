@@ -4,10 +4,10 @@
 
 Reproduces the force recursion of
 :func:`cablexsec.mechanics.papailiou.wire_slip_history` (``stress_Pa`` only)
-for a constant stick stiffness: the Papailiou slip-front cap at the current
+for a constant stick stiffness: the signed Papailiou bounds at the current
 bending direction and clamping, the scalar elastic--Coulomb return map at
 every wire, and the held/blended bending direction below
-``f * kappa_on`` (see :func:`~cablexsec.mechanics.papailiou.wire_slip_history`).
+``f m(lam) kappa_on`` (see :func:`~cablexsec.mechanics.papailiou.wire_slip_history`).
 Work terms
 are not formed here; callers needing the moment or the energy balance use the
 reference routine. Regression tests compare the two.
@@ -47,7 +47,9 @@ def _cap(
     mu: float,
     g: FloatArray,
 ) -> FloatArray:
-    out = np.zeros(phi.size)
+    # Row 0: tension bound sigma0 g expm1(lam psi); row 1: compression bound
+    # sigma0 g (1 - exp(-lam psi)) (capstan on the wire's own force).
+    out = np.zeros((2, phi.size))
     if pressure <= 0.0:
         return out
     sin_a = abs(math.sin(lay_angle))
@@ -60,7 +62,8 @@ def _cap(
         if c > 1.0:
             c = 1.0
         psi = math.asin(c)
-        out[w] = sigma0 * g[w] * math.expm1(mu * sin_a * psi)
+        out[0, w] = sigma0 * g[w] * math.expm1(mu * sin_a * psi)
+        out[1, w] = -sigma0 * g[w] * math.expm1(-mu * sin_a * psi)
     return out
 
 
@@ -90,11 +93,11 @@ def _stress_kernel(
     current = angle0
     held_angle = math.nan
     held_pressure = math.nan
-    held_cap = np.zeros(n_w)
+    held_cap = np.zeros((2, n_w))
     cur_angle = math.nan
     cur_pressure = math.nan
-    cur_cap = np.zeros(n_w)
-    cap = np.zeros(n_w)
+    cur_cap = np.zeros((2, n_w))
+    cap = np.zeros((2, n_w))
     for i in range(n_t):
         x = kx[i]
         y = ky[i]
@@ -117,17 +120,21 @@ def _stress_kernel(
                 cur_cap = _cap(phi, current, p, r_helix, n_w, area, lay_angle, mu, g)
                 cur_angle = current
                 cur_pressure = p
-            for w in range(n_w):
-                cap[w] = (1.0 - blend) * held_cap[w] + blend * cur_cap[w]
+            for s in range(2):
+                for w in range(n_w):
+                    cap[s, w] = (1.0 - blend) * held_cap[s, w] + blend * cur_cap[s, w]
         else:
-            for w in range(n_w):
-                cap[w] = held_cap[w]
+            for s in range(2):
+                for w in range(n_w):
+                    cap[s, w] = held_cap[s, w]
         for w in range(n_w):
             drive = dm0[w] * x + dm1[w] * y
             inc = drive - old_drive[w]
             trial = force[w] + k * inc
-            if abs(trial) > cap[w]:
-                force[w] = math.copysign(cap[w], trial)
+            if trial > cap[0, w]:
+                force[w] = cap[0, w]
+            elif trial < -cap[1, w]:
+                force[w] = -cap[1, w]
             else:
                 force[w] = trial
             old_drive[w] = drive

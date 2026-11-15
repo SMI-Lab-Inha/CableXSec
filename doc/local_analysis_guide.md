@@ -1407,16 +1407,28 @@ run uncompiled.
 `compute_fatigue` (and `wire_stress_field`) take `friction_model`:
 
 - `"direction_tied"` (default): each wire is an independent spring–slider with
-  the ξ-reduced stick stiffness and the Papailiou cap of the current bending
-  direction (held below `0.1 κ_on`, `direction_hold_fraction`).
+  the ξ-reduced stick stiffness and the Papailiou bounds of the current bending
+  direction (held below `0.1 m κ_on`, `direction_hold_fraction`,
+  `m = 1 − 3λ²/8`, `λ = μ |sin α|`).
 - `"distributed"`: the friction force is solved along one pitch of the helix
   with interface shear stiffness `k̂ = ξ/(1 − ξ)` and the capstan bound
-  `μ |sin α|`, for any biaxial curvature history and the same clamping
-  history. Stick zones then anchor the force distribution, so the result does
-  not depend on a bending direction.
+  `λ n` on the signed wire force, for any biaxial curvature history and the
+  same clamping history. Stick zones then anchor the force distribution, so
+  the result does not depend on a bending direction.
+
+In every law the capstan term acts on the wire's own force (Papailiou 1997,
+Eq. 14 with the signed helix angle): a rising wire stress is bounded by
+`σ0 expm1(λψ)`, a falling one by `−σ0 (1 − exp(−λψ))`. A full reversal of a
+slipping wire therefore spans `2 σ0 sinh(λψ)`, which differs from the linear
+Coulomb range `2 σ0 λψ` only at third order in `λ`; the peak tensile friction
+stress is `σ0 expm1(λπ/2)`. Releases before the correction used the tension
+bound on both sides, which overstated the extreme-fibre friction range by the
+factor `2/(1 + exp(−λπ/2))` (+2.8 to +6.7 % for the bundled power-cable
+templates, `λ` 0.035 to 0.085) and the full-slip loop work by about
+`(π − 2)λ/2`.
 - `"progressive"` (gap G8): each wire of the direction-tied law becomes a set
   of parallel spring–sliders (an Iwan population) with the same stick
-  stiffness, whose caps average to the same Papailiou cap. The default
+  stiffness, whose bounds average to the same Papailiou bounds. The default
   density, `ProgressiveFriction(density="continuity")`, has no parameter: it
   is the friction-continuity slip law of Sævik (1992), Kim (2020) and
   Lukassen (2019), in which a stuck wire carries the stress of the slip
@@ -1474,21 +1486,22 @@ stationary, and it slips mostly near the neutral axis, where its cap is close
 to zero. In the distributed law every helix node slips at its own traction
 bound. For an orbit of radius `R` much larger than the slip onset, the work of
 one revolution over that of the two planar cycles of amplitude `R` (about the
-two axes) is `π/4` in the distributed law (per revolution every node slips
-through `4R`, against `4R |sin φ|` in a planar cycle) and
-`π(π/2 − 1)/4 = 0.448` in the direction-tied law (linearised cap
-`σ0 μ |sin α| asin|cos ψ|`); `tests/test_orbit_friction_heat.py` checks both
-limits. On the 66 kV template (both armour layers,
+two axes) is `π/4` in the distributed law for any `λ = μ |sin α|` (per
+revolution every node slips through `4R`, against `4R |sin φ|` in a planar
+cycle) and `π (sinh x₀ − λ)/(4 λ cosh x₀)`, `x₀ = λπ/2`, in the
+direction-tied law with its signed bounds, which is `π(π/2 − 1)/4 = 0.448`
+up to `O(λ²)`; `tests/test_orbit_friction_heat.py` checks both limits. On the 66 kV template (both armour layers,
 100 kN):
 
 | Circular orbit radius / `κ_on` | 2 | 4 | 8 | 16 | 32 | large (closed form) |
 | --- | --- | --- | --- | --- | --- | --- |
-| direction-tied work / distributed work | 0.16 | 0.28 | 0.38 | 0.46 | 0.51 | 0.57 |
-| largest per-wire stress range, direction-tied / distributed | 0.92–0.94 | 0.96–0.98 | 0.99–1.00 | 1.00–1.01 | 1.01 | |
+| direction-tied work / distributed work | 0.16 | 0.29 | 0.39 | 0.47 | 0.51 | 0.57 |
+| largest per-wire stress range, direction-tied / distributed | 0.92–0.94 | 0.97–0.98 | 0.99–1.00 | 1.00–1.01 | 1.01 | |
 
 A planar cycle of the same amplitudes dissipates the same work in both laws
-within 3 %, and a figure-eight orbit (`κ_y` at twice the frequency of `κ_x`)
-0.65–0.78 of the distributed work. Fatigue is not affected, but a heat source
+within 3 % (at large amplitude the direction-tied work is `sinh(x₀)/x₀`
+times the distributed one, 1.0005–1.0008 here), and a figure-eight orbit
+(`κ_y` at twice the frequency of `κ_x`) 0.66–0.78 of the distributed work. Fatigue is not affected, but a heat source
 is: `compute_thermal_fatigue` takes the frictional heat of its `Pi2`
 diagnostic from the distributed law whatever `friction_model` the fatigue
 uses (64 nodes per pitch and substeps of `κ_on`, within 0.25 % of the
@@ -2024,10 +2037,10 @@ reconstruction with stated bounds; `examples/thies2016_screens_sheaths.py`):
 at `R = 2.54 m` the laminate strain amplitude is 0.80% (free), 0.82%
 (frictional) and 1.81% (stuck); the summed laminate damage within 0.6 m of the
 headstock is 49 (locking at the MBR) and 19 (video radii), cracking under
-every bound. The screen wires carry a 253 MPa friction stress range at the
-extreme fibre, 0.82 mm slip at the neutral axis and a bulk damage of 0.55;
+every bound. The screen wires carry a 247 MPa friction stress range at the
+extreme fibre, 0.82 mm slip at the neutral axis and a bulk damage of 0.47;
 the fretting knock-down raises the partial-slip wires next to the extreme
-fibres to 22 (library Cu–Cu μ = 0.20) or 43 (μ = 0.25). The core lay (4.7°)
+fibres to 19 (library Cu–Cu μ = 0.20) or 37 (μ = 0.25). The core lay (4.7°)
 lowers the radial core curvature by 2%, which moves two of the four
 partial-slip wires into gross slip (4 with aligned cores, 2 with the lay).
 
@@ -2173,9 +2186,9 @@ assumed inputs and bounds of the reconstruction.
   field `κ(x, t)` (Section 13.5) is kinematic: small rotations, linear
   secant `EI`, no restrictor hysteresis, locking from the root only.
 - **Bending loop calibration fixes the product, not the split.** Matching a
-  measured moment–curvature loop identifies the friction cap, approximately
-  the product of friction coefficient and clamping pressure. Different (μ,
-  pressure) pairs give the same loop. Outputs that depend on each factor
+  measured moment–curvature loop identifies the friction cap, the product of
+  friction coefficient and clamping pressure up to second order in
+  `μ |sin α|`. Different (μ, pressure) pairs give the same loop. Outputs that depend on each factor
   separately, such as crossing pressure, slip amplitude and fretting indices,
   are not fixed by the loop. State which split you use.
 - **Transverse slip.** The default loxodromic kinematics (`transverse_ratio=0`)

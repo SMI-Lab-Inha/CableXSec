@@ -48,8 +48,9 @@ Tape states
     Elastic--Coulomb stick-slip along the tape on the declared
     friction-setting pressure ``P1 + P2`` and friction coefficient: the
     bending part of the stuck strain, per fibre line of the tape
-    (centre and edges), is returned through the Papailiou cap
-    ``sigma_0 expm1(mu sin(beta) psi)`` with
+    (centre and edges), is returned through the signed Papailiou bounds
+    ``-sigma_0 (1 - exp(-mu sin(beta) psi)) <= sigma <=
+    sigma_0 expm1(mu sin(beta) psi)`` with
     ``sigma_0 = rho (P1 + P2) / (t sin^2 beta)`` and ``psi`` the helix
     angle from the neutral line of the current bending direction
     ([Papailiou1997]; the per-unit-length friction force of a tape is
@@ -213,10 +214,10 @@ def _papailiou_return(
 ) -> FloatArray:
     """Direction-tied elastic--Coulomb return map, shape (fibre line, time).
 
-    ``drive`` is the stuck bending strain per line and time; the cap of a
-    line at ``theta`` is ``sigma0 expm1(mu sin(beta) asin|cos(theta - b)|)``
-    with ``b`` the current bending direction (held while the bending
-    vanishes).
+    ``drive`` is the stuck bending strain per line and time; a line at
+    ``theta`` stays in ``[-sigma0 (1 - exp(-mu sin(beta) psi)),
+    sigma0 expm1(mu sin(beta) psi)]``, ``psi = asin|cos(theta - b)|`` with
+    ``b`` the current bending direction (held while the bending vanishes).
     """
     n_l, n_t = drive.shape
     out = np.zeros((n_l, n_t))
@@ -225,8 +226,9 @@ def _papailiou_return(
     for i in range(n_t):
         psi = np.arcsin(np.clip(np.abs(np.cos(theta - direction[i])), 0.0, 1.0))
         cap = sigma0 * np.expm1(mu_sin * psi)
+        cap_lo = -sigma0 * np.expm1(-mu_sin * psi)
         trial = force + stiffness * (drive[:, i] - previous)
-        force = np.clip(trial, -cap, cap)
+        force = np.minimum(np.maximum(trial, -cap_lo), cap)
         previous = drive[:, i]
         out[:, i] = force
     return out

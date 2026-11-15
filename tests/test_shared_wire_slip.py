@@ -46,19 +46,25 @@ def test_fixed_plane_reversal_and_zero_hold_match_independent_plastic_strain(
     c, s = math.cos(layer.lay_angle_rad), math.sin(layer.lay_angle_rad)
     stiffness = layer.xi * layer.E_wire_Pa * c**2
     width = 2 * math.pi * layer.r_helix_m / layer.n_wires
-    cap = (
+    sigma0 = (
         layer.contact_pressure_Pa
         * width
         * c
         * layer.r_helix_m
         / (layer.A_wire_m2 * s**2)
-        * np.expm1(layer.mu * s * np.arcsin(np.abs(np.cos(phi - angle))))
     )
+    # Signed capstan ([Papailiou1997] Eqs. 11, 14 with the signed helix
+    # angle): a rising stress is bounded by sigma0 (exp(lam psi) - 1), a
+    # falling one by -sigma0 (1 - exp(-lam psi)), whichever side the wire is
+    # on; psi depends on the bending plane only, not on the sign of kappa.
+    lam_psi = layer.mu * s * np.arcsin(np.abs(np.cos(phi - angle)))
+    upper = sigma0 * (np.exp(lam_psi) - 1)
+    lower = sigma0 * (1 - np.exp(-lam_psi))
     plastic = np.zeros(layer.n_wires)
     expected = []
     for curvature in kappa:
         strain = curvature * layer.r_helix_m * np.cos(phi - angle)
-        stress = np.clip(stiffness * (strain - plastic), -cap, cap)
+        stress = np.clip(stiffness * (strain - plastic), -lower, upper)
         plastic = strain - stress / stiffness
         expected.append(stress)
     np.testing.assert_allclose(result.stress_Pa.T, expected, rtol=2e-12, atol=2e-7)

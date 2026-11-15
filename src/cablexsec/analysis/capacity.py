@@ -125,7 +125,7 @@ from cablexsec.mechanics.axisymmetric import (
     AxisymmetricResult,
     compute_contact_forces,
 )
-from cablexsec.mechanics.papailiou import wire_slip_stress_cap
+from cablexsec.mechanics.papailiou import wire_slip_stress_bounds
 from cablexsec.mechanics.section_state import SectionState, solve_section_state
 from cablexsec.mechanics.stiffness import ea_fixed
 from cablexsec.mechanics.wire_stress import local_bending_amplitude
@@ -672,7 +672,8 @@ def _wire_usage(
             if section_state is not None:
                 sigma_axial = section_state.layers[layer.name].longitudinal_stress_Pa
             sigma_stick = spec.k_f * spec.r_helix_m * np.abs(cos_phi) * kappa
-            sigma_slip = wire_slip_stress_cap(spec, phi_bend)
+            cap_hi, cap_lo = wire_slip_stress_bounds(spec, phi_bend)
+            sigma_slip = np.where(cos_phi >= 0.0, cap_hi, cap_lo)
             sigma_friction = np.sign(cos_phi) * np.minimum(sigma_stick, sigma_slip)
             sigma_bending = _local_bending_max(
                 layer, kappa, phi, spec.E_wire_Pa, spec.lay_angle_rad, phi_bend

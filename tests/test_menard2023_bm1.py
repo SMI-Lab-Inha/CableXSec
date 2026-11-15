@@ -111,15 +111,13 @@ def test_BM1_held_out_pm01_loop_matches_digitised_test_branches() -> None:
     assert normalized_rmse < 0.05
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "After force-projection, section-geometry and per-wire shear corrections, "
-        "the reduced model exceeds the 10% matched experimental cycle-work criterion. "
-        "Compare the same measured curvature paths in J/m, not a source-table entry labelled J."
-    ),
-)
 def test_BM1_matched_experimental_cycle_work_criterion() -> None:
+    """Registered 10 % criterion on the matched cycle work (J/m, same paths).
+
+    It failed with the former symmetric capstan cap (+12.9 %); with the
+    signed bound of [Papailiou1997] the full-slip loop work falls by 3.7 %
+    and the difference is +8.8 %. The threshold is unchanged.
+    """
     data = np.genfromtxt(MEASURED_B, delimiter=",", names=True)
     curvature, moment = data["curvature_1_per_m"], data["moment_Nm"]
     augmented, _, crossings = insert_cycle_crossings(curvature, crossing=0.0)

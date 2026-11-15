@@ -20,7 +20,9 @@ needs and what a designer reads from a cross-section tool:
   difference;
 * the friction-setting contact pressure ``P1+P2`` of each armour layer, its
   slip-onset curvature (:func:`~cablexsec.mechanics.papailiou.
-  slip_onset_curvature`, the neutral-axis limit) and its full-slip curvature
+  slip_onset_curvature`, the neutral-axis limit; with the signed capstan
+  bound the first wire slips on the compression side at ``1 - 3 lam^2 / 8``
+  of it, ``lam = mu |sin a|``) and its full-slip curvature
   (:func:`~cablexsec.mechanics.papailiou.full_slip_curvature`, the last wire to
   slip), both with the stick stiffness of the bending law;
 * the monotonic moment-curvature backbone of :func:`~cablexsec.api.
@@ -339,7 +341,10 @@ class ArmourSlip:
     xi: float
     """Shear coefficient in the stick stiffness ``xi E cos² a`` of the law."""
     onset_curvature_1_m: float
-    """Neutral-axis limit of the slip onset (a lower bound for the wires)."""
+    """Neutral-axis limit of the slip onset. The first wire slips slightly
+    below it, on the compression side, at ``m(lam)`` times this value,
+    ``m = 1 - 3 lam^2 / 8 + O(lam^3)`` (signed capstan bound,
+    :func:`~cablexsec.mechanics.papailiou.slip_onset_curvature`)."""
     full_slip_curvature_1_m: float
     """Curvature from which every wire of the layer slips."""
     stick_bending_stiffness_Nm2: float
@@ -364,7 +369,8 @@ class CoreSlip:
     xi: float
     """Stick coefficient of a core (insulation shear and contact penalty)."""
     onset_curvature_1_m: float
-    """Neutral-axis limit of the core slip onset."""
+    """Neutral-axis limit of the core slip onset (the compression side slips
+    from ``m(lam)`` times it, as for the armour)."""
     full_slip_curvature_1_m: float
     """Curvature from which every core slips."""
     stick_bending_stiffness_Nm2: float

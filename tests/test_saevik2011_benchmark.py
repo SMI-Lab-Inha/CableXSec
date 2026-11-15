@@ -121,12 +121,16 @@ def test_registered_targets_and_results_are_pinned(rows):
         "median R in [0.85, 1.18] and >= 12 of 14 R in [0.70, 1.43] "
         "(R = mean predicted / mean measured, bending-plane stations)"
     )
+    # Signed capstan bound; the former symmetric cap gave median R 1.65
+    # (0.45-3.65) and sectional median 1.03 (0.45-2.28). The stick load
+    # cases are unchanged, the slipping ones fall by 3-5 %.
     assert plane.value == (
-        "median R 1.65 (0.45-3.65), 3 of 14 in band; sectional median 1.03 "
-        "(0.45-2.28), 11 of 14"
+        "median R 1.62 (0.45-3.59), 3 of 14 in band; sectional median 1.00 "
+        "(0.45-2.17), 11 of 14"
     )
     assert plane.status == "FAIL"
     gj = rows["SV11-GJ"]
     assert gj.target == "mean ratio in [0.72, 1.38]"
-    assert gj.value == "1.90 (sectional 1.32); static stress 271 MPa"
+    # Former symmetric cap: 1.90 (sectional 1.32).
+    assert gj.value == "1.80 (sectional 1.24); static stress 271 MPa"
     assert gj.status == "FAIL"

@@ -74,11 +74,11 @@ no part in setting them.
 
 <!-- tutorial-output -->
 ```text
-model moment -539 to 537 N m
-ordered RMSE / measured range: 3.16 %
+model moment -532 to 530 N m
+ordered RMSE / measured range: 2.71 %
 ```
 
-Point by point in the recorded order, the moment error is 3.16 % of the
+Point by point in the recorded order, the moment error is 2.71 % of the
 measured moment range.
 
 ## 3. The loop area is the friction work
@@ -98,21 +98,20 @@ the loop.
 
 <!-- tutorial-output -->
 ```text
-stored energy at the cycle crossings: [0.354 0.354 0.354] J/m
-largest stored energy: 17.29 J/m
-friction work per cycle, model:    [70.4 70.3] J/m
+stored energy at the cycle crossings: [0.328 0.328 0.328] J/m
+largest stored energy: 17.27 J/m
+friction work per cycle, model:    [67.9 67.8] J/m
 loop area per cycle, measured:     [62.4 62.2] J/m
-difference of the means: +12.9 %
+difference of the means: +8.8 %
 ```
 
 The stored energy is the same at every zero crossing, so each cycle closes. It
 peaks at the curvature extremes.
 
-The calculated friction work per cycle is 12.9 % above the measured loop area.
-The validation record registers a 10 % target for this comparison, so the case
-is reported there as a failure: row BM1-loop of the
-[validation record](../validation.md), discussed in the
-[benchmark register](../benchmarks.md).
+The calculated friction work per cycle is 8.8 % above the measured loop area,
+inside the 10 % target that the validation record registers for this
+comparison: row BM1-loop of the [validation record](../validation.md),
+discussed in the [benchmark register](../benchmarks.md).
 
 `loop.W_diss_J_per_m` is the friction work over the whole supplied history,
 conditioning pass included. For the loss per cycle, take differences of
@@ -143,20 +142,22 @@ and the clamping through a copy of the cable with another initial pressure
 
 <!-- tutorial-output -->
 ```text
-mu = 0.1        peak   451 N m, friction work  36.8 J/m per cycle, inner slip onset 0.0015 1/m
-mu = 0.2        peak   548 N m, friction work  73.5 J/m per cycle, inner slip onset 0.0030 1/m
-mu = 0.3        peak   649 N m, friction work 110.2 J/m per cycle, inner slip onset 0.0046 1/m
-p0 = 0.15 MPa   peak   453 N m, friction work  37.5 J/m per cycle, inner slip onset 0.0015 1/m
-p0 = 0.30 MPa   peak   548 N m, friction work  73.5 J/m per cycle, inner slip onset 0.0030 1/m
-p0 = 0.60 MPa   peak   739 N m, friction work 141.4 J/m per cycle, inner slip onset 0.0061 1/m
+mu = 0.1        peak   449 N m, friction work  36.1 J/m per cycle, inner slip onset 0.0015 1/m
+mu = 0.2        peak   541 N m, friction work  70.9 J/m per cycle, inner slip onset 0.0030 1/m
+mu = 0.3        peak   633 N m, friction work 104.5 J/m per cycle, inner slip onset 0.0046 1/m
+p0 = 0.15 MPa   peak   449 N m, friction work  36.1 J/m per cycle, inner slip onset 0.0015 1/m
+p0 = 0.30 MPa   peak   541 N m, friction work  70.9 J/m per cycle, inner slip onset 0.0030 1/m
+p0 = 0.60 MPa   peak   725 N m, friction work 136.5 J/m per cycle, inner slip onset 0.0061 1/m
 ```
 
 The friction work per cycle is close to proportional to the friction
 coefficient and to the pressure, and so is the slip-onset curvature.
 
-Halving the friction coefficient and halving the pressure give nearly the
-same loop, 36.8 and 37.5 J/m. A measured loop therefore constrains the product
-of friction and clamping, not the two separately. The
+Halving the friction coefficient and halving the pressure give the same
+loop to the digits printed, 36.1 J/m. The friction stress scales with
+`mu sigma_0` and departs from that product only at second order in
+`mu sin(alpha)`, so a measured loop constrains the product of friction and
+clamping, not the two separately. The
 [benchmark register](../benchmarks.md) reports the same for the six Ménard
 ranges.
 

@@ -4,10 +4,12 @@
 
 Gates:
 
-* large-amplitude whirl, closed form: one revolution of a circular orbit of
-  radius ``R`` against the two planar cycles of amplitude ``R``, ratio
-  ``pi / 4`` for the distributed helix model (every helix node slips through
-  ``4 R`` at its bound) and ``pi (pi/2 - 1) / 4`` for the direction-tied cap
+* large-amplitude whirl, closed forms with the signed capstan bound: one
+  revolution of a circular orbit of radius ``R`` against the two planar
+  cycles of amplitude ``R``, ratio ``pi / 4`` for the distributed helix model
+  (exact for any ``lam``) and ``pi (sinh x0 - lam) / (4 lam cosh x0)``,
+  ``x0 = lam pi / 2``, for the direction-tied cap; in planar bending the
+  direction-tied work is ``sinh(x0) / x0`` times the distributed one
   (:func:`cablexsec.mechanics.papailiou.wire_slip_history` notes);
 * the heat of ``compute_thermal_fatigue`` is the distributed dissipation of
   the fatigue-path discretisation within 0.5 %, on a planar record (where it
@@ -100,11 +102,32 @@ def test_large_whirl_dissipation_matches_closed_form(spec):
         )
     ratio_d = distributed["circle"] / (distributed["x"] + distributed["y"])
     ratio_p = direction_tied["circle"] / (direction_tied["x"] + direction_tied["y"])
-    # Corrections are of order kappa_on / R and of the capstan term.
-    assert ratio_d == pytest.approx(math.pi / 4.0, rel=0.01)
-    assert ratio_p == pytest.approx(math.pi * (math.pi / 2.0 - 1.0) / 4.0, rel=0.02)
-    # In planar bending the two models dissipate the same work.
-    assert direction_tied["x"] == pytest.approx(distributed["x"], rel=0.01)
+    # Rigid-plastic limit (R >> kappa_on), signed bounds [-l(psi), u(psi)],
+    # u + l = 2 sigma0 sinh(lam psi). Direction-tied: on the orbit every wire
+    # is at the bound of the sign of its drive rate, so per revolution it
+    # dissipates r R int (u + l) |sin b| = 4 sigma0 r R (sinh x0 - lam) /
+    # (1 + lam^2); a planar cycle gives 2 r R |c| (u + l), whose wire mean
+    # over the two axes is (16 / pi) sigma0 r R lam cosh x0 / (1 + lam^2).
+    # Distributed: the rotating full-slip field is the planar one,
+    # sigma0 (C exp(lam x) - 1), turned to the slip-reversal axes, and both
+    # cases integrate exp(lam x) cos x, so pi / 4 holds for any lam. The
+    # remaining corrections are of order kappa_on / R (0.26 % and 0.06 % here,
+    # four times smaller than at R = 256 kappa_on).
+    lam = spec.mu * abs(math.sin(spec.lay_angle_rad))
+    x0 = lam * math.pi / 2.0
+    tied_limit = math.pi * (math.sinh(x0) - lam) / (4.0 * lam * math.cosh(x0))
+    assert tied_limit == pytest.approx(
+        math.pi * (math.pi / 2.0 - 1.0) / 4.0, rel=lam**2
+    )
+    assert ratio_d == pytest.approx(math.pi / 4.0, rel=2e-3)
+    assert ratio_p == pytest.approx(tied_limit, rel=5e-3)
+    # In planar bending the extreme-fibre wire reverses over 2 sigma0
+    # sinh(x0) against sigma0 lam pi in the distributed field: the works
+    # differ by sinh(x0) / x0 (1.0008 here, which this check resolves only
+    # to the 1e-3 discretisation of the two models).
+    assert direction_tied["x"] / distributed["x"] == pytest.approx(
+        math.sinh(x0) / x0, rel=2e-3
+    )
 
 
 def _block_heat(t66: CableData, kx: np.ndarray, ky: np.ndarray):

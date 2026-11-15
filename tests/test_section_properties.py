@@ -279,7 +279,18 @@ def test_backbone_is_compute_mkappa_and_the_staircase_has_the_bounds(
     onset = min(s.onset_curvature_1_m for s in held.armour)
     full = max(s.full_slip_curvature_1_m for s in held.armour)
     assert full < held.kappa_1_m[-1]
-    stick = high <= onset
+    # The reported onset is the neutral-axis limit. With the signed capstan
+    # bound the compression side slips first, at m = min_psi (1 - exp(-lam
+    # psi)) / (lam sin psi) = 1 - 3 lam^2 / 8 + O(lam^3) times it (brute force
+    # here), so the pure stick steps end there.
+    m = 1.0
+    psi = np.linspace(1e-7, np.pi / 2, 200_001)
+    specs = cx.cable_to_mkappa_specs(single, 50e3)
+    for s, spec in zip(held.armour, specs, strict=True):
+        lam = s.mu * abs(np.sin(spec.lay_angle_rad))
+        m = min(m, float(np.min(-np.expm1(-lam * psi) / (lam * np.sin(psi)))))
+    assert 0.99 < m < 1.0
+    stick = high <= m * onset
     slip = low >= full
     assert stick.any() and slip.any()
     np.testing.assert_allclose(tangent[stick], held.ei_stick_Nm2, rtol=1e-9)

@@ -63,10 +63,9 @@ recorded with their targets, data and scripts in the
 | Torque constant of a strand | Feyrer, Example 2.8 | 0.11 % |
 | Moment–curvature loop energy closure | closed form | 0.08 % |
 
-Comparisons that do not meet their registered targets — the friction work of the Ménard
-±0.10 m⁻¹ loop (12.9 % against a 10 % target), the Witz 300-bar loop, the Hu et al. (2022)
-conductor loop and the Sævik (2011) near-termination stresses — are reported as failed in the
-same record, with their tolerances unchanged.
+Comparisons that do not meet their registered targets — the Witz 300-bar loop, the Hu et
+al. (2022) conductor loop and the Sævik (2011) near-termination stresses — are reported as
+failed in the same record, with their tolerances unchanged.
 
 ## Quick start
 

@@ -59,8 +59,10 @@ def test_identify_on_0_bar_predict_300_bar_stays_a_registered_failure(rows):
     assert row.target == (
         "width within [1692, 2489] N·m and energy within 15% of 3125 J/m"
     )
-    # The live identification reproduces the declared (identified) value.
-    assert "p0 1.037 MPa (YAML 1.037)" in row.value
-    assert "300-bar width 1383 vs [1990, 2164] N·m (-30.5% / -36.1%)" in row.value
-    assert "energy 2732 J/m (-12.6%)" in row.value
+    # The live identification reproduces the declared (identified) value,
+    # re-identified with the signed capstan bound (1.037 MPa with the former
+    # symmetric cap, which gave width 1383 N·m and energy -12.6 %).
+    assert "p0 1.071 MPa (YAML 1.071)" in row.value
+    assert "300-bar width 1356 vs [1990, 2164] N·m (-31.8% / -37.3%)" in row.value
+    assert "energy 2682 J/m (-14.2%)" in row.value
     assert row.status == "FAIL"

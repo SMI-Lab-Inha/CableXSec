@@ -19,6 +19,7 @@ from cablexsec.exceptions import CableInputError
 from cablexsec.mechanics.fast_slip import wire_friction_stress
 from cablexsec.mechanics.papailiou import (
     DIRECTION_HOLD_FRACTION,
+    _compression_onset_factor,
     direction_threshold_curvature,
     slip_onset_curvature,
     wire_slip_history,
@@ -56,13 +57,16 @@ def test_onset_curvature_formula_and_virgin_onset():
         expected = spec.mu * q * g_min / (spec.A_wire_m2 * sin_a * spec.k_f)
         onset = slip_onset_curvature(spec)
         assert onset == pytest.approx(expected, rel=1e-12)
+        # Signed capstan: the compression-side first slip lies m(lam) below
+        # the neutral-axis onset, and the hold threshold follows it.
+        m = _compression_onset_factor(spec.mu * sin_a)
         assert direction_threshold_curvature(spec) == pytest.approx(
-            DIRECTION_HOLD_FRACTION * onset, rel=1e-12
+            DIRECTION_HOLD_FRACTION * m * onset, rel=1e-12
         )
         # Dense uniform population: no wire slips below the bound, and the
-        # first slip occurs just above it (neutral-axis wires).
+        # first slip occurs just above it (compression side, psi ~ 3 lam / 2).
         dense = replace(spec, n_wires=720, shape_g=None)
-        onset = slip_onset_curvature(dense)
+        onset = m * slip_onset_curvature(dense)
         kappa = np.linspace(0.0, 1.2 * onset, 1201)
         count = wire_slip_history(dense, kappa, np.zeros_like(kappa)).slipping_count
         first = kappa[np.argmax(count > 0)]

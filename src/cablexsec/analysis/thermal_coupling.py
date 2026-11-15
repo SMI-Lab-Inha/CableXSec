@@ -24,7 +24,7 @@ dissipation of the distributed helix friction model
 whatever friction law the fatigue stresses use. The direction-tied cap of the
 default fatigue path re-orients with the bending direction, and under rotating
 curvature it under-counts the dissipation: on a circular orbit its work is
-0.16 of the distributed model's at twice the slip onset, 0.38 at eight times,
+0.16 of the distributed model's at twice the slip onset, 0.39 at eight times,
 and tends to 0.57 at large amplitude
 (:func:`~cablexsec.mechanics.papailiou.wire_slip_history`). Its wire stress
 ranges agree with the distributed model within 10 %, and in planar bending the
@@ -36,8 +36,9 @@ What a temperature does to the mechanics (per block):
     and the temperature-dependent polymer moduli enter the solved radial
     contact state (:func:`~cablexsec.mechanics.radial_cable.solve_cable_radial_state`,
     unilateral frictionless contact, residual manufacturing wire stress
-    identified at ``T_ref``). Its ``P1+P2`` sets the friction cap
-    ``sigma_0 g expm1(mu |sin a| psi)`` of every wire, and its crossing
+    identified at ``T_ref``). Its ``P1+P2`` sets the friction bounds
+    ``-sigma_0 g (1 - exp(-lam psi)) <= sigma <= sigma_0 g expm1(lam psi)``,
+    ``lam = mu |sin a|``, of every wire, and its crossing
     reaction the crossed-wire contact load.
 (b) **Stiffness.** Polymer moduli follow the registered ``E(T)`` laws of the
     material library (``xlpe_qiao2025``, ``hdpe``: [Qiao2025] Eq. 9 after

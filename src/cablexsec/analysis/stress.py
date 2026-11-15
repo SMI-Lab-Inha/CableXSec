@@ -29,17 +29,21 @@ The friction stress ``σ_f`` is the **same Papailiou slip-front physics** that
 :func:`~cablexsec.api.compute_mkappa` integrates, evaluated per physical wire.
 A wire at azimuth ``θ = φ_k − φ_bend`` carries the stick axial stress
 ``E cos²β r |cosθ| κ`` capped by the frozen-friction slip stress
-``σ_0 (exp(μ sinβ ψ) − 1)`` at the neutral-axis angle ``ψ = arcsin|cosθ|``
-([Papailiou1997] Eq. 14, with ``σ_0 = (P1+P2) b_t r cosα / (A_w sin²α)``,
-``b_t = 2π r / n``, per [Kim2020] Eq. 3.24; see
-:func:`~cablexsec.mechanics.papailiou.wire_slip_stress_cap`). Because
+``σ_0 (exp(μ sinβ ψ) − 1)`` on the tension side and ``σ_0 (1 − exp(−μ sinβ ψ))``
+on the compression side, at the neutral-axis angle ``ψ = arcsin|cosθ|``
+([Papailiou1997] Eq. 14 with the signed helix angle,
+``σ_0 = (P1+P2) b_t r cosα / (A_w sin²α)``, ``b_t = 2π r / n``, per [Kim2020]
+Eq. 3.24; see :func:`~cablexsec.mechanics.papailiou.wire_slip_stress_bounds`).
+Because
 ``sinψ = |cosθ|`` maps the physical azimuth one-to-one onto the Papailiou
 neutral-axis coordinate, the assembled cable moment
 ``Σ σ_f A_w r_h cos(φ−φ_bend) cosβ + EI_min κ`` recovers
 :func:`~cablexsec.api.compute_mkappa` (the Papailiou engine) to within per-wire
 discretisation. This is an internal consistency check, not independent
 validation. Slip starts at the **neutral axis** (smallest ``κ_c``), per the
-Raoof/Kim mechanism. The per-wire stick-slip boundary curvature ``κ_c,k`` is
+Raoof/Kim mechanism; with the signed bound the first slip sits on the
+compression side at ``ψ ≈ 3λ/2``, ``λ = μ sinβ``, at ``1 − 3λ²/8`` times the
+neutral-axis onset. The per-wire stick-slip boundary curvature ``κ_c,k`` is
 reported.
 
 References
@@ -67,7 +71,7 @@ from cablexsec.cable_adapters import (
 from cablexsec.cables.schema import CableData
 from cablexsec.exceptions import CableInputError, CableSchemaError
 from cablexsec.materials import library
-from cablexsec.mechanics.papailiou import wire_slip_stress_cap
+from cablexsec.mechanics.papailiou import wire_slip_stress_bounds
 from cablexsec.mechanics.section_state import SectionState, solve_section_state
 from cablexsec.mechanics.stiffness import ea_fixed, ei_min_slip
 from cablexsec.mechanics.thermal import ThermalResult
@@ -366,9 +370,11 @@ def compute_stress(
         # at azimuth θ = φ−φ_bend sits at neutral-axis angle ψ with
         # sin ψ = |cos θ| ([Papailiou1997] coords). sigma_0 from the cable's
         # P1+P2 ([Kim2020] Eq. 3.24). Stick stress is capped by the frozen
-        # slip stress; slip onset is at the neutral axis (smallest κ_c).
+        # slip stress of the wire's side (tension or compression bound);
+        # slip onset is near the neutral axis (smallest κ_c).
         abs_c = np.abs(cphi)
-        sigma_slip = wire_slip_stress_cap(spec, phi_bend)
+        cap_hi, cap_lo = wire_slip_stress_bounds(spec, phi_bend)
+        sigma_slip = np.where(cphi >= 0.0, cap_hi, cap_lo)
         sigma_stuck = spec.k_f * r_h * abs_c * kappa_mag
         sigma_f = np.sign(cphi) * np.minimum(sigma_stuck, sigma_slip)
         slipping: BoolArray = np.asarray(sigma_stuck >= sigma_slip, dtype=bool)
@@ -439,7 +445,7 @@ def compute_stress(
         s_envelope[lyr.name] = envelope
 
         # Per-wire stick-slip boundary curvature, consistent with the engine:
-        # κ_c = σ_slip / (E cos²β r |cos θ|) — smallest at the neutral axis.
+        # κ_c = σ_slip / (E cos²β r |cos θ|) — smallest near the neutral axis.
         denom = spec.k_f * r_h * abs_c
         safe = np.where(denom > 0.0, denom, 1.0)
         kappa_c = np.where(denom > 0.0, sigma_slip / safe, np.inf)

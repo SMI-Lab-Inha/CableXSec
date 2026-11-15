@@ -7,16 +7,24 @@ Optional alternative to the single spring-slider per wire of
 (``friction_model="direction_tied"``, the default). Each wire is split into
 ``N`` parallel elastic--Coulomb sub-elements (an Iwan 1967 parallel-Jenkins
 population). Every sub-element has the wire's stick stiffness ``k`` and a
-share ``1/N`` of the stress; its cap is a fraction of the package's
-Papailiou cap ``sigma_0 g expm1(lam psi)`` of the wire (``lam = mu |sin a|``,
-``sin psi = |cos(phi - phi_bend)|``), with the fractions averaging to one, so
-that the stick stiffness and the full-slip stress are those of the default
-law. The wire stress is the mean of the sub-element forces. The caps follow
-the bending direction exactly as the default cap does (held direction and
-blend below ``f kappa_on``), so the law applies to biaxial histories and a
-rotation of the history rotates the response. Every sub-element dissipates
-non-negatively; reversal follows Masing's rule and nested loops close, as for
-any parallel-Jenkins population (Iwan 1967, Eqs. 9-15).
+share ``1/N`` of the stress; its two bounds are fractions of the package's
+Papailiou bounds of the wire, ``sigma_0 g expm1(lam psi)`` for a rising and
+``sigma_0 g (1 - exp(-lam psi))`` for a falling stress (``lam = mu |sin a|``,
+``sin psi = |cos(phi - phi_bend)|``,
+:func:`cablexsec.mechanics.papailiou.wire_slip_stress_bounds`), with the
+fractions of each averaging to one, so that the stick stiffness and the
+full-slip stresses are those of the default law. The wire stress is the mean
+of the sub-element forces. The bounds follow the bending direction exactly as
+the default ones do (held direction and blend below ``f m(lam) kappa_on``), so
+the law applies to biaxial histories and a rotation of the history rotates
+the response. Every sub-element dissipates
+non-negatively and nested loops close, as for any parallel-Jenkins
+population (Iwan 1967, Eqs. 9-15). Masing's rule holds in its generalised
+form: a sub-element that slipped at the bound ``b_1`` of its first excursion
+reverses over ``b_1 + b_2``, so the reversal branch is twice the virgin branch
+of the population with the mean bounds ``(b_1 + b_2) / 2 = sigma_0 g
+sinh(lam psi)`` shares, at half the reversal distance (exactly so while no
+sub-element ended its first excursion in stick above its opposite bound).
 
 Densities
 ---------
@@ -36,8 +44,9 @@ pointwise cap. Cell-averaging the yield density over equal shares
           - \mathrm{expm1}(\lambda \arcsin(q_j S))\right],
     \quad S = \sin\psi ,
 
-whose mean over ``j`` is the package cap exactly. ``N = 1`` is the default
-law, bit for bit.
+whose mean over ``j`` is the package cap exactly; the compression bounds
+use ``-expm1(-lambda ...)`` in place of ``expm1(lambda ...)``. ``N = 1`` is
+the default law, bit for bit.
 
 ``"uniform"`` (spread ``h`` in ``[0, 1]``): caps ``cap (1 + h (2 (j + 1/2)/N
 - 1))``, an Iwan density of friction or contact pressure around its mean
@@ -173,7 +182,10 @@ def _caps_kernel(
     density: int,
     n_el: int,
     spread: float,
+    side: float,
 ) -> FloatArray:
+    # side = +1: tension bounds sigma0 g expm1(lam psi) shares; side = -1:
+    # compression bounds sigma0 g (1 - exp(-lam psi)) shares.
     out = np.zeros((phi.size, n_el))
     if pressure <= 0.0:
         return out
@@ -195,11 +207,11 @@ def _caps_kernel(
                 q = (j + 1.0) / n_el
                 if j + 1 == n_el:
                     q = 1.0
-                upper = math.expm1(lam * math.asin(q * c))
+                upper = side * math.expm1(side * lam * math.asin(q * c))
                 out[w, j] = base * scale * (upper - lower)
                 lower = upper
         else:
-            cap = base * math.expm1(lam * math.asin(c))
+            cap = base * side * math.expm1(side * lam * math.asin(c))
             for j in range(n_el):
                 out[w, j] = cap * (1.0 + spread * (2.0 * (j + 0.5) / n_el - 1.0))
     return out
@@ -211,12 +223,16 @@ def progressive_caps(
     progressive: ProgressiveFriction | None = None,
     *,
     contact_pressure_Pa: float | None = None,
+    side: float = 1.0,
 ) -> FloatArray:
     """Sub-element caps [Pa], shape ``(n_wires, n_elements)``.
 
-    The mean over sub-elements equals
-    :func:`cablexsec.mechanics.papailiou.wire_slip_stress_cap` (exactly for
-    the uniform density; to rounding for the continuity density).
+    ``side=1`` gives the upper bounds (rising stress), ``side=-1`` the
+    magnitudes of the lower bounds (falling stress).
+
+    The mean over sub-elements equals the matching bound of
+    :func:`cablexsec.mechanics.papailiou.wire_slip_stress_bounds` (exactly
+    for the uniform density; to rounding for the continuity density).
     """
     spec = _resolve(progressive)
     pressure = (
@@ -243,6 +259,7 @@ def progressive_caps(
             spec.density_code,
             spec.n_elements,
             spec.spread,
+            float(side),
         )
     )
 
@@ -336,17 +353,28 @@ def progressive_wire_history(
     old_drive = np.zeros(n_w)
     k_now = float(stiffness[0])
     held = current = initial_bending_angle
-    caches: dict[str, tuple[tuple[float, float] | None, FloatArray]] = {
-        "held": (None, np.zeros((n_w, n_el))),
-        "current": (None, np.zeros((n_w, n_el))),
+    zero = np.zeros((n_w, n_el))
+    caches: dict[
+        str, tuple[tuple[float, float] | None, tuple[FloatArray, FloatArray]]
+    ] = {
+        "held": (None, (zero, zero)),
+        "current": (None, (zero, zero)),
     }
 
-    def oriented(slot: str, angle: float, load: float) -> FloatArray:
+    def oriented(slot: str, angle: float, load: float) -> tuple[FloatArray, FloatArray]:
         key, value = caches[slot]
         if key != (angle, load):
-            value = progressive_caps(layer, angle, spec, contact_pressure_Pa=load)
-            if not np.isfinite(value).all() or np.any(value < 0):
-                raise CableInputError("sub-element caps must be finite and nonnegative")
+            value = (
+                progressive_caps(layer, angle, spec, contact_pressure_Pa=load),
+                progressive_caps(
+                    layer, angle, spec, contact_pressure_Pa=load, side=-1.0
+                ),
+            )
+            for part in value:
+                if not np.isfinite(part).all() or np.any(part < 0):
+                    raise CableInputError(
+                        "sub-element caps must be finite and nonnegative"
+                    )
             caches[slot] = ((angle, load), value)
         return value
 
@@ -372,21 +400,21 @@ def progressive_wire_history(
                 magnitude = math.sqrt(x * x + y * y)
                 if magnitude >= threshold:
                     held = current
-                    cap = oriented("held", held, load)
+                    cap, cap_lo = oriented("held", held, load)
                 else:
                     blend = magnitude / threshold
-                    cap = oriented("held", held, load)
+                    cap, cap_lo = oriented("held", held, load)
                     if blend > 0.0:
-                        cap = (1.0 - blend) * cap + blend * oriented(
-                            "current", current, load
-                        )
+                        cur_hi, cur_lo = oriented("current", current, load)
+                        cap = (1.0 - blend) * cap + blend * cur_hi
+                        cap_lo = (1.0 - blend) * cap_lo + blend * cur_lo
                 drive = drive_map @ np.array([x, y])
                 increment = drive - old_drive
                 if not np.isfinite(increment).all():
                     raise CableInputError("derived wire increment must be finite")
                 trial = force + k_now * increment[:, None]
-                slipping = np.abs(trial) > cap
-                force = np.where(slipping, np.copysign(cap, trial), trial)
+                force = np.minimum(np.maximum(trial, -cap_lo), cap)
+                slipping = force != trial
                 slip = np.where(
                     slipping, increment[:, None] - (force - old_force) / k_now, 0.0
                 )
@@ -470,9 +498,11 @@ def _progressive_stress_kernel(
     held_angle = math.nan
     held_pressure = math.nan
     held_cap = np.zeros((n_w, n_el))
+    held_lo = np.zeros((n_w, n_el))
     cur_angle = math.nan
     cur_pressure = math.nan
     cur_cap = np.zeros((n_w, n_el))
+    cur_lo = np.zeros((n_w, n_el))
     share = 1.0 / n_el
     for i in range(n_t):
         x = kx[i]
@@ -501,6 +531,22 @@ def _progressive_stress_kernel(
                 density,
                 n_el,
                 spread,
+                1.0,
+            )
+            held_lo = _caps_kernel(
+                phi,
+                held,
+                p,
+                r_helix,
+                n_w,
+                area,
+                lay_angle,
+                mu,
+                g,
+                density,
+                n_el,
+                spread,
+                -1.0,
             )
             held_angle = held
             held_pressure = p
@@ -518,6 +564,22 @@ def _progressive_stress_kernel(
                 density,
                 n_el,
                 spread,
+                1.0,
+            )
+            cur_lo = _caps_kernel(
+                phi,
+                current,
+                p,
+                r_helix,
+                n_w,
+                area,
+                lay_angle,
+                mu,
+                g,
+                density,
+                n_el,
+                spread,
+                -1.0,
             )
             cur_angle = current
             cur_pressure = p
@@ -527,11 +589,15 @@ def _progressive_stress_kernel(
             total = 0.0
             for j in range(n_el):
                 cap = held_cap[w, j]
+                lo = held_lo[w, j]
                 if blend > 0.0:
                     cap = (1.0 - blend) * held_cap[w, j] + blend * cur_cap[w, j]
+                    lo = (1.0 - blend) * held_lo[w, j] + blend * cur_lo[w, j]
                 trial = force[w, j] + k * inc
-                if abs(trial) > cap:
-                    force[w, j] = math.copysign(cap, trial)
+                if trial > cap:
+                    force[w, j] = cap
+                elif trial < -lo:
+                    force[w, j] = -lo
                 else:
                     force[w, j] = trial
                 total += force[w, j]

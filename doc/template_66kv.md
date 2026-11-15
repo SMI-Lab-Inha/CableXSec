@@ -120,8 +120,8 @@ th = cx.compute_thermal(cable, current_A=1093.0, conductor_area_m2=630e-6,
 | Full-slip EI | 21.0 kN·m², with or without core friction | 42.47 kN·m² slipping stiffness at 50 kN, IEA Table 13; branch slope about 29 kN·m² in Fig. 6 and about 41 kN·m² in Fig. 12b | −51 % (−28 % against Fig. 6); outer and inner sheath give 11.6 and 6.1 kN·m². Friction cannot raise the full-slip value (Section 4.1) |
 | No-slip EI (plane section) | 1653 kN·m²; bending-law slope 853 kN·m² armour only, 981 kN·m² with core friction (core ξ = 0.73) | of order 1500–2000 kN·m², initial slope in the Fig. 12b inset (10 kN) | Read from the inset |
 | M at 0.2 1/m, 50 kN loop | 4.31 / 4.28 kN·m (bounded / solved); 4.39 / 4.38 kN·m with core friction | about 6.8 kN·m, Fig. 6 | −35 % with core friction |
-| Loop half-height at κ = 0 | 0.11 / 0.08 kN·m (bounded / solved); 0.20 / 0.19 kN·m with core friction | about 1 kN·m, Fig. 6 | Core friction (μ 0.46) adds 0.08–0.10 kN·m; still about 5 times low |
-| Moment at slip onset, 10/100/200 kN | 0.23 / 0.44 / 0.67 kN·m at 0.01 1/m; 0.25 / 0.60 / 0.99 kN·m with core friction (bounded) | about 5.5 / 9.5 / 12 kN·m, Fig. 12b | Same cause; 12 to 22 times low |
+| Loop half-height at κ = 0 | 0.11 / 0.08 kN·m (bounded / solved); 0.19 / 0.18 kN·m with core friction | about 1 kN·m, Fig. 6 | Core friction (μ 0.46) adds 0.08–0.10 kN·m; still about 5 times low |
+| Moment at slip onset, 10/100/200 kN | 0.23 / 0.43 / 0.66 kN·m at 0.01 1/m; 0.25 / 0.59 / 0.97 kN·m with core friction (bounded) | about 5.5 / 9.5 / 12 kN·m, Fig. 12b | Same cause; 12 to 22 times low |
 | Armour axial stress at 1000 kN | 298 / 305 MPa (inner / outer) | about 355 MPa von Mises, Fig. 19b | Axial part only |
 | Conductor axial stress at 1000 kN | 176 MPa | about 190 MPa, Fig. 19b | −7 % |
 | Armour yield, pure bending | 1.16 1/m | about 1 1/m, Section 3.3 | |
@@ -130,6 +130,16 @@ th = cx.compute_thermal(cable, current_A=1093.0, conductor_area_m2=630e-6,
 | Copper 120 MPa plastic limit, pure bending | 0.362 1/m, bend radius 2.76 m, bent towards a core; 0.353 1/m, 2.84 m in the worst bending direction, 30° from a core (strand basis of the 5 GPa bending modulus) | 0.5 1/m (Section 3.3); MBR 2.76 m (IEA Table 13) | Set by the assumed bending modulus (Section 4.6) |
 | Conductor temperature at 1093 A (125 MW) | 88.9 °C (armour 61.0 °C) | 125 MW rating, IEA Table 13 (90 °C XLPE basis) | Assumed T4; no three-core factor or λ2 |
 | Mass | 76.3 kg/m; 52.5 kg/m without the screens | 55.76 kg/m, IEA Table 13 | Screens are full copper annuli in Table 1 |
+
+The friction-dependent values from here to the end of the page were computed
+with the former symmetric capstan bound, except the loop half-heights and
+slip-onset moments of the table above, the Section 4.1 table and the
+frictional heat, `Π2` and temperature rise of the daily cycle in Section 4.2,
+which are regenerated with the signed bound
+(`validation/scripts/check_core_friction.py`).
+For this template (`λ = μ |sin α|` 0.035–0.045) the signed bound lowers the
+full-slip friction stress range by 2.8–3.6 % and the bulk damage by up to
+about 12 % (CHANGELOG).
 
 Fatigue on a synthetic 2000 s history (κ_x = 0.004 sin(2πt/10) + noise,
 κ_y = 0.002 sin(2πt/13 + 0.4), T = 50 ± 5 kN), maximum wire damage (inner
@@ -168,16 +178,16 @@ fatigue (`iea_task49_66kv_stranded`, Section 4.5).
 | Quantity at 50 kN | Armour only (bounded / solved) | With core friction (bounded / solved) | Published | Status |
 | --- | --- | --- | --- | --- |
 | Core normal load per core | — | 9.4 / 12.2 kN/m | not published | — |
-| Loop half-height at κ = 0 | 0.114 / 0.083 kN·m | 0.195 / 0.187 kN·m | about 1.0 kN·m (Fig. 6) | FAIL |
+| Loop half-height at κ = 0 | 0.112 / 0.081 kN·m | 0.190 / 0.181 kN·m | about 1.0 kN·m (Fig. 6) | FAIL |
 | M at 0.2 1/m | 4.31 / 4.28 kN·m | 4.39 / 4.38 kN·m | about 6.8 kN·m (Fig. 6) | FAIL |
 | Branch slope, 0.05–0.15 1/m | 21.0 kN·m² | 21.0 kN·m² | about 29 (Fig. 6); 42.47 (IEA Table 13) kN·m² | FAIL |
-| M at 0.01 1/m, 10 / 100 / 200 kN (solved) | 0.23 / 0.37 / 0.54 kN·m | 0.25 / 0.58 / 0.96 kN·m | about 5.8 / 9.5 / 12.5 kN·m (Fig. 12b) | FAIL |
+| M at 0.01 1/m, 10 / 100 / 200 kN (solved) | 0.23 / 0.37 / 0.53 kN·m | 0.25 / 0.57 / 0.93 kN·m | about 5.8 / 9.5 / 12.5 kN·m (Fig. 12b) | FAIL |
 | Slope 0.1–0.4 1/m, 10 / 100 / 200 kN | 21.0 kN·m² | 21.0 kN·m² | about 41 / 41 / 44 kN·m² (Fig. 12b) | FAIL |
 
 What the comparison shows:
 
 - The core friction moment is linear in the core contact load. A 1.0 kN·m
-  half-height needs about 107 kN/m per core, against 12.2 kN/m from the
+  half-height needs about 112 kN/m per core, against 12.2 kN/m from the
   solved tension-induced contact at 50 kN. The source does not state an
   initial contact state; its Fig. 12b knee at 10 kN (5.8 kN·m) exceeds its
   own Fig. 6 half-height at 50 kN (about 1 kN·m), so the two figures cannot
@@ -236,10 +246,12 @@ state 7.3 and 5.2 (upper-bound sensitivities, as above). The daily range of the 
 6.1e-7 per day from bending at this sea state. Diagnostics: Π1 = 3.8e-4;
 Π3 = 14–48 in every block (the armour slips in every block, so the damage
 follows the friction cap); frictional heating of the record at most
-0.79 W/m, Π2 = 7.1e-3 at the peak-load block, and an armour temperature rise
-of at most 0.29 K through the network (dissipation of the distributed friction
-law; the direction-tied cap, which under-counts the work of the rotating
-curvature of this record, gives 0.58 W/m, 5.2e-3 and 0.21 K;
+0.77 W/m, Π2 = 6.9e-3 at the peak-load block, and an armour temperature rise
+of at most 0.28 K through the network (dissipation of the distributed friction
+law, signed capstan bound; the direction-tied cap, which under-counts the work
+of the rotating curvature of this record, gives 0.57 W/m, 5.1e-3 and 0.21 K;
+with the former symmetric bound 0.79 W/m, 7.1e-3 and 0.29 K, direction-tied
+0.58 W/m, 5.2e-3 and 0.21 K;
 [local_analysis_guide.md](local_analysis_guide.md) Section 9), so the
 one-way coupling holds for this sea state (Π2 grows without bound as the current tends to zero, which
 is why the temperature rise is the quantity to compare with the

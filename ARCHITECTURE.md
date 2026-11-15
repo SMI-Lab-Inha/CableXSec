@@ -330,12 +330,16 @@ selected with `friction_model="distributed"` in `wire_stress_field`,
 default `"direction_tied"` path is unchanged bit for bit. For each layer it
 solves one wire over one pitch of its helix (uniform curvature, axial slip
 only) as the elastic–Coulomb problem `n = e + u′`, `n′ = t`,
-`t = k̂ (u − p)`, `|t| ≤ ρ(t) g(φ) + λ|n|`, with `k̂ = ξ/(1 − ξ)` from the
-layer's Yun coefficient, the capstan bound `λ = μ |sin α|` and the clamping
-ratio `ρ = P(t)/P_ref`. The normalisation is that of the reference solver:
-below slip the field is the ξ-reduced stick stress of the default law, slip starts at the same
-curvature `κ_on`, and planar monotonic loading to full slip gives the
-package cap `σ0 expm1(μ |sin α| ψ)`. Each wire samples the field by phase.
+`t = k̂ (u − p)`, `|t| ≤ max(ρ(t) g(φ) + λn, 0)`, with `k̂ = ξ/(1 − ξ)` from
+the layer's Yun coefficient, the capstan bound `λ = μ |sin α|` on the signed
+wire force and the clamping ratio `ρ = P(t)/P_ref`. The normalisation is that
+of the reference solver: below slip the field is the ξ-reduced stick stress of
+the default law and slip starts near the same curvature `κ_on`. Planar
+monotonic loading to full slip gives `σ0 (C exp(λx) − 1)`,
+`C = λπ/(2 sinh(λπ/2))`, `x` from the geometric neutral axis toward tension:
+the neutral axis moves toward the tension side (zero pitch mean of the force)
+and the extreme-fibre range is the linear value `σ0 λπ`. Each wire samples the
+field by phase.
 There is no held bending direction.
 
 The kernel is `numba`-compiled. Each increment is backward Euler: a
