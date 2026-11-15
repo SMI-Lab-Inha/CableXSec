@@ -680,6 +680,52 @@ def _torque_rows() -> list[Row]:
     ]
 
 
+def _mkappa_tension_cycle(cable: CableData) -> tuple[float, float]:
+    """Tension cycling inside the bending cycles: the M-kappa law against
+    the fatigue path (gap a1).
+
+    Bending at +-0.03 1/m (200 samples per cycle) on the Menard cable with
+    the tension 10 + 60 sin^2(pi t / 370) kN, incommensurate with the
+    bending. Returns the largest moment difference over the largest moment
+    and the largest work-balance residual over the total friction work.
+    """
+    from cablexsec.analysis.fatigue import wire_stress_field  # noqa: PLC0415
+    from cablexsec.cable_adapters import cable_to_fatigue_layers  # noqa: PLC0415
+
+    t = np.arange(1200)
+    kappa = 0.03 * np.sin(2.0 * np.pi * t / 200.0)
+    tension = 1.0e4 + 6.0e4 * np.sin(np.pi * t / 370.0) ** 2
+    result = cx.compute_mkappa(cable, kappa, contact_tension_history_N=tension)
+    pressure, _ = cx.armour_contact_histories(cable, tension)
+    moment = result.EI_min_Nm2 * kappa
+    for layer in cable_to_fatigue_layers(cable, contact_tension_N=float(tension[0])):
+        friction = wire_stress_field(
+            layer,
+            kappa,
+            np.zeros_like(kappa),
+            contact_pressure_Pa=pressure[layer.name],
+            keep_friction=True,
+        ).friction_Pa
+        assert friction is not None
+        spec = layer.spec
+        lever = (
+            spec.A_wire_m2
+            * math.cos(spec.lay_angle_rad)
+            * spec.r_helix_m
+            * np.cos(spec.phi_wires)
+        )
+        moment = moment + lever @ friction
+    deviation = float(
+        np.max(np.abs(result.moment_Nm - moment)) / np.max(np.abs(moment))
+    )
+    assert result.work is not None
+    balance = float(
+        np.max(np.abs(result.work.balance_residual_J_per_m))
+        / result.work.friction_J_per_m[-1]
+    )
+    return deviation, balance
+
+
 def _rows() -> list[Row]:
     rows: list[Row] = _normal_state_rows()
     menard = cx.load_cable(cx.menard2023_yaml_path(), geometry_override=None)
@@ -974,6 +1020,25 @@ def _rows() -> list[Row]:
             "< 2%",
             f"{m_rec_g:.3f}%",
             "PASS" if m_rec_g < 2.0 else "FAIL",
+        )
+    )
+
+    # Tension cycling within the bending cycles: compute_mkappa with a
+    # contact-tension history against the moment assembled from the fatigue
+    # path's friction stress on the same tension history (the same kernels;
+    # the fatigue path may use the compiled recursion), and the incremental
+    # work balance under the changing friction bound.
+    mk_dev, mk_balance = _mkappa_tension_cycle(menard)
+    rows.append(
+        Row(
+            "1",
+            "MK-Tcyc",
+            "compute_mkappa with a tension history cycling within the bending "
+            "cycles vs the fatigue-path friction stress on the same history; "
+            "work balance under the changing friction bound",
+            "< 1e-12 relative; < 1e-12 relative",
+            f"{mk_dev:.1e}; {mk_balance:.1e}",
+            "PASS" if mk_dev < 1e-12 and mk_balance < 1e-12 else "FAIL",
         )
     )
 

@@ -742,6 +742,28 @@ for state in response.states:
 - `W_diss_J_per_m` is friction work over the whole supplied history, including
   conditioning cycles. For closed-cycle loss use `loop.work` and
   `cablexsec.analysis.curve_comparison.insert_cycle_crossings`.
+- The contact pressure is that of one contact state unless a history is
+  given. `contact_tension_history_N` (one tension per curvature sample) sets
+  the armour `P1+P2` of every sample through the contact model, the same
+  histories `compute_fatigue` forms from `tension_N`
+  (`armour_contact_histories`); `contact_pressure_Pa` takes the per-sample
+  `P1+P2` of every structural armour layer directly, for example from a
+  sequence of solved section states. The friction bound of each wire follows
+  the pressure with the slip state carried across, so a tension cycle inside
+  the bending cycles gives the same friction stress as the fatigue path
+  (registered check MK-Tcyc). Only that bound follows: the stick and full-slip
+  stiffnesses, the laid-core and ring contact loads and the wire-yield range
+  check use the reference state (the first sample of a tension history).
+  `loop.contact_pressure_Pa` returns the pressures used. `SectionLaw` and the
+  bending-test simulator keep a fixed pressure, because their leg solver
+  evaluates trial curvatures that carry no sample time.
+
+  ```python
+  t = np.arange(1200)
+  kappa = 0.03 * np.sin(2 * np.pi * t / 200)
+  tension = 1e4 + 6e4 * np.sin(np.pi * t / 370) ** 2   # N, within the cycles
+  loop = cx.compute_mkappa(cable, kappa, contact_tension_history_N=tension)
+  ```
 - `compute_stress` is a monotonic result at one curvature, not a cyclic history.
 - Offset components (laid power cores) are reported in the three core slip
   states of Section 13.1: `sigma_stick_*` (core held to the cable axis,

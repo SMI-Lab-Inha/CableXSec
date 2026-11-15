@@ -8,6 +8,25 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `compute_mkappa` can let the armour contact pressure follow the bending history:
+  `contact_tension_history_N` sets the per-sample `P1+P2` from a tension history through the
+  contact model (the histories `compute_fatigue` forms from `tension_N`), and
+  `contact_pressure_Pa` takes the per-sample `P1+P2` of every structural armour layer. Before,
+  one bending calculation held one contact pressure. The pressure moves only the friction bound
+  of each wire's return map, with the slip state carried across, so no material-work term
+  arises: a falling bound releases the elastic energy `A cos α (c0² − c1²)/(2k)` of a slipping
+  wire as friction work, and a rising bound leaves a sticking wire unchanged. The stick and
+  full-slip stiffnesses, the laid-core and ring contact loads and the wire-yield range check
+  stay at the reference state (the first sample of a tension history). A history equal to the
+  fixed pressure reproduces the fixed-pressure loop bit for bit, and the result returns the
+  pressures used (`MkappaResult.contact_pressure_Pa`). New validation row MK-Tcyc: a tension
+  cycle inside the bending cycles gives the fatigue path's friction stress (3.4e-16 of the
+  moment) and closes the work balance (1.1e-15 of the friction work). `SectionLaw` and the bending-test simulator keep a
+  fixed pressure (their leg solver evaluates trial curvatures without a sample time), and so
+  does the exported bending law.
+
 ### Fixed
 
 - The frictional heat of `compute_thermal_fatigue` (`frictional_heat_W_m`, `pi2` and

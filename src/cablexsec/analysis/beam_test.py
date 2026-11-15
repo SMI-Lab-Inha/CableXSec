@@ -238,6 +238,14 @@ class SectionLaw:
         option) and assembles the moment from the wire stresses in the same
         way; it substeps internally, so its leg property holds to the
         substep accuracy.
+
+        The contact pressure is that of the one contact state given here.
+        The pressure and tension histories of
+        :func:`~cablexsec.api.compute_mkappa` (``contact_pressure_Pa``,
+        ``contact_tension_history_N``) are not offered: a pressure belongs
+        to a sample time, and the test solver evaluates every station over
+        trial curvature histories (a reduced history plus sorted trial
+        curvatures) that carry no time, so the leg property would not hold.
         """
         require_fully_specified(cable, "SectionLaw.from_cable")
         require_finite(tension_N, "tension_N")

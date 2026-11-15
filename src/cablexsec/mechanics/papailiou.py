@@ -85,6 +85,7 @@ References
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -575,6 +576,7 @@ def compute_mkappa_wire_slip_front(
     phi_bend: float = 0.0,
     EI_min_Nm2: float = 0.0,
     progressive: ProgressiveFriction | None = None,
+    contact_pressure_Pa: Sequence[FloatArray | None] | None = None,
 ) -> PapailiouWireResult:
     """Integrate one shared Papailiou return map over physical cable wires.
 
@@ -585,18 +587,31 @@ def compute_mkappa_wire_slip_front(
     ``progressive`` selects the optional progressive (Iwan) law of
     :mod:`cablexsec.mechanics.progressive_friction`; its slip fraction is the
     share of slipping sub-elements. ``None`` keeps the default law.
+
+    ``contact_pressure_Pa`` gives, per layer and in the order of ``layers``,
+    a per-sample friction-setting pressure ``P1+P2`` [Pa] for the return map
+    (the kernels' ``contact_pressure_Pa``), or ``None`` for the layer's own
+    fixed ``contact_pressure_Pa``. The pressure moves only the friction bound;
+    stick stiffness and ``EI_min`` stay those of the layer specifications.
+    ``None`` for the whole argument keeps the fixed-pressure law.
     """
     kappa = np.asarray(kappa_history, dtype=np.float64)
     moment = np.zeros(kappa.size, dtype=np.float64)
     slip_fraction = np.zeros(kappa.size, dtype=np.float64)
     stored, friction, endpoint, remainder = (np.zeros(kappa.size) for _ in range(4))
     total_wires = sum(layer.n_wires for layer in layers) or 1
-    for layer in layers:
+    if contact_pressure_Pa is not None and len(contact_pressure_Pa) != len(layers):
+        raise CableInputError("one contact-pressure history (or None) per layer")
+    pressures = (
+        [None] * len(layers) if contact_pressure_Pa is None else contact_pressure_Pa
+    )
+    for layer, pressure in zip(layers, pressures, strict=True):
         if progressive is None:
             history = wire_slip_history(
                 layer,
                 kappa * math.cos(phi_bend),
                 kappa * math.sin(phi_bend),
+                contact_pressure_Pa=pressure,
                 initial_bending_angle=phi_bend,
             )
             slipping: FloatArray | NDArray[np.int64] = history.slipping_count
@@ -610,6 +625,7 @@ def compute_mkappa_wire_slip_front(
                 kappa * math.cos(phi_bend),
                 kappa * math.sin(phi_bend),
                 progressive=progressive,
+                contact_pressure_Pa=pressure,
                 initial_bending_angle=phi_bend,
             )
             history = progressive_history

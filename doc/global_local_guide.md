@@ -399,6 +399,8 @@ backbone at the midpoint is missed by 3.9 % of the moment range (Ménard; regist
 
 Limits. The law is planar. CableXSec's biaxial response is per wire and tied to the current bending direction; a
 global solver that applies an isotropic hysteretic law to the resultant curvature makes an assumption the section
-model does not. Tension and annulus state are fixed within one law. Whether a global program's hysteretic bending option
+model does not. Tension and annulus state are fixed within one law; the section law itself can follow a tension
+history within a bending cycle (`compute_mkappa(..., contact_tension_history_N=...)`), but the exported law has no
+rule yet for its slider states when the tension changes. Whether a global program's hysteretic bending option
 applies Masing's rules to the exported table is target MX-5, open until checked; CableDyn does not yet have a
 bending-law interface (its stage 2, Section 7).

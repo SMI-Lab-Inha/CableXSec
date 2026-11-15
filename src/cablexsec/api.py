@@ -463,21 +463,30 @@ class MkappaResult:
     slip_fraction : numpy.ndarray
         Fraction of wires slipping at each step.
     tension_N : float
-        Axial tension the contact forces were evaluated at [N].
+        Axial tension the contact forces were evaluated at [N]; with a
+        contact-tension history, its first sample (the reference state).
     provenance : Provenance or None
         Backing citations/gates and active limitations.
     work : BendingWork or None
         Cumulative stored energy, frictional work and incremental work balance.
         Returned by compute_mkappa; optional only for compatibility with manually
-        constructed result objects. For this fixed-pressure scalar bending law,
-        mechanical work between two stations is the stored-energy change plus
-        the frictional-work increment, including within-step yield transitions.
+        constructed result objects. For this scalar bending law, mechanical
+        work between two stations is the stored-energy change plus the
+        frictional-work increment, including within-step yield transitions.
+        This holds with a contact-pressure history too: the pressure moves
+        only the friction bound of the return map, and a bound that falls
+        below a wire's stress releases stored energy as friction work.
     core_friction : CoreFrictionHistory or None
         Core and internal-ring contribution when ``core_friction`` was
         requested (moments in the material frame, contact loads, ``xi``,
         effective friction); ``None`` for the armour-only law. When present,
         ``moment_Nm``, ``work``, ``W_diss_J_per_m`` and ``EI_max_Nm2`` include
         it; ``slip_fraction`` remains the armour-wire fraction.
+    contact_pressure_Pa : dict[str, numpy.ndarray] or None
+        Per-sample friction-setting pressure ``P1+P2`` [Pa] of every
+        structural armour layer when the pressure followed a history
+        (``contact_pressure_Pa`` or ``contact_tension_history_N`` of
+        :func:`compute_mkappa`); ``None`` when it was held fixed.
     """
 
     kappa_1_m: FloatArray
@@ -491,6 +500,7 @@ class MkappaResult:
     provenance: Provenance | None = None
     work: BendingWork | None = None
     core_friction: CoreFrictionHistory | None = None
+    contact_pressure_Pa: dict[str, FloatArray] | None = None
 
 
 @dataclass(frozen=True)
@@ -521,11 +531,22 @@ class _MkappaLaw:
     progressive: ProgressiveFriction | None
     core_model: CoreFrictionModel | None
 
-    def run(self, kappa: FloatArray) -> _MkappaRun:
+    def run(
+        self,
+        kappa: FloatArray,
+        contact_pressure_Pa: Sequence[FloatArray] | None = None,
+    ) -> _MkappaRun:
+        """Evaluate the law; ``contact_pressure_Pa`` is one armour ``P1+P2``
+        history per layer (order of ``layers``), ``None`` for fixed pressure.
+        The laid-core model keeps its own fixed contact loads."""
         phi_bend = self.phi_bend
         if self.progressive is None:
             res = compute_mkappa_wire_slip_front(
-                self.layers, kappa, phi_bend=phi_bend, EI_min_Nm2=self.ei_min
+                self.layers,
+                kappa,
+                phi_bend=phi_bend,
+                EI_min_Nm2=self.ei_min,
+                contact_pressure_Pa=contact_pressure_Pa,
             )
         else:
             res = compute_mkappa_wire_slip_front(
@@ -534,6 +555,7 @@ class _MkappaLaw:
                 phi_bend=phi_bend,
                 EI_min_Nm2=self.ei_min,
                 progressive=self.progressive,
+                contact_pressure_Pa=contact_pressure_Pa,
             )
         model = self.core_model
         if model is None:
@@ -624,6 +646,8 @@ def compute_mkappa(
     core_friction: bool | CoreFrictionSpec | None = None,
     friction_model: Literal["direction_tied", "progressive"] = "direction_tied",
     progressive: ProgressiveFriction | None = None,
+    contact_pressure_Pa: Mapping[str, FloatArray] | None = None,
+    contact_tension_history_N: FloatArray | None = None,
 ) -> MkappaResult:
     r"""Moment-curvature hysteresis of a cable over a curvature history.
 
@@ -635,6 +659,21 @@ def compute_mkappa(
     uniform mean pressure on each armour population. An inner bedding-support
     reaction is not substituted for armour pressure. ``EI_min`` is the
     individual-component full-slip stiffness.
+
+    By default the pressure is that of one contact state, held over the
+    history. ``contact_tension_history_N`` lets it follow a tension history
+    (the contact histories of :func:`compute_fatigue` and
+    :func:`armour_contact_histories`), and ``contact_pressure_Pa`` takes the
+    per-sample pressure of each armour layer directly. The pressure then
+    sets the friction bound of every wire at every sample, in the same
+    return map as the fatigue path: the slip state is carried across the
+    change, a falling bound clips a wire's friction stress (friction work),
+    and a rising bound leaves a sticking wire unchanged. What follows the
+    history is the armour friction bound only. The stick stiffness,
+    ``EI_min``, ``EI_max``, the laid-core and internal-ring contact loads
+    (``core_friction``) and the wire-yield range check stay at the reference
+    state (``tension_N``, ``section_state`` or ``radial_state``; the first
+    sample of a tension history).
 
     Parameters
     ----------
@@ -656,15 +695,17 @@ def compute_mkappa(
         coupled radial contact solution (concentric and three-core,
         manufacturing residual wire stress included; doc/radial_model.md).
     section_state : SectionState, optional
-        Previously solved normal equilibrium. Its layer moduli, shear support
-        and contact pressures are held fixed over the supplied bending history.
-        Do not also supply tension or a conflicting contact model.
+        Previously solved normal equilibrium. Its layer moduli and shear
+        support are held fixed over the supplied bending history, and so are
+        its contact pressures unless ``contact_pressure_Pa`` is given. Do not
+        also supply tension or a conflicting contact model.
     radial_state : CableRadialState, optional
         A solved radial state from :func:`solve_cable_radial_state`, which
         accepts internal/external or flooded pressure, an end-cap thrust,
         torque or twist, prescribed axial strain and layer temperatures. Its
-        face pressures and line loads are held fixed over the bending history.
-        Do not also supply tension, a section state or another contact model.
+        face pressures and line loads are held fixed over the bending history
+        unless ``contact_pressure_Pa`` is given. Do not also supply tension, a
+        section state or another contact model.
     core_friction : bool or CoreFrictionSpec, optional
         Add the stick-slip law of the laid power cores against their
         neighbours, the filler and the surrounding ring, and of resolved
@@ -685,10 +726,41 @@ def compute_mkappa(
         Settings of the progressive law (density, sub-elements, spread);
         ``None`` uses :class:`ProgressiveFriction` defaults. Only with
         ``friction_model="progressive"``.
+    contact_pressure_Pa : dict[str, numpy.ndarray], optional
+        Per-sample friction-setting pressure ``P1+P2`` [Pa] of every
+        structural armour layer, keyed by layer name (all of them), each the
+        shape of ``kappa_history``, finite and non-negative; for example the
+        histories of :func:`armour_contact_histories` or of a sequence of
+        solved section states. The reference state (``tension_N``,
+        ``section_state`` or ``radial_state``) supplies everything else. A
+        history equal to the fixed pressure at every sample reproduces the
+        fixed-pressure result bit for bit.
+    contact_tension_history_N : numpy.ndarray, optional
+        Tension history [N] that sets the armour contact pressure at every
+        sample through the selected contact model, as ``tension_N`` does in
+        :func:`compute_fatigue`: the bounded chain is affine in tension, the
+        qp model is solved at every distinct tension, and the solved model is
+        exact up to 33 distinct tensions and interpolated between 33 exact
+        solutions beyond. Non-negative, the shape of ``kappa_history``. The
+        reference state is the first sample; the wire-yield range check uses
+        the largest tension. Not with ``tension_N``, ``section_state``,
+        ``radial_state`` or ``contact_pressure_Pa``.
 
     Returns
     -------
     MkappaResult
+
+    Notes
+    -----
+    Energy under a pressure history: the pressure enters only the friction
+    bound of each spring-slider, not its stiffness, so no material-work term
+    arises (``wire_slip_history`` keeps that term for a changing stiffness).
+    A bound that drops from ``c0`` to ``c1`` below a slipping wire's stress
+    at fixed curvature releases the stored energy ``A cos a (c0^2 - c1^2) /
+    (2 k)`` as friction work (``k`` the stick modulus); the reported friction
+    increment of one such step is ``A cos a c1 (c0 - c1) / k`` and the rest
+    is the integration remainder of ``work``, which vanishes as the change is
+    resolved in smaller steps. A rising bound does no work.
 
     References
     ----------
@@ -733,6 +805,30 @@ def compute_mkappa(
         if friction_model == "progressive"
         else None
     )
+    tension_history = None
+    if contact_tension_history_N is not None:
+        if (
+            tension_N != 0
+            or section_state is not None
+            or radial_state is not None
+            or contact_pressure_Pa is not None
+        ):
+            raise CableSchemaError(
+                "contact_tension_history_N sets the contact state: give it "
+                "without tension_N, a section or radial state or "
+                "contact_pressure_Pa"
+            )
+        tension_history = real_array(
+            contact_tension_history_N, "contact_tension_history_N"
+        ).astype(np.float64)
+        require_finite(tension_history, "contact_tension_history_N")
+        if tension_history.shape != kappa.shape:
+            raise CableSchemaError(
+                "contact_tension_history_N must match the kappa_history shape"
+            )
+        if np.any(tension_history < 0.0):
+            raise CableSchemaError("contact_tension_history_N must be >= 0.")
+        tension_N = float(tension_history[0])
     if radial_state is not None:
         radial_state.require_cable(cable)
         if (
@@ -760,6 +856,13 @@ def compute_mkappa(
         contact_model = contact_model or "bounded"
     if contact_model not in {"bounded", "qp", "solved"}:
         raise CableSchemaError("contact_model must be 'bounded', 'qp' or 'solved'.")
+    # Armour layers in the order of the law's specifications.
+    names = [layer.name for layer in structural_armour_layers(cable)]
+    pressure_history: dict[str, FloatArray] | None = None
+    if contact_pressure_Pa is not None:
+        pressure_history = _mkappa_pressure_history(
+            contact_pressure_Pa, names, kappa.shape
+        )
     law = _prepare_mkappa_law(
         cable,
         tension_N,
@@ -771,6 +874,9 @@ def compute_mkappa(
         core_spec=resolve_core_friction(core_friction),
         progressive=progressive_settings,
     )
+    if tension_history is not None:
+        histories, _ = _contact_histories(cable, tension_history, contact_model)
+        pressure_history = {name: histories[name] for name in names}
 
     # Soft guard: the linear-elastic wire-stress assumption holds below the
     # armour yield curvature (where the capacity envelope's wire-yield mechanism
@@ -778,7 +884,11 @@ def compute_mkappa(
     try:
         kappa_yield = wire_yield_curvature(
             cable,
-            tension_N if section_state is None else 0.0,
+            float(np.max(tension_history))
+            if tension_history is not None
+            else tension_N
+            if section_state is None
+            else 0.0,
             mu=mu,
             section_state=section_state,
             contact_model=contact_model,
@@ -797,7 +907,12 @@ def compute_mkappa(
     except (ValueError, KeyError):
         pass  # no yield-strength armour: no curvature bound to check
 
-    run = law.run(kappa)
+    run = law.run(
+        kappa,
+        None
+        if pressure_history is None
+        else [pressure_history[name] for name in names],
+    )
     res, moment, work, ei_max = run.armour, run.moment_Nm, run.work, run.EI_max_Nm2
     w_diss, core_history = run.W_diss_J_per_m, run.core_history
     law_extra = (
@@ -805,6 +920,25 @@ def compute_mkappa(
         if progressive_settings is None
         else "; progressive (Iwan) armour friction law, "
         + progressive_settings.describe()
+    )
+    history_extra = (
+        ""
+        if pressure_history is None
+        else "; the armour contact pressure follows the "
+        + (
+            f"tension history through the {contact_model} contact model"
+            if tension_history is not None
+            else "supplied per-sample history"
+        )
+    )
+    history_limitations: tuple[str, ...] = (
+        ()
+        if pressure_history is None
+        else (
+            "only the armour friction bound follows the contact-pressure "
+            "history; the stick stiffness, EI_min, any laid-core and ring "
+            "contact loads and the wire-yield check use the reference state",
+        )
     )
     model = law.core_model
     if model is None:
@@ -848,11 +982,13 @@ def compute_mkappa(
         tension_N=tension_N,
         work=work,
         core_friction=core_history,
+        contact_pressure_Pa=pressure_history,
         provenance=Provenance(
             method="Papailiou slip-front moment-curvature law of the physical "
             "wires (slip front from the neutral axis); the armour contact "
             "pressure combines the manufacturing contact with the applied-tension "
             f"increment of the {contact_model} contact model"
+            + history_extra
             + law_extra
             + method_extra,
             citations=(
@@ -887,9 +1023,40 @@ def compute_mkappa(
                 "published section results (the radial model notes); the "
                 "three-core state depends on the declared filler representation",
                 *limitations_extra,
+                *history_limitations,
             ),
         ),
     )
+
+
+def _mkappa_pressure_history(
+    contact_pressure_Pa: Mapping[str, FloatArray],
+    names: Sequence[str],
+    shape: tuple[int, ...],
+) -> dict[str, FloatArray]:
+    """Check a per-layer ``P1+P2`` history for :func:`compute_mkappa`."""
+    if not isinstance(contact_pressure_Pa, Mapping):
+        raise CableSchemaError(
+            "contact_pressure_Pa must map armour layer names to pressure histories"
+        )
+    given, expected = set(contact_pressure_Pa), set(names)
+    if given != expected:
+        raise CableSchemaError(
+            "contact_pressure_Pa must give every structural armour layer "
+            f"{sorted(expected)}; missing {sorted(expected - given)}, "
+            f"unknown {sorted(given - expected)}"
+        )
+    out: dict[str, FloatArray] = {}
+    for name in names:
+        label = f"contact_pressure_Pa[{name!r}]"
+        values = real_array(contact_pressure_Pa[name], label).astype(np.float64)
+        require_finite(values, label)
+        if values.shape != shape:
+            raise CableSchemaError(f"{label} must match the kappa_history shape")
+        if np.any(values < 0.0):
+            raise CableSchemaError(f"{label} must be >= 0.")
+        out[name] = values
+    return out
 
 
 def _papailiou_slip_fraction(
