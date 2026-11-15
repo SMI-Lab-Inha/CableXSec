@@ -6,6 +6,22 @@ All notable changes to CableXSec are recorded in this file. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- The frictional heat of `compute_thermal_fatigue` (`frictional_heat_W_m`, `pi2` and
+  `friction_temperature_rise_K` of every block) is now the dissipation of the distributed
+  helix friction law, whatever friction law the fatigue uses. It was the work of the
+  direction-tied cap, which turns with the bending direction and under rotating curvature
+  dissipates too little: on a circular orbit 0.16 of the distributed work at twice the slip
+  onset and 0.57 at large amplitude (closed forms `π(π/2 − 1)/4` and `π/4` of the two planar
+  cycles, now tested). Planar records change by less than 3 % from twice the slip onset; on
+  the synthetic 66 kV record of the manual the largest block heat rises from 0.58 to
+  0.79 W/m (doc/template_66kv.md Section 4.2). Stresses and damage are unchanged. A
+  layer with `ξ = 1` keeps the direction-tied work, and the provenance records it
+  (`thermal_coupling.record_friction_work`).
+
 ## [0.1.0] - 2026-11-14
 
 First public release. The Python interfaces are versioned but may change before `1.0.0`.

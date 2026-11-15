@@ -569,6 +569,33 @@ def wire_slip_history(
     ``keep_cap=True`` also returns the cap of every wire at every sample
     (``cap_Pa``); a wire whose stress is below its cap is in stick. The
     other results are unchanged.
+
+    Friction work under rotating curvature. ``work.friction_J_per_m`` is the
+    dissipation of this population. In planar bending it agrees with the
+    distributed helix model
+    (:func:`~cablexsec.mechanics.distributed_friction.distributed_friction_history`)
+    within 3 % from twice the slip onset, but under rotating curvature it is
+    too low. The cap is the friction stress accumulated from the current
+    neutral axis, so it turns with the bending direction. On a circular orbit
+    a wire passes the extreme fibre, where its cap is largest, while its
+    drive is stationary, and it slips mostly near the neutral axis, where its
+    cap is close to zero. For a circular orbit of radius ``R`` much larger
+    than the slip onset, with the linearised cap
+    ``sigma_0 lam asin|cos(phi - phi_bend)|`` (``lam = mu |sin a|``), a wire
+    dissipates ``4 (pi/2 - 1) sigma_0 lam r R`` per revolution (times
+    ``A cos a``), against an average of ``16 sigma_0 lam r R / pi`` for the
+    two planar cycles of amplitude ``R`` about the two axes: ratio
+    ``pi (pi/2 - 1) / 4 = 0.448``. In the distributed model every helix node
+    slips through the full ``4 R`` per revolution at its own traction bound,
+    and the ratio is ``pi / 4``. The
+    direction-tied work is thus 0.57 of the distributed work at large
+    amplitude, and less closer to slip onset (0.16 at twice the onset and 0.38
+    at eight times on the 66 kV template). The per-wire stress ranges, which
+    fatigue uses, agree with the distributed model within 10 % on the same
+    orbits: the cap bounds the stress amplitude much as the distributed bound
+    does, but narrows the stress-drive loop of each wire. Frictional heat
+    uses the distributed dissipation
+    (:func:`~cablexsec.analysis.thermal_coupling.record_friction_work`).
     """
     kx, ky = np.asarray(kappa_x, dtype=float), np.asarray(kappa_y, dtype=float)
     if (

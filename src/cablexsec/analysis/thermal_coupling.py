@@ -18,7 +18,17 @@ evaluated with them. Between blocks the slow state changes; in a single
 record the wire slip state is carried across block boundaries.
 
 One-way coupling (ETM Pi2 = q_f / W << 1). Friction does not heat the cable;
-the frictional work is reported as a diagnostic only.
+the frictional work is reported as a diagnostic only. The work is the
+dissipation of the distributed helix friction model
+(:func:`~cablexsec.mechanics.distributed_friction.distributed_friction_history`),
+whatever friction law the fatigue stresses use. The direction-tied cap of the
+default fatigue path re-orients with the bending direction, and under rotating
+curvature it under-counts the dissipation: on a circular orbit its work is
+0.16 of the distributed model's at twice the slip onset, 0.38 at eight times,
+and tends to 0.57 at large amplitude
+(:func:`~cablexsec.mechanics.papailiou.wire_slip_history`). Its wire stress
+ranges agree with the distributed model within 10 %, and in planar bending the
+two models dissipate the same work within 3 % from twice the slip onset.
 
 What a temperature does to the mechanics (per block):
 
@@ -114,6 +124,7 @@ from cablexsec.clamping import clamping_state
 from cablexsec.exceptions import CableInputError
 from cablexsec.materials import library
 from cablexsec.materials.sn_curves import get_sn_curve
+from cablexsec.mechanics.distributed_friction import distributed_friction_history
 from cablexsec.mechanics.mkappa import HelicalLayerSpec
 from cablexsec.mechanics.papailiou import slip_onset_curvature, wire_slip_history
 from cablexsec.mechanics.radial_cable import (
@@ -135,6 +146,8 @@ if TYPE_CHECKING:
     from cablexsec.analysis.fatigue import FatigueLayer, FatigueResult
 
 __all__ = [
+    "HEAT_MAX_INCREMENT",
+    "HEAT_NODES_PER_PITCH",
     "POLYMER_SOFTENING_WARNING_C",
     "REFERENCE_TOLERANCE_K",
     "ArmourThermalState",
@@ -147,6 +160,7 @@ __all__ = [
     "ThermalState",
     "armour_thermal_state",
     "compute_thermal_fatigue",
+    "record_friction_work",
     "thermal_fatigue_inputs",
     "thermal_material_state",
     "thermal_provenance_notes",
@@ -182,6 +196,18 @@ POLYMER_SOFTENING_WARNING_C = 40.0
 #: Layer temperatures within this of ``T_ref`` are the reference state [K]
 #: (round-off of the thermal network, not a physical temperature change).
 REFERENCE_TOLERANCE_K = 1.0e-6
+
+#: Helix nodes per pitch of the distributed friction model that gives the
+#: frictional heat of a record (:func:`compute_thermal_fatigue`).
+HEAT_NODES_PER_PITCH = 64
+#: Largest curvature substep of that model, in units of the slip onset.
+#: The dissipation is an integral over the pitch and converges faster than the
+#: wire stress: on the 66 kV template (both armour layers at 50 kN; the
+#: synthetic record of doc/template_66kv.md, and circular, planar and
+#: figure-eight orbits of 1.5 to 32 times the slip onset) these settings are
+#: within 0.25 % of the fatigue-path defaults (four nodes per wire, substeps of
+#: 0.1 slip onset) at about a hundredth of their cost on the record.
+HEAT_MAX_INCREMENT = 1.0
 
 _LABORATORY_T_REF_C = library.MODULUS_REFERENCE_TEMPERATURE_C
 
@@ -1291,7 +1317,8 @@ class ThermalBlockResult:
     """Fatigue of the bending record evaluated at one slow-time block.
 
     ``frictional_heat_W_m`` is the armour frictional work rate of the record
-    (all armour layers, at the block clamping and mean tension);
+    (all armour layers, at the block clamping and mean tension; dissipation
+    of the distributed helix model, :func:`record_friction_work`);
     ``pi2`` its ratio to the heat generated in the block (undefined, and
     large, as the current tends to zero); ``friction_temperature_rise_K`` the
     steady temperature rise it would cause at the armour through the network
@@ -1400,6 +1427,36 @@ def _max_damage(result: FatigueResult) -> float:
     )
 
 
+def record_friction_work(
+    spec: HelicalLayerSpec, kappa_x: FloatArray, kappa_y: FloatArray
+) -> tuple[float, str]:
+    """Friction work of one armour layer over a bending record [J/m].
+
+    The record starts stress free. The work is the dissipation of the
+    distributed helix model
+    (:func:`~cablexsec.mechanics.distributed_friction.distributed_friction_history`
+    with :data:`HEAT_NODES_PER_PITCH` and :data:`HEAT_MAX_INCREMENT`), which
+    holds for any biaxial history: every helix node dissipates at its own
+    traction bound. The direction-tied cap of the fatigue path under-counts
+    the dissipation of rotating curvature (module notes). The distributed
+    model needs ``xi < 1``; a rigid interface (``xi = 1``) falls back to the
+    direction-tied work, which is then exact only for planar records. Returns
+    the work and the model that gave it, ``"distributed"`` or
+    ``"direction_tied"``.
+    """
+    if spec.xi < 1.0:
+        history = distributed_friction_history(
+            spec,
+            kappa_x,
+            kappa_y,
+            nodes_per_pitch=HEAT_NODES_PER_PITCH,
+            max_increment=HEAT_MAX_INCREMENT,
+        )
+        return float(history.dissipation_J_per_m[-1]), "distributed"
+    work = wire_slip_history(spec, kappa_x, kappa_y).work.friction_J_per_m
+    return float(work[-1]), "direction_tied"
+
+
 def _principal_range(kx: FloatArray, ky: FloatArray) -> tuple[float, FloatArray]:
     angles = np.linspace(0.0, math.pi, 73)[:-1]
     best, series = -1.0, kx
@@ -1434,7 +1491,11 @@ def compute_thermal_fatigue(
     block damages are weighted by block duration. The unenergised reference
     and the time-mean fixed-temperature results are returned for comparison
     (ETM H3). ``record_duration_s`` enables the ``Pi1`` and ``Pi2``
-    diagnostics. ``fatigue_options`` are passed to ``compute_fatigue``.
+    diagnostics; the frictional heat of ``Pi2`` is the dissipation of the
+    distributed helix model (:func:`record_friction_work`) whatever
+    ``friction_model`` the fatigue uses, because the direction-tied cap
+    under-counts the dissipation of rotating curvature.
+    ``fatigue_options`` are passed to ``compute_fatigue``.
 
     The reference is every layer at ``thermal.T_ref_C`` with the history's
     polymer relaxation factor. When that factor is below one the ratio is
@@ -1502,6 +1563,7 @@ def compute_thermal_fatigue(
     )
     results: list[ThermalBlockResult] = []
     weighted: dict[str, FloatArray] = {}
+    rigid_layers: set[str] = set()
     for block in blocks:
         fat = run(block.state)
         armour = armour_thermal_state(cable, block.state, tension_N=t_mean, mu=mu)
@@ -1526,8 +1588,10 @@ def compute_thermal_fatigue(
                     xi=a.stick_modulus_Pa
                     / (spec.E_wire_Pa * math.cos(spec.lay_angle_rad) ** 2),
                 )
-                hist = wire_slip_history(spec_b, kx, ky)
-                q_layer = float(hist.work.friction_J_per_m[-1]) / record_duration_s
+                work, model = record_friction_work(spec_b, kx, ky)
+                if model != "distributed":
+                    rigid_layers.add(layer.name)
+                q_layer = work / record_duration_s
                 q_f += q_layer
                 if thermal.network is not None:
                     rise += q_layer * thermal.network.resistance_to_ambient_Km_W(
@@ -1610,6 +1674,24 @@ def compute_thermal_fatigue(
         ),
         limitations=(
             "one-way coupling; frictional heating only as the Pi2 diagnostic",
+            *(
+                ()
+                if record_duration_s is None
+                else (
+                    "frictional heat: dissipation of the distributed helix "
+                    f"friction model ({HEAT_NODES_PER_PITCH} nodes per pitch, "
+                    f"substeps of {HEAT_MAX_INCREMENT:g} kappa_on) from a "
+                    "stress-free start at the block clamping and mean tension; "
+                    "the direction-tied cap under-counts the dissipation of "
+                    "rotating curvature",
+                )
+            ),
+            *(
+                f"frictional heat of {name}: direction-tied work (xi = 1, the "
+                "distributed model needs an elastic interface); it under-counts "
+                "the dissipation of non-planar records"
+                for name in sorted(rigid_layers)
+            ),
             "block-mean state frozen within a block; record repeated per block",
             "friction coefficient independent of temperature",
             "E(T) only for registered laws (10-90 degC) or explicit transfers",
