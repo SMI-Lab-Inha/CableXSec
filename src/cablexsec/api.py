@@ -2592,9 +2592,7 @@ def _contact_histories(
     """
     tension = np.asarray(tension_N, dtype=np.float64)
     if contact_model == "solved":
-        return _solved_contact_histories(
-            cable, tension, crossing_loads=crossing_loads
-        )
+        return _solved_contact_histories(cable, tension, crossing_loads=crossing_loads)
     if contact_model == "bounded":
         scale = max(float(np.max(tension)), 1.0)
         p0 = armour_contact_pressure(cable, 0.0, contact_model=contact_model)
@@ -2628,9 +2626,7 @@ def _contact_histories(
     ]
     f_values = (
         [
-            armour_crossing_line_loads(
-                cable, float(value), contact_model=contact_model
-            )
+            armour_crossing_line_loads(cable, float(value), contact_model=contact_model)
             for value in unique
         ]
         if crossing_loads
