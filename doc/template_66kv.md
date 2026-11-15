@@ -236,9 +236,12 @@ state 7.3 and 5.2 (upper-bound sensitivities, as above). The daily range of the 
 6.1e-7 per day from bending at this sea state. Diagnostics: Π1 = 3.8e-4;
 Π3 = 14–48 in every block (the armour slips in every block, so the damage
 follows the friction cap); frictional heating of the record at most
-0.53 W/m, Π2 = 4.8e-3 at the peak-load block, and an armour temperature rise
-of at most 0.20 K through the network, so the one-way coupling holds for
-this sea state (Π2 grows without bound as the current tends to zero, which
+0.79 W/m, Π2 = 7.1e-3 at the peak-load block, and an armour temperature rise
+of at most 0.29 K through the network (dissipation of the distributed friction
+law; the direction-tied cap, which under-counts the work of the rotating
+curvature of this record, gives 0.58 W/m, 5.2e-3 and 0.21 K;
+[local_analysis_guide.md](local_analysis_guide.md) Section 9), so the
+one-way coupling holds for this sea state (Π2 grows without bound as the current tends to zero, which
 is why the temperature rise is the quantity to compare with the
 measurement resolution).
 

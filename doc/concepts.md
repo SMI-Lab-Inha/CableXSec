@@ -111,6 +111,15 @@ history of the two curvature components. Three friction laws are available:
 
 Section 9 of the local analysis guide helps choose between them.
 
+The laws give the same stress ranges but not the same friction work when the
+bending direction rotates. The direction-tied cap turns with the bending
+direction, so on a circular orbit a wire slips mostly near the neutral axis,
+where its cap is small. Its work per revolution is then 0.16 of the
+distributed law's at twice the slip onset and 0.57 at large amplitude, while
+the wire stress ranges agree within 10 %. The frictional heat of
+`compute_thermal_fatigue` is therefore always the dissipation of the
+distributed law.
+
 ## Two bounds bracket the bending stiffness
 
 `cx.compute_stiffness` returns two bending stiffnesses, and the hysteretic

@@ -1168,7 +1168,8 @@ What happens, per slow-time block:
    the slip state across block boundaries.
 
 Diagnostics returned: `Pi1` (wave period over the network time constant),
-`Pi2` per block (frictional work rate over the heat generated), `Pi3` per
+`Pi2` per block (frictional work rate over the heat generated; the work is
+that of the distributed friction law, Section 9), `Pi3` per
 layer (curvature range over slip-onset curvature), `Pi4` and `Pi5` per armour
 layer (`cx.armour_thermal_state`), the damage at the time-mean temperature
 (`fixed_mean`, the fixed-temperature assumption), the unenergised
@@ -1463,6 +1464,40 @@ model-to-model differences, not a validation; no measured armour strain under
 biaxial bending is available. Cost is about twice the default stress and
 damage time (1.46 s against 0.70 s per section-hour on one thread at four
 nodes per wire).
+
+**Friction work under rotating curvature.** The stress ranges of the two laws
+stay close under biaxial bending, but their friction work does not. The
+direction-tied cap is the friction stress accumulated from the current
+neutral axis, so it turns with the bending direction. On a circular orbit a
+wire passes the extreme fibre, where its cap is largest, while its drive is
+stationary, and it slips mostly near the neutral axis, where its cap is close
+to zero. In the distributed law every helix node slips at its own traction
+bound. For an orbit of radius `R` much larger than the slip onset, the work of
+one revolution over that of the two planar cycles of amplitude `R` (about the
+two axes) is `π/4` in the distributed law (per revolution every node slips
+through `4R`, against `4R |sin φ|` in a planar cycle) and
+`π(π/2 − 1)/4 = 0.448` in the direction-tied law (linearised cap
+`σ0 μ |sin α| asin|cos ψ|`); `tests/test_orbit_friction_heat.py` checks both
+limits. On the 66 kV template (both armour layers,
+100 kN):
+
+| Circular orbit radius / `κ_on` | 2 | 4 | 8 | 16 | 32 | large (closed form) |
+| --- | --- | --- | --- | --- | --- | --- |
+| direction-tied work / distributed work | 0.16 | 0.28 | 0.38 | 0.46 | 0.51 | 0.57 |
+| largest per-wire stress range, direction-tied / distributed | 0.92–0.94 | 0.96–0.98 | 0.99–1.00 | 1.00–1.01 | 1.01 | |
+
+A planar cycle of the same amplitudes dissipates the same work in both laws
+within 3 %, and a figure-eight orbit (`κ_y` at twice the frequency of `κ_x`)
+0.65–0.78 of the distributed work. Fatigue is not affected, but a heat source
+is: `compute_thermal_fatigue` takes the frictional heat of its `Pi2`
+diagnostic from the distributed law whatever `friction_model` the fatigue
+uses (64 nodes per pitch and substeps of `κ_on`, within 0.25 % of the
+fatigue-path settings at about a hundredth of their cost;
+`cablexsec.analysis.thermal_coupling.record_friction_work`). A layer with a
+rigid interface (`ξ = 1`), which the distributed law does not cover, keeps the
+direction-tied work, and the provenance says so. `compute_mkappa` and the
+cyclic bending of `simulate_frictional_heating` are planar, where the two
+works agree.
 
 ```python
 from cablexsec import ProgressiveFriction, compute_fatigue, compute_mkappa
