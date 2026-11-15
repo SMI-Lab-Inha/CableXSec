@@ -179,6 +179,7 @@ from cablexsec.mechanics.papailiou import (
     BendingWork,
     PapailiouLayer,
     PapailiouWireResult,
+    _station_return,
     compute_mkappa_wire_slip_front,
 )
 from cablexsec.mechanics.progressive_friction import ProgressiveFriction
@@ -186,7 +187,6 @@ from cablexsec.mechanics.radial_cable import (
     CableRadialState,
     solve_cable_radial_state,
 )
-from cablexsec.mechanics.return_mapping import coulomb_return_map
 from cablexsec.mechanics.section_state import SectionState, solve_section_state
 from cablexsec.mechanics.shell_bending import (
     ShellStressResult,
@@ -897,13 +897,14 @@ def _papailiou_slip_fraction(
 ) -> FloatArray:
     """Fraction of Papailiou helix-angle stations in slip per step (diagnostic).
 
-    Re-runs the frozen station elements (:func:`coulomb_return_map` on each
-    layer's :meth:`station_params`) tracking slip — consistent with the moment
-    that :func:`compute_mkappa_papailiou` returns.
+    Re-runs the station spring-sliders (signed capstan interval of each
+    layer's :meth:`~cablexsec.mechanics.papailiou.PapailiouLayer.station_bounds`)
+    tracking slip — consistent with the moment that
+    :func:`compute_mkappa_papailiou` returns.
     """
     if not layers:
         return np.zeros(np.asarray(kappa).size, dtype=np.float64)
-    station = [lyr.station_params() for lyr in layers]
+    station = [lyr.station_bounds() for lyr in layers]
     forces = [np.zeros_like(s[0]) for s in station]
     total = sum(len(s[0]) for s in station) or 1
     kap = np.asarray(kappa, dtype=np.float64)
@@ -913,10 +914,14 @@ def _papailiou_slip_fraction(
         d_kappa = kap[t] - kappa_prev
         kappa_prev = kap[t]
         n_slip = 0
-        for i, (k_phi, f_y_phi, _w) in enumerate(station):
+        for i, (k_phi, upper, lower, _w) in enumerate(station):
             active = k_phi > 0.0
-            f_new, _slip, slipping = coulomb_return_map(
-                forces[i][active], d_kappa, k_phi[active], f_y_phi[active]
+            f_new, _slip, slipping = _station_return(
+                forces[i][active],
+                d_kappa,
+                k_phi[active],
+                upper[active],
+                lower[active],
             )
             forces[i][active] = f_new
             n_slip += int(np.count_nonzero(slipping))

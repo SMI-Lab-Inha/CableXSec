@@ -72,7 +72,7 @@ curvature-gradient study). It is an explicit option:
 
 ``solver="along_wire"`` uses :mod:`cablexsec.mechanics.along_wire`: every
 wire is solved along its own helix with its azimuth-dependent contact shape,
-the optional capstan bound (``capstan=True``, the package cap) and the
+the optional capstan bound (``capstan=True``, the package's signed bound) and the
 biaxial imposed strain ``k_hat(x)(kappa_x cos theta + kappa_y sin theta)``
 directly (the ``biaxial`` setting is not used; the history is still scaled
 by one shape). The reference is the same solver far from any anchor, so the
@@ -84,7 +84,7 @@ Axial slip only, one wire per layer without layer interaction, proportional
 curvature ``kappa(x, t) = kappa_s(t) k_hat(x)`` with ``k_hat(x_s) = 1``,
 wire modulus and stick stiffness at the layer reference. The clamp solver
 uses a rigid interface, a constant bound and a linearised cap for the
-increment (the sectional part keeps the ``expm1`` cap). The anchorage
+increment (the sectional part keeps the signed Papailiou bounds). The anchorage
 position controls the result near the anchor; a bonded (epoxy) length inside
 a fitting is not frictional, so the anchor is its inner end. Measured
 near-termination armour stresses (Sævik 2011; Gjøsteen et al. 2027) are not

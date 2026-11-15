@@ -17,7 +17,7 @@ from cablexsec.exceptions import CableInputError
 from cablexsec.mechanics.papailiou import (
     slip_onset_curvature,
     wire_slip_history,
-    wire_slip_stress_cap,
+    wire_slip_stress_bounds,
 )
 from cablexsec.mechanics.section_conventions import rotation_to_strain_curvature
 from cablexsec.mechanics.stiffness import ea_fixed
@@ -84,13 +84,18 @@ def test_the_cap_is_kept_on_request(cable: cx.CableData) -> None:
     np.testing.assert_array_equal(plain.stress_Pa, kept.stress_Pa)
     np.testing.assert_array_equal(plain.moment_Nm, kept.moment_Nm)
     assert np.all(np.abs(kept.stress_Pa) <= kept.cap_Pa * (1 + 1e-12))
-    # Above the hold threshold the cap is that of the current direction.
+    # Above the hold threshold the cap is the bound of the current direction
+    # on the side of the wire's stress: upper for a nonnegative stress, lower
+    # (signed capstan) for a negative one.
     index = 777
+    upper, lower = wire_slip_stress_bounds(spec, math.atan2(ky[index], kx[index]))
     np.testing.assert_allclose(
         kept.cap_Pa[:, index],
-        wire_slip_stress_cap(spec, math.atan2(ky[index], kx[index])),
+        np.where(kept.stress_Pa[:, index] < 0.0, lower, upper),
         rtol=1e-12,
     )
+    assert np.any(kept.stress_Pa[:, index] < 0.0)
+    assert np.any(kept.stress_Pa[:, index] > 0.0)
     # The slipping count of the return map is the wires at their cap that
     # moved; a wire below its cap is never counted.
     below = np.abs(kept.stress_Pa) < kept.cap_Pa * (1 - 1e-12)
@@ -156,8 +161,9 @@ def test_planar_cycles_flip_the_direction(cable: cx.CableData) -> None:
 def _independent_lead(spec: object, kappa: float, per_revolution: int = 20000) -> float:
     """Lead of the stress resultant over the bending direction of one wire
     population under steady anticlockwise rotation, from a scalar
-    spring-slider written out here: the Papailiou cap
-    sigma0 expm1(mu |sin a| asin|cos(beta)|) and the elastic-Coulomb update.
+    spring-slider written out here: the signed Papailiou bounds
+    -sigma0 (1 - exp(-m psi)) <= sigma <= sigma0 (exp(m psi) - 1),
+    psi = asin|cos(beta)|, m = mu |sin a|, and the elastic-Coulomb update.
     Every wire sees the same history shifted in time, so the steady stress
     S(beta) of one wire gives the distribution round a continuous layer."""
     a = spec.lay_angle_rad  # type: ignore[attr-defined]
@@ -172,12 +178,14 @@ def _independent_lead(spec: object, kappa: float, per_revolution: int = 20000) -
     k = spec.k_f  # type: ignore[attr-defined]
     turn = np.linspace(0.0, 6 * math.pi, 3 * per_revolution + 1)
     drive = r * kappa * np.cos(turn)  # the wire at azimuth zero
-    cap = sigma0 * np.expm1(m * np.arcsin(np.abs(np.cos(turn))))
+    psi = np.arcsin(np.abs(np.cos(turn)))
+    upper = sigma0 * (np.exp(m * psi) - 1)
+    lower = sigma0 * (1 - np.exp(-m * psi))
     stress = np.empty_like(turn)
     force = 0.0
     for i in range(turn.size):
         trial = force + k * (drive[i] - (drive[i - 1] if i else 0.0))
-        force = max(-cap[i], min(cap[i], trial))
+        force = max(-lower[i], min(upper[i], trial))
         stress[i] = force
     last = slice(2 * per_revolution, 3 * per_revolution)
     beta = -turn[last]  # the wire's azimuth from the bending direction
@@ -198,7 +206,10 @@ def test_rotation_in_partial_slip_against_an_independent_calculation(
     lead = float(np.mean(result.stress_angle_rad(outer)[last]))
     expected = _independent_lead(spec, kappa)
     assert math.degrees(lead) == pytest.approx(math.degrees(expected), abs=0.1)
-    assert 9.0 < math.degrees(lead) < 11.0  # the stress axis leads
+    # The stress axis leads (11.06 deg). The signed bound lets the compression
+    # side slip earlier than the former symmetric cap (10 deg), so at three
+    # times the onset more of the ring slips and the lead is larger.
+    assert 10.5 < math.degrees(lead) < 11.5
     # Energy: the work per revolution, 2 pi |b| |m| sin(lead), is the friction
     # dissipation of the same history (plastic work of the slip increments).
     history = wire_slip_history(spec, kx, ky)  # type: ignore[arg-type]
@@ -230,10 +241,15 @@ def test_rotation_reversed_reverses_the_lead(cable: cx.CableData) -> None:
 
 
 def test_full_slip_moment_is_normal_to_the_curvature(cable: cx.CableData) -> None:
-    """Closed form: every wire at its cap with the sign of its strain rate,
-    sigma_k = cap(beta_k) sign(sin beta_k), whose resultant is normal to the
-    curvature (Kimball 1925) with the continuous-layer magnitude
-    M = A cos(a) r sigma0 (n/2pi) 4 [(e^{m pi/2} - m)/(1 + m^2) - 1]."""
+    """Closed form: every wire at the bound of the sign of its strain rate,
+    sigma_k = sigma0 (e^{m psi} - 1) for sin beta_k > 0 and
+    -sigma0 (1 - e^{-m psi}) for sin beta_k < 0 (signed capstan), whose
+    resultant is normal to the curvature (Kimball 1925): the in-plane part
+    cancels between beta and pi - beta. Opposite wires (beta, beta + pi) add
+    up to the reversal span 2 sigma0 sinh(m psi), and with psi = pi/2 - beta
+    on [0, pi/2] the continuous-layer magnitude is
+    M = A cos(a) r sigma0 (n/2pi) 4 int_0^{pi/2} sinh(m psi) cos(psi) dpsi
+      = A cos(a) r sigma0 (n/2pi) 4 (sinh(m pi/2) - m)/(1 + m^2)."""
     layers = _layers(cable)
     name, spec = layers[1]
     kappa = 1e4 * slip_onset_curvature(spec)  # type: ignore[arg-type]
@@ -262,7 +278,8 @@ def test_full_slip_moment_is_normal_to_the_curvature(cable: cx.CableData) -> Non
         * sigma0
         * (n / (2 * math.pi))
         * 4
-        * ((math.exp(m * math.pi / 2) - m) / (1 + m * m) - 1)
+        * (math.sinh(m * math.pi / 2) - m)
+        / (1 + m * m)
     )
     direction = np.column_stack((kx, ky))[last] / kappa
     normal = np.column_stack((-direction[:, 1], direction[:, 0]))

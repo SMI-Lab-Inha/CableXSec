@@ -89,9 +89,22 @@ def test_direction_hold_fraction_must_lie_in_the_unit_interval(fraction):
 
 
 def test_threshold_is_the_fraction_of_the_onset_curvature():
+    """``f m(lam) kappa_on``: ``m`` is the compression-side first slip.
+
+    The compression bound ``sigma0 (1 - exp(-lam psi))`` reaches the stick
+    stress ``k r kappa sin psi`` first at ``kappa_on min_psi (1 - exp(-lam
+    psi)) / (lam sin psi)``; expanding to second order,
+    ``1 - lam psi / 2 + (1 + lam^2) psi^2 / 6``, its minimum lies at
+    ``psi = 3 lam / (2 (1 + lam^2))`` with the value ``1 - 3 lam^2 / 8``.
+    Here the minimum is found by brute force on a fine grid.
+    """
     layer = _spec()
+    lam = layer.mu * abs(math.sin(layer.lay_angle_rad))
+    psi = np.linspace(1e-7, math.pi / 2, 2_000_001)
+    m = float(np.min(-np.expm1(-lam * psi) / (lam * np.sin(psi))))
+    assert m == pytest.approx(1 - 3 * lam**2 / 8, abs=lam**3)
     assert direction_threshold_curvature(layer, 0.25) == pytest.approx(
-        0.25 * slip_onset_curvature(layer), rel=1e-15
+        0.25 * m * slip_onset_curvature(layer), rel=1e-11
     )
 
 

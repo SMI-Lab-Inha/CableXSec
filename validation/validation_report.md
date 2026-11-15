@@ -18,14 +18,14 @@ Every row is computed from published data or closed-form references in this repo
 | 1 | OvM | Frictionless contact slip vs Out-von Morgen geodesic (Eqs. 26-28): loxodromic slip = wire-direction component; magnitude within bound; closed forms vs exact geodesic | < 1e-12 relative; ratio <= 1; < 1e-3 relative at k = 1e-4 | identity 1.07e-15; ratio 0.333; closed form 3.76e-04 | PASS |
 | 1 | OvM-g | Geodesic transverse map (eta = 1) vs Out-von Morgen slip vector (Eqs. 26-28) at mu = 0; vs exact geodesic | < 1e-12 relative; < 1e-3 relative at k = 1e-4 | closed form 1.05e-15; delta*/Eq. 28 - 1 2.7e-15; exact 2.62e-04 | PASS |
 | 1 | Out89 | Contact plastic slip vs Out (1989) effective curvature change dk - 2 kappa_s (Eq. 1) and damage ratios (Eqs. A8, A11) | < 1e-12 relative; < 1e-4 absolute | Eq. 1 9.63e-16; A8/A11 5.0e-07 | PASS |
-| 1 | CF | Laid-core friction: mu = 0 armour-only loop; large mu tangent vs EI_max; full-slip core moment vs closed form; dissipation >= 0; rotation equivariance | 0 N m; < 1e-9; < 5e-3; >= 0; < 1e-9 relative | 0.0e+00 N m; 1.3e-15; 1.1e-04; 4.8e-06; 5.2e-14 | PASS |
+| 1 | CF | Laid-core friction: mu = 0 armour-only loop; large mu tangent vs EI_max; full-slip core moment vs closed form; dissipation >= 0; rotation equivariance | 0 N m; < 1e-9; < 5e-3; >= 0; < 1e-9 relative | 0.0e+00 N m; 4.4e-16; 1.0e-04; 5.0e-06; 5.4e-14 | PASS |
 | 1 | FR | Fretting regime: Mindlin energy vs numerical Masing loop; Fouvry A/D/B at transition; Cattaneo strip I(0) = pi/16; mu = inf stick energy; planar-path rotation | < 1e-9; < 1e-12; < 1e-12; 0 J; < 1e-12 relative | 7.8e-12; 4.4e-16; 1.6e-15; 0.0e+00 J; 4.4e-16 | PASS |
 | 1 | TQ | Torque balance: Feyrer Ex. 2.8 torque constant c_1S (fixed radius); coupled section vs Knapp (1981) core factor, theta = 2 nu; mirror lay reverses torque and twist | 0.0345 +/- 0.2%; < 1e-4 relative; < 1e-9 relative | 0.03446 (-0.11%); -1.3e-06; 0.0e+00 | PASS |
 | 1 | A11 | M-κ energy closure (loop area vs closed form) | < 0.1% | 0.082% | PASS |
 | 1 | σ_B | Radial-fibre bending vs Ménard Eq. 14 (φ=0 from extension side) | < 1e-6% | 0.00e+00% | PASS |
 | 1 | M-rec | Assembled per-wire moment vs compute_mkappa (cross-engine, single-core) | < 2% | 0.000% | PASS |
 | 1 | M-rec-3core | Cross-engine moment vs compute_mkappa with offset-core geometry and shared mean armour pressure | < 2% | 0.000% | PASS |
-| 1 | slip-onset | First-to-slip wire at neutral axis (|cos| → 0; Raoof/Papailiou, not extreme-fibre loop) | |cos| < 0.2 | |cos|=0.000 | PASS |
+| 1 | slip-onset | First-to-slip wire at the neutral axis (|cos| → 0, compression side at psi ≈ 3 lam/2; Raoof/Papailiou, not extreme-fibre loop) | |cos| < 0.2 | |cos|=0.156 | PASS |
 | 1 | xsec-K | Coupling tangent bounds (κ→0=EI_max, κ→∞=EI_min); slip-front local slope | < 0.01% | κ0:3.16e-14% / κ∞:5.99e-13% | PASS |
 | 1 | QP-KKT | Concentric contact max|normal line force times gap| (common extension, twist and radial equilibrium) | < 1e-8 N | 1.9e-13 (q>=0: True) | PASS |
 | 1 | QP-Lamé | Isolated cylinder surface compliances vs compound-cylinder shrink-fit closed form | < 1e-6 | 1.3e-16 | PASS |
@@ -47,22 +47,22 @@ Every row is computed from published data or closed-form references in this repo
 | 2 | TQ-KL | Torque-balance outer helix angle vs Kim and Lee (2017) beam FE, 1+6+12 strand, seven pairs [deg] | abs. difference <= 0.3 | -0.26 to -0.06 | PASS |
 | 2 | TQ-UJ | Fixed-end torque per kN vs Utting and Jones (1987) Part II Table 1, six strands: model/Machida-Durelli theory; model/test | 1.04-1.07; 1.00-1.15 | 1.051-1.059; 1.067-1.136 | PASS |
 | 2 | BM1 | Ménard full-slip EI_min (calibration-free) | < 15% | 0.6% (EI_min 3571 N·m²) | PASS |
-| 2 | BM1-loop | Ménard +/-0.10 M-kappa after published +/-0.05 calibration, four-point test arrangement (Sec. 3: M = Fa L1, LVDT parabola) | ordered RMSE < 5%; matched experimental cycle work within 10% | model -548/548 N·m and W=70.4 J/m vs measured 62.3 J/m; measured -502/526 N·m; ordered RMSE 3.16%; matched experimental work difference 12.9% | FAIL |
-| 2 | BM1-loop-uniform | Ménard +/-0.10 M-kappa after published +/-0.05 calibration, uniform curvature (pre-T1 basis, kept for continuity) | ordered RMSE < 5%; matched experimental cycle work within 10% | model -548/548 N·m and W=70.4 J/m vs measured 62.3 J/m; measured -502/526 N·m; ordered RMSE 3.16%; matched experimental work difference 12.9% | FAIL |
+| 2 | BM1-loop | Ménard +/-0.10 M-kappa after published +/-0.05 calibration, four-point test arrangement (Sec. 3: M = Fa L1, LVDT parabola) | ordered RMSE < 5%; matched experimental cycle work within 10% | model -541/541 N·m and W=67.8 J/m vs measured 62.3 J/m; measured -502/526 N·m; ordered RMSE 2.71%; matched experimental work difference 8.8% | PASS (published calibration transfer) |
+| 2 | BM1-loop-uniform | Ménard +/-0.10 M-kappa after published +/-0.05 calibration, uniform curvature (pre-T1 basis, kept for continuity) | ordered RMSE < 5%; matched experimental cycle work within 10% | model -541/541 N·m and W=67.8 J/m vs measured 62.3 J/m; measured -502/526 N·m; ordered RMSE 2.71%; matched experimental work difference 8.8% | PASS (published calibration transfer) |
 | 2 | HU-3PB | Hu et al. (2022) conductor loop, third cycle, in its three-point arrangement (440 mm, ±6 mm; M = FL/4, kappa = 12w/L²) | loop area 3.185 N·m/m ±15% and transition share 34% ±10 points | KH: area 5.236 N·m/m (+64.4%), share 39.4%, M_max 8.83 N·m; Papailiou: area 4.354 N·m/m (+36.7%), share 32.8%, M_max 8.11 N·m | FAIL |
 | 2 | HU-uniform | Hu et al. (2022) conductor loop at uniform curvature (pre-T1 basis, kept for continuity) | loop area 3.185 N·m/m ±15% and transition share 34% ±10 points | KH: area 4.084 N·m/m (+28.2%), share 1.7%, M_max 7.58 N·m; Papailiou: area 3.340 N·m/m (+4.9%), share 1.7%, M_max 7.07 N·m | NOT COMPARABLE (the test does not impose uniform curvature) |
 | 2 | WITZ-EI | Witz (1996) pipe full-slip EI_min, 0 bar, vs measured gradients 1190 / 1014 N·m² (parameter-free) | within [913, 1309] N·m² (gradients ±10%) | 1007 N·m² (-15.4% / -0.7%) | PASS |
-| 2 | WITZ-ID | Witz (1996) 300-bar loop predicted after p0 identified on the 0-bar width at kappa = 0 (mu = 0.10 declared) | width within [1692, 2489] N·m and energy within 15% of 3125 J/m | p0 1.037 MPa (YAML 1.037); 0-bar energy 1114 vs 1118 J/m; 300-bar width 1383 vs [1990, 2164] N·m (-30.5% / -36.1%), energy 2732 J/m (-12.6%) | FAIL |
-| 2 | SV11-PLANE | Sævik (2011) Figs 17-23, 14 load cases: normalised inner-armour axial stress range at the 8 bending-plane FBG stations, termination-corrected prediction, mu = 0.20 declared | median R in [0.85, 1.18] and >= 12 of 14 R in [0.70, 1.43] (R = mean predicted / mean measured, bending-plane stations) | median R 1.65 (0.45-3.65), 3 of 14 in band; sectional median 1.03 (0.45-2.28), 11 of 14 | FAIL |
-| 2 | SV11-GJ | Gjøsteen et al. (2027) Figs 27-35, LC 14 at +-8 deg: absolute axial range at stations 2.1, 2.5, 3.1, 3.5, termination-corrected, mu = 0.20 | mean ratio in [0.72, 1.38] | 1.90 (sectional 1.32); static stress 271 MPa | FAIL |
+| 2 | WITZ-ID | Witz (1996) 300-bar loop predicted after p0 identified on the 0-bar width at kappa = 0 (mu = 0.10 declared) | width within [1692, 2489] N·m and energy within 15% of 3125 J/m | p0 1.071 MPa (YAML 1.071); 0-bar energy 1114 vs 1118 J/m; 300-bar width 1356 vs [1990, 2164] N·m (-31.8% / -37.3%), energy 2682 J/m (-14.2%) | FAIL |
+| 2 | SV11-PLANE | Sævik (2011) Figs 17-23, 14 load cases: normalised inner-armour axial stress range at the 8 bending-plane FBG stations, termination-corrected prediction, mu = 0.20 declared | median R in [0.85, 1.18] and >= 12 of 14 R in [0.70, 1.43] (R = mean predicted / mean measured, bending-plane stations) | median R 1.62 (0.45-3.59), 3 of 14 in band; sectional median 1.00 (0.45-2.17), 11 of 14 | FAIL |
+| 2 | SV11-GJ | Gjøsteen et al. (2027) Figs 27-35, LC 14 at +-8 deg: absolute axial range at stations 2.1, 2.5, 3.1, 3.5, termination-corrected, mu = 0.20 | mean ratio in [0.72, 1.38] | 1.80 (sectional 1.24); static stress 271 MPa | FAIL |
 | 2 | BM5 | CIGRE TB880 conductor temp (cited Poradowski tabulated T-network, λ1') | ≤ 90 °C, ~5 K low | 84.4 °C (FEM 89.62 / IEC 90; λ1″ closes residual). NOT yet from compute_thermal(cable) — three-core geometric factor pending IEC 60287-2-1 (not yet implemented) | PARTIAL (cited network; λ1″ + 3-core factor gated) |
 | 2 | BM4 | Saevik-Bruaseth EA population; no-radial-interaction bound | mean model/measured < 1.25 | mean ratio about 1.45; U1 > 2.0 | NOT VALIDATED (negative finding; radial interaction missing) |
 
 ## Test taxonomy (full gate suite)
 
-- analytical_sanity: `1026 passed, 3109 deselected`
-- independent_method: `70 passed, 4065 deselected`
-- full_scale: `26 passed, 4108 deselected`
+- analytical_sanity: `1035 passed, 3111 deselected`
+- independent_method: `70 passed, 4076 deselected`
+- full_scale: `27 passed, 4119 deselected`
 
 Run `pytest -m <marker>` to reproduce each group.
 

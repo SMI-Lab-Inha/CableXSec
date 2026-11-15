@@ -980,7 +980,9 @@ def _rows() -> list[Row]:
     # GATE B (distinguishing physics): slip starts at the NEUTRAL AXIS, per the
     # Raoof (1989b,1992) strain-gauge observation and Papailiou — not the extreme
     # fibre (which the retired Coulomb loop predicts). The first-to-slip wire's
-    # bending lever |cos(φ−φ_bend)| must be ≈ 0 (neutral axis), not ≈ 1.
+    # bending lever |cos(φ−φ_bend)| must be ≈ 0 (neutral axis), not ≈ 1. With
+    # the signed capstan bound the first slip sits on the compression side at
+    # psi ≈ 3 lam / 2 (lam = mu |sin a|), so |cos| is small but not zero.
     name_b = next(iter(sc_stress.phi_deg))
     kc_b = sc_stress.kappa_c_1_m[name_b]
     phi_b = sc_stress.phi_deg[name_b]
@@ -991,8 +993,9 @@ def _rows() -> list[Row]:
         Row(
             "1",
             "slip-onset",
-            "First-to-slip wire at neutral axis "
-            "(|cos| → 0; Raoof/Papailiou, not extreme-fibre loop)",
+            "First-to-slip wire at the neutral axis "
+            "(|cos| → 0, compression side at psi ≈ 3 lam/2; Raoof/Papailiou, "
+            "not extreme-fibre loop)",
             "|cos| < 0.2",
             f"|cos|={lever_first:.3f}",
             "PASS" if lever_first < 0.2 else "FAIL",

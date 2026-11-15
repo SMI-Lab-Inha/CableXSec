@@ -16,6 +16,8 @@ import numpy as np
 import pytest
 
 import cablexsec as cx
+from cablexsec.cable_adapters import cable_to_mkappa_specs
+from cablexsec.mechanics.papailiou import wire_slip_stress_bounds
 
 pytestmark = pytest.mark.analytical_sanity
 
@@ -84,12 +86,49 @@ def test_repeated_history_doubles_damage(cable):
         assert 1.9 <= twice[name] / base[name] <= 2.1
 
 
+def _mirror_defect_terms(cable):
+    """Full-slip value and envelope of ``M(kappa) + M(-kappa)``.
+
+    The friction bounds belong to the wire (upper ``u`` for a rising, lower
+    ``l`` for a falling stress), so the mirrored history is the original one
+    with the bounds swapped: ``M(kappa) + M(-kappa) = sum_w W r c_w D_w``,
+    ``c_w = cos(phi_w)``, ``W = A cos a``, with ``D_w`` the stress difference
+    of the two bound orders under the same drive. A wire and its mirror image
+    (``c -> -c``) have the same ``D``, so an even wire count cancels exactly;
+    in full slip ``D_w = u_w - l_w = 2 sigma0 (cosh(lam psi) - 1)``, and the
+    stop operator is monotone in its bounds, ``0 <= D_w <= u_w - l_w``.
+    """
+    full = positive = negative = 0.0
+    for spec in cable_to_mkappa_specs(cable, 5.0e4):
+        upper, lower = wire_slip_stress_bounds(spec, 0.0)
+        c = np.cos(spec.phi_wires)
+        term = spec.A_wire_m2 * math.cos(spec.lay_angle_rad) * spec.r_helix_m
+        span = term * c * (upper - lower)
+        full += float(np.sum(span))
+        positive += float(np.sum(span[c > 0]))
+        negative -= float(np.sum(span[c < 0]))
+    return full, max(positive, negative)
+
+
 def test_moment_curvature_symmetry_and_work_balance(cable):
     kappa = 0.08 * np.sin(np.linspace(0.0, 4.0 * math.pi, 161))
     loop = cx.compute_mkappa(cable, kappa, tension_N=5.0e4)
     mirror = cx.compute_mkappa(cable, -kappa, tension_N=5.0e4)
     scale = float(np.max(np.abs(loop.moment_Nm)))
-    assert np.max(np.abs(loop.moment_Nm + mirror.moment_Nm)) <= 1e-9 * scale
+    defect = np.asarray(loop.moment_Nm) + np.asarray(mirror.moment_Nm)
+    full, envelope = _mirror_defect_terms(cable)
+    if all(spec.n_wires % 2 == 0 for spec in cable_to_mkappa_specs(cable, 5.0e4)):
+        assert np.max(np.abs(defect)) <= 1e-9 * scale
+    else:
+        # Odd wire counts: M(-kappa) = -M(kappa) up to the signed-capstan
+        # asymmetry (8e-5 of the peak for menard2023 in full slip), even in
+        # kappa: swapping the two histories leaves the sum unchanged.
+        slipped = (np.asarray(loop.slip_fraction) == 1.0) & (
+            np.asarray(mirror.slip_fraction) == 1.0
+        )
+        assert slipped.any() and abs(full) > 1e-6 * scale
+        np.testing.assert_allclose(defect[slipped], full, rtol=0, atol=1e-9 * scale)
+        assert np.max(np.abs(defect)) <= envelope + 1e-9 * scale
     assert loop.work is not None
     friction = np.asarray(loop.work.friction_J_per_m)
     assert np.all(np.diff(friction) >= -1e-12 * max(1.0, friction[-1]))

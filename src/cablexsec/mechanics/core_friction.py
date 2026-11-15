@@ -31,12 +31,14 @@ where ``q_core`` [N/m of cable] is the sum of the normal contact line loads
 on one core. The Papailiou friction-setting stress of a core is then
 ``sigma_0 A_core = q_core cos(beta) r_c / sin^2 beta`` (``q_core cos(beta)`` is
 the line load per core length, as ``q_wire`` of
-:class:`~cablexsec.mechanics.papailiou.PapailiouLayer`) and the slip cap
-``sigma_0 expm1(mu_eff |sin beta| psi)`` is that of a wire whose two faces
-carry ``q_core`` (friction accumulates from the neutral-axis crossing over the
-core length ``r_c psi / sin beta``). The effective friction coefficient is the
-load-weighted mean ``mu_eff = sum(mu_i q_i) / sum(q_i)`` of the core--core,
-core--filler and core--sheath contacts.
+:class:`~cablexsec.mechanics.papailiou.PapailiouLayer`) and the slip bounds
+``sigma_0 expm1(mu_eff |sin beta| psi)`` (rising stress) and
+``sigma_0 (1 - exp(-mu_eff |sin beta| psi))`` (falling stress) are those of a
+wire whose two faces carry ``q_core`` (friction accumulates from the
+neutral-axis crossing over the core length ``r_c psi / sin beta``). The
+effective friction coefficient is the load-weighted mean
+``mu_eff = sum(mu_i q_i) / sum(q_i)`` of the core--core, core--filler and
+core--sheath contacts.
 
 With full stick the stations give ``xi sum_l 0.5 EA_l r_c^2 cos^3 beta``,
 the core parallel-axis term of

@@ -111,12 +111,12 @@ pressure and temperature without bending, as the
 strain axis offset -3.82 mm
  kappa  theta    psi  delta  psi_L  stick
  0.005    0.0    0.0    0.0    0.0    360
- 0.015    0.0    0.0    0.0    0.0    263
+ 0.015    0.0    0.0    0.0    0.0    242
  0.025    0.0    0.0    0.0    0.0      0
  0.050    0.0    0.0    0.0    0.0      0
- 0.050   30.0   33.8    3.8   41.9    156
- 0.050  120.0  123.9    3.9  132.3    156
- 0.050  180.0 -176.1    3.9 -167.7    150
+ 0.050   30.0   34.0    4.0   43.0    145
+ 0.050  120.0  124.1    4.1  133.4    145
+ 0.050  180.0 -175.9    4.1 -166.6    145
 ```
 
 Angles are in degrees from the section x axis. `theta` is the bending
@@ -146,19 +146,19 @@ tension and curvature, for a section stress map.
 ```text
 core state: frictional
 layer              kind      min MPa  max MPa    use  limit
-cu_conductor       annulus     -29.2    107.1  0.893  yielding
+cu_conductor       annulus     -28.7    107.1  0.893  yielding
 conductor_screen   annulus      -0.2      0.3      -  no limit given
 xlpe_insulation    annulus      -0.3      0.4      -  no limit given
 insulation_screen  annulus      -0.3      0.4      -  no limit given
-cu_screen          annulus    -243.6    309.0      -  follows the section
+cu_screen          annulus    -243.1    309.0      -  follows the section
 hdpe_core_sheath   annulus      -2.0      2.5  0.037  strain limit
 pp_filler          annulus      -7.0      7.6      -  no limit given
 hdpe_bedding       annulus      -4.3      4.6  0.068  strain limit
-inner_armour       wires       -80.2    152.2  0.221  yielding
-outer_armour       wires       -27.9     97.8  0.142  yielding
+inner_armour       wires       -71.4    152.2  0.221  yielding
+outer_armour       wires       -25.7     97.8  0.142  yielding
 hdpe_outer_sheath  annulus      -5.5      5.9  0.086  strain limit
-inner_armour: 61 wires, centre line -47.7 to 119.7 MPa
-outer_armour: 67 wires, centre line 4.7 to 65.3 MPa
+inner_armour: 61 wires, centre line -38.9 to 119.7 MPa
+outer_armour: 67 wires, centre line 7.9 to 65.3 MPa
 ```
 
 ```{figure} howto/figures/howto_04_section_stress.png
@@ -186,13 +186,13 @@ cable coiled into a static tank with one twist per turn.
 <!-- howto-output: howto_05_coiling.py -->
 ```text
 D = 14.4 m: kappa = twist = 0.1389 1/m, torque 14.79 kN m
-  armour wire centre  -245.6 to -205.4 MPa, surface  -300.4 to -150.6 MPa
-  bird-caging capacity 231.7 MPa, buckling 1.060, yield 0.751
-  governing: armour (radial), utilisation 1.060, elastic True
+  armour wire centre  -244.0 to -205.4 MPa, surface  -299.8 to -150.6 MPa
+  bird-caging capacity 231.7 MPa, buckling 1.053, yield 0.750
+  governing: armour (radial), utilisation 1.053, elastic True
 D =  8.0 m: kappa = twist = 0.2500 1/m, torque 26.62 kN m
-  armour wire centre  -442.1 to -369.7 MPa, surface  -540.7 to -271.1 MPa
-  bird-caging capacity 231.7 MPa, buckling 1.908, yield 1.352
-  governing: armour (radial), utilisation 1.908, elastic False
+  armour wire centre  -439.1 to -369.7 MPa, surface  -539.7 to -271.1 MPa
+  bird-caging capacity 231.7 MPa, buckling 1.895, yield 1.349
+  governing: armour (radial), utilisation 1.895, elastic False
 ```
 
 The check is elastic. When the wires yield (`elastic False`) the stresses are
@@ -216,11 +216,11 @@ all from one record.
 ```text
 armour: critical layer inner_armour, wire at 0 deg, fibre at 0 deg
   inner_armour  damage in 600 s 5.859e-06
-  outer_armour  damage in 600 s 2.547e-06
+  outer_armour  damage in 600 s 2.245e-06
 copper fibre: 122 cycles, max amplitude 1568 ue, damage 3.647e-05
 curvature: mean 60 s maximum 0.0479 1/m, 1 h most probable 0.0761, 90 % fractile 0.0941 1/m
 inner_armour  slip range 0.0 um, slipping share 0.00
-outer_armour  slip range 278.1 um, slipping share 0.25
+outer_armour  slip range 284.7 um, slipping share 0.26
 ```
 
 `jonswap_series` makes a synthetic screening record. `fatigue_from_series`
@@ -267,8 +267,8 @@ coupling none
   friction heat 0.00 W/m at start, 0.00 W/m at 6 h
   after 6 h: conductor 30.3 C, outer armour 24.7 C
 coupling two_way
-  friction heat 8.07 W/m at start, 11.89 W/m at 6 h
-  after 6 h: conductor 32.2 C, outer armour 26.6 C
+  friction heat 7.89 W/m at start, 11.62 W/m at 6 h
+  after 6 h: conductor 32.1 C, outer armour 26.6 C
 ```
 
 This cable declares no manufacturing clamping, so the friction rests on the

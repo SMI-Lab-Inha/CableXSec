@@ -14,6 +14,7 @@ from cablexsec.cable_adapters import cable_to_mkappa_specs
 from cablexsec.exceptions import CableInputError, CableSchemaError
 from cablexsec.mechanics import fast_slip
 from cablexsec.mechanics.papailiou import (
+    _compression_onset_factor,
     slip_onset_curvature,
     wire_slip_history,
     wire_slip_stress_cap,
@@ -191,28 +192,89 @@ def test_transition_is_more_gradual_than_the_default(spec):
         spec, kappa, zeros, progressive=ProgressiveFriction()
     ).moment_Nm[:, 0]
     # Same stick branch, never above the pointwise law, strictly below it in
-    # the transition (friction continuity removes the KK overshoot).
-    stick = kappa <= k_on
+    # the transition (friction continuity removes the KK overshoot). The stick
+    # branch ends at the compression-side first slip m(lam) k_on, below k_on.
+    lam = spec.mu * abs(math.sin(spec.lay_angle_rad))
+    stick = kappa < _compression_onset_factor(lam) * k_on
+    assert np.count_nonzero(stick) > 3
     assert np.allclose(ref[stick], new[stick], rtol=1e-12, atol=0)
     assert np.all(new <= ref + 1e-9 * np.abs(ref).max())
     assert (ref - new)[kappa > 1.2 * k_on].min() > 0
 
 
-def test_masing_reversal(spec):
+def _reversal(spec, multiple):
     k_on = slip_onset_curvature(spec)
-    amp = 3.0 * k_on
+    amp = multiple * k_on
     up = np.linspace(0.0, amp, 1201)
     down = np.linspace(amp, -amp, 1201)[1:]
     kappa = np.r_[up, down]
-    zeros = np.zeros_like(kappa)
     m = progressive_wire_history(
-        spec, kappa, zeros, progressive=ProgressiveFriction()
+        spec, kappa, np.zeros_like(kappa), progressive=ProgressiveFriction()
     ).moment_Nm[:, 0]
-    virgin = m[: up.size]
-    # Masing: M_down(k) = M(amp) - 2 M_virgin((amp - k)/2)
-    m_down = m[up.size :]
-    expected = m[up.size - 1] - 2.0 * np.interp((amp - down) / 2.0, up, virgin)
-    assert np.abs(m_down - expected).max() < 1e-7 * np.abs(m).max()
+    return amp, up, down, m
+
+
+def _sub_elements(spec, amp):
+    """Bounds of every sub-element, ``(wires, elements)``: ``b1`` on the side
+    of the first excursion (upper on the tension side, lower on the
+    compression side), ``b2`` the opposite one, and the peak force."""
+    settings = ProgressiveFriction()
+    upper = progressive_caps(spec, 0.0, settings)
+    lower = progressive_caps(spec, 0.0, settings, side=-1.0)
+    c = np.cos(spec.phi_wires)[:, None]
+    b1 = np.where(c >= 0, upper, lower)
+    b2 = np.where(c >= 0, lower, upper)
+    stick = spec.k_f * spec.r_helix_m * np.abs(c)
+    peak = np.minimum(stick * amp, b1)
+    return b1, b2, peak, stick
+
+
+def _moment(spec, force):
+    """Moment of the sub-element forces (signed by the wire side)."""
+    c = np.cos(spec.phi_wires)
+    weight = spec.A_wire_m2 * math.cos(spec.lay_angle_rad) * spec.r_helix_m
+    return (
+        weight
+        * np.einsum("wjt,w->t", np.sign(c)[:, None, None] * force, c)
+        / (force.shape[1])
+    )
+
+
+def test_reversal_is_the_elementwise_closed_form(spec):
+    """Each sub-element is elastic--perfectly plastic with the interval
+    ``[-lower, upper]``: from the peak ``f_p = min(k x_p, b1)`` of its first
+    excursion it reverses as ``f_p - min(k d, f_p + b2)`` at the reversal
+    distance ``d`` (written out here, no time stepping)."""
+    amp, up, down, m = _reversal(spec, 3.0)
+    b1, b2, peak, stick = _sub_elements(spec, amp)
+    d = (amp - down)[None, None, :]
+    force = peak[..., None] - np.minimum(stick[..., None] * d, (peak + b2)[..., None])
+    expected = _moment(spec, force)
+    assert np.abs(m[up.size :] - expected).max() < 1e-12 * np.abs(m).max()
+
+
+def test_masing_reversal_in_its_generalised_form(spec):
+    """Masing's rule for the signed interval: a sub-element that slipped at
+    ``b1`` reverses over ``b1 + b2``, ``b1 - min(k d, b1 + b2) = b1 - 2
+    min(k d / 2, (b1 + b2) / 2)``, and one that stuck with ``f_p <= b2``
+    reverses elastically over the whole return; both give
+    ``M_down(k) = M(amp) - 2 M_s((amp - k) / 2)`` with ``M_s`` the virgin
+    branch of the population with the mean bounds ``(b1 + b2) / 2`` (the
+    ``sinh`` shares). Only a sub-element stuck at ``b2 < f_p < b1`` breaks
+    it; none does at ten times the onset. The plain doubling of the virgin
+    branch, exact for the former symmetric cap, no longer holds."""
+    amp, up, down, m = _reversal(spec, 10.0)
+    b1, b2, peak, stick = _sub_elements(spec, amp)
+    assert not np.any((peak < b1) & (peak > b2))
+    half = ((amp - down) / 2)[None, None, :]
+    mean_virgin = _moment(
+        spec, np.minimum(stick[..., None] * half, (0.5 * (b1 + b2))[..., None])
+    )
+    expected = m[up.size - 1] - 2.0 * mean_virgin
+    scale = np.abs(m).max()
+    assert np.abs(m[up.size :] - expected).max() < 1e-12 * scale
+    plain = m[up.size - 1] - 2.0 * np.interp((amp - down) / 2.0, up, m[: up.size])
+    assert np.abs(m[up.size :] - plain).max() > 1e-3 * scale
 
 
 def test_dissipation_nonnegative_and_balance(spec):

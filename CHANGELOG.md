@@ -15,12 +15,39 @@ All notable changes to CableXSec are recorded in this file. The format follows
   helix friction law, whatever friction law the fatigue uses. It was the work of the
   direction-tied cap, which turns with the bending direction and under rotating curvature
   dissipates too little: on a circular orbit 0.16 of the distributed work at twice the slip
-  onset and 0.57 at large amplitude (closed forms `π(π/2 − 1)/4` and `π/4` of the two planar
-  cycles, now tested). Planar records change by less than 3 % from twice the slip onset; on
-  the synthetic 66 kV record of the manual the largest block heat rises from 0.58 to
-  0.79 W/m (doc/template_66kv.md Section 4.2). Stresses and damage are unchanged. A
+  onset and 0.57 at large amplitude (orbit over planar work `π (sinh x₀ − λ)/(4 λ cosh x₀)`,
+  `x₀ = λπ/2`, against `π/4` for the distributed law, now tested). Planar records change by
+  less than 3 % from twice the slip onset; on the synthetic 66 kV record of the manual the
+  largest block heat rises from 0.57 to 0.77 W/m with the signed capstan bound below
+  (doc/template_66kv.md Section 4.2). Stresses and damage are unchanged. A
   layer with `ξ = 1` keeps the direction-tied work, and the provenance records it
   (`thermal_coupling.record_friction_work`).
+- The capstan term of the armour friction bound is signed, as in Papailiou (1997),
+  Eqs. 11, 13-15 and 21, which use the signed helix angle: a rising wire stress is bounded by
+  `σ0 (exp(λψ) − 1)` and a falling one by `−σ0 (1 − exp(−λψ))`, `λ = μ |sin α|`
+  (`wire_slip_stress_bounds`). Before, the tension bound was applied on both sides, as if
+  a wire whose force falls pressed harder on its bed. A full reversal of a slipping wire now
+  spans `2 σ0 sinh(λψ)`; the peak tensile friction stress, and so the yield and capacity
+  checks on the tension side, are unchanged. The fix applies to the direction-tied,
+  progressive, distributed (`b = ρ g + λ n`) and along-wire laws, the tape and laid-core
+  laws, the station model of `compute_mkappa_papailiou` and the monotonic stress
+  snapshots. The direction-hold threshold is now `f m(λ) κ_on`, `m = 1 − 3λ²/8 + O(λ³)`,
+  the compression-side first slip, so that no wire slips below it.
+- Size of the correction: the former bound overstated the full-slip extreme-fibre friction
+  stress range by `2/(1 + exp(−λπ/2))`, +2.8 to +6.7 % for the bundled power-cable
+  templates (`λ` 0.035 to 0.085), and the full-slip loop work by about `(π − 2)λ/2`
+  (+6.5 % at 35°, μ 0.2). The bulk damage of the bundled templates falls by 0 to 16 % (the
+  former values were 0 to 19 % high): no change while a layer sticks, the largest change
+  once the friction range governs the bulk range. Below about three times the onset
+  curvature the compression side now slips earlier and a loop can dissipate more.
+- Validation rows (VALIDATION.md): BM1-loop and BM1-loop-uniform pass (ordered RMSE
+  3.16 % to 2.71 %, cycle work +12.9 % to +8.8 % against the unchanged 10 % target);
+  SV11-PLANE and SV11-GJ move closer to the measurements and still fail; WITZ-ID moves
+  slightly further (300-bar energy −12.6 % to −14.2 %, width still failing), with the
+  initial pressure of `witz1996.yaml` re-identified (1.037 to 1.071 MPa); the
+  laid-core closed form of row CF is the signed one.
+- `full_slip_curvature` takes the bound of each wire's side; the station slip fraction of
+  the Papailiou diagnostic uses the same signed intervals as the moment.
 
 ## [0.1.0] - 2026-11-14
 

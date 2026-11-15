@@ -34,13 +34,13 @@ afterwards: a comparison that misses its target is reported as failed.
 | **A10, A10b** | Vector-slip rotation equivariance; vector and loxodromic contrast | identity | 3.8e-16; 1.2e-16 | <1e-12 | Pass |
 | **OvM, OvM-g** | Frictionless contact slip and geodesic transverse map | Out and von Morgen (1997), Eqs. 26–28 | ≤2.7e-15; exact geodesic 2.6e-4 to 3.8e-4 | <1e-12; <1e-3 at k = 1e-4 | Pass |
 | **Out89** | Contact plastic slip and damage ratios | Out (1989), Eqs. 1, A8, A11 | 9.6e-16; 5.0e-7 | <1e-12; <1e-4 | Pass |
-| **CF** | Laid-core friction limits | closed forms, rotation equivariance | ≤1.1e-4 | per check | Pass |
+| **CF** | Laid-core friction limits | closed forms, rotation equivariance | ≤1.0e-4 | per check | Pass |
 | **FR** | Fretting regime: Mindlin energy, Fouvry transition, Cattaneo strip | closed forms, numerical Masing loop | ≤7.8e-12 | <1e-9 to <1e-12 | Pass |
 | **TQ** | Torque constant of a strand; coupled section; mirror lay | Feyrer, Example 2.8; Knapp (1981) | −0.11 %; −1.3e-6; 0 | ±0.2 %; <1e-4; <1e-9 | Pass |
 | **A11** | Moment–curvature energy closure | loop area against closed form | 0.082 % | <0.1 % | Pass |
 | **σ_B** | Radial-fibre bending stress | Ménard and Cartraud (2023), Eq. 14 | 0 | <1e-6 % | Pass |
 | **M-rec, M-rec-3core** | Assembled per-wire moment against the section engine | cross-engine | 0.000 % | <2 % | Pass |
-| **slip-onset** | First wire to slip lies at the neutral axis | Raoof; Papailiou | \|cos\| = 0.000 | \|cos\| < 0.2 | Pass |
+| **slip-onset** | First wire to slip lies at the neutral axis (compression side, ψ ≈ 3λ/2) | Raoof; Papailiou | \|cos\| = 0.156 | \|cos\| < 0.2 | Pass |
 | **xsec-K** | Coupling tangent bounds | EI_max, EI_min limits | ≤6.3e-13 % | <0.01 % | Pass |
 | **QP-KKT, QP-Lamé** | Concentric contact complementarity; shrink-fit compliances | KKT conditions; compound cylinder | 1.9e-13 N; 1.3e-16 | <1e-8 N; <1e-6 | Pass |
 | **COMP-T, COMP-N, COMP-O, SH-AX** | Component thermal expansion, axial equilibrium, zero-offset bounds, sheath axial stress | closed forms | 0 | <1e-6 Pa; <1e-12 | Pass |
@@ -57,14 +57,14 @@ afterwards: a comparison that misses its target is reported as failed.
 | **TQ-KL** | Torque-balance helix angle, seven strand pairs | Kim and Lee (2017), beam FE | −0.26 to −0.06 deg | ≤0.3 deg | Pass |
 | **TQ-UJ** | Fixed-end torque per tension, six strands | Utting and Jones (1987), Table 1 | theory 1.051–1.059; test 1.067–1.136 | 1.04–1.07; 1.00–1.15 | Pass |
 | **BM1** | Full-slip bending stiffness EI_min, no calibration | Ménard and Cartraud (2023), Table 3 | 0.6 % (3571 N·m²) | <15 % | Pass |
-| **BM1-loop** | ±0.10 m⁻¹ moment–curvature loop after the published ±0.05 calibration, four-point arrangement | Ménard and Cartraud (2023), Fig. 16b | ordered RMSE 3.16 %; cycle work 70.4 vs 62.3 J/m (12.9 %) | RMSE <5 %; work within 10 % | **Fail** |
-| **BM1-loop-uniform** | Same comparison at uniform curvature | Ménard and Cartraud (2023), Fig. 16b | as BM1-loop | as BM1-loop | **Fail** |
+| **BM1-loop** | ±0.10 m⁻¹ moment–curvature loop after the published ±0.05 calibration, four-point arrangement | Ménard and Cartraud (2023), Fig. 16b | ordered RMSE 2.71 %; cycle work 67.8 vs 62.3 J/m (8.8 %) | RMSE <5 %; work within 10 % | Pass |
+| **BM1-loop-uniform** | Same comparison at uniform curvature | Ménard and Cartraud (2023), Fig. 16b | as BM1-loop | as BM1-loop | Pass |
 | **HU-3PB** | Conductor loop, third cycle, three-point arrangement | Hu et al. (2022) | loop area +36.7 % (Papailiou), +64.4 % (KH); transition share 32.8 % / 39.4 % | area ±15 %; share 34 ± 10 points | **Fail** |
 | **HU-uniform** | Same loop at uniform curvature | Hu et al. (2022) | area +4.9 % (Papailiou) | — | Not comparable |
 | **WITZ-EI** | Full-slip EI_min of a 2.5-inch flexible pipe, 0 bar, parameter-free | Witz (1996), measured gradients 1190 / 1014 N·m² | 1007 N·m² | 913–1309 N·m² | Pass |
-| **WITZ-ID** | 300-bar loop predicted after identifying the initial pressure at 0 bar | Witz (1996), Figs 5–6 | width 1383 N·m vs 1990–2164; energy −12.6 % | width 1692–2489 N·m; energy ±15 % | **Fail** |
-| **SV11-PLANE** | Inner-armour stress ranges at the bending-plane FBG stations, 14 load cases | Sævik (2011), Figs 17–23 | median ratio 1.65 (3 of 14 in band); sectional 1.03 (11 of 14) | median 0.85–1.18 and ≥12 of 14 in 0.70–1.43 | **Fail** |
-| **SV11-GJ** | Absolute stress ranges near the termination, load case 14 | Gjøsteen et al. (2027), Figs 27–35 | mean ratio 1.90 (sectional 1.32) | 0.72–1.38 | **Fail** |
+| **WITZ-ID** | 300-bar loop predicted after identifying the initial pressure at 0 bar | Witz (1996), Figs 5–6 | width 1356 N·m vs 1990–2164; energy −14.2 % | width 1692–2489 N·m; energy ±15 % | **Fail** |
+| **SV11-PLANE** | Inner-armour stress ranges at the bending-plane FBG stations, 14 load cases | Sævik (2011), Figs 17–23 | median ratio 1.62 (3 of 14 in band); sectional 1.00 (11 of 14) | median 0.85–1.18 and ≥12 of 14 in 0.70–1.43 | **Fail** |
+| **SV11-GJ** | Absolute stress ranges near the termination, load case 14 | Gjøsteen et al. (2027), Figs 27–35 | mean ratio 1.80 (sectional 1.24) | 0.72–1.38 | **Fail** |
 | **BM5** | Conductor temperature of the CIGRE TB 880 export cable, from the source's tabulated network inputs (`compute_thermal` on the cable itself is not yet comparable) | Poradowski tabulated thermal network; FEM 89.62 °C | 84.4 °C | ≤90 °C, about 5 K low | Partial |
 | **BM4** | Axial stiffness of a population of umbilicals | Sævik and Bruaseth (2005) | mean ratio about 1.45 | <1.25 | Not validated |
 
@@ -82,9 +82,10 @@ quantities are those of the passing rows. In particular:
 
 - The full-slip bending stiffness and the analytical limits of the slip model are confirmed
   against published data without calibration (BM1, WITZ-EI).
-- The friction work of the measured Ménard ±0.10 m⁻¹ loop is overestimated by 13 %, and the
-  300-bar Witz loop is too narrow after identification at 0 bar; absolute dissipation
-  predictions therefore carry the uncertainty shown by BM1-loop and WITZ-ID.
+- The friction work of the measured Ménard ±0.10 m⁻¹ loop is overestimated by 9 % (within
+  its 10 % target), and the 300-bar Witz loop is too narrow after identification at 0 bar;
+  absolute dissipation predictions therefore carry the uncertainty shown by BM1-loop and
+  WITZ-ID.
 - The termination-corrected (anchored-wire) armour stress is an upper estimate that the
   published near-termination measurements do not support (SV11-PLANE, SV11-GJ); the sectional
   result is the one that matches them.
@@ -130,5 +131,6 @@ python validation/scripts/run_validation.py          # rewrite validation/valida
 python validation/scripts/run_validation.py --check  # compare with the committed report
 ```
 
-The script exits with status 1 while any row is **Fail** or **Review**. In 0.1.0 the failed rows
-are the registered comparisons listed above.
+The script exits with status 1 while any row is **Fail** or **Review**. The failed rows are the
+registered comparisons listed above; in 0.1.0 they included BM1-loop and BM1-loop-uniform, which
+pass since the signed capstan correction (see the changelog).

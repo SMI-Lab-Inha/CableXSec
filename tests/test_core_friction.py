@@ -122,12 +122,21 @@ def test_infinite_friction_gives_the_no_slip_section(cable):
 
 
 def test_full_slip_core_moment_matches_closed_form(cable):
-    """Half-height at kappa = 0 of the core population after full reversal."""
+    """Half-height at kappa = 0 of the core population after full reversal.
+
+    Signed capstan: after the reversal the cores that were on the tension
+    side sit at their lower bound ``-sigma0 (1 - exp(-a psi))`` and the others
+    at their upper bound ``sigma0 expm1(a psi)``, so the moment integrand is
+    their half sum ``sinh(a psi) sin(psi)`` and
+    ``int_0^{pi/2} sinh(a psi) sin(psi) dpsi = a cosh(a pi/2) / (1 + a^2)``
+    (the same magnitude at the peak). The former symmetric cap gave
+    ``(a exp(a pi/2) + 1) / (1 + a^2) - 1``.
+    """
     model = build_core_friction(cable, SPEC, T, contact_model="solved")
     q = model.loads.total_N_per_m
     beta, r = model.lay_angle_rad, model.r_offset_m
     a = model.mu_effective * math.sin(beta)
-    integral = (a * math.exp(a * math.pi / 2) + 1.0) / (1.0 + a * a) - 1.0
+    integral = a * math.cosh(a * math.pi / 2) / (1.0 + a * a)
     closed = (
         2.0
         / math.pi
@@ -144,10 +153,11 @@ def test_full_slip_core_moment_matches_closed_form(cable):
     m = hist.core_moment_Nm[:, 0]
     assert -_descending_zero(k, m) == pytest.approx(closed, rel=5e-3)
     assert m.max() == pytest.approx(closed, rel=5e-3)
-    # Small-angle form 2 n mu q r^2 cos(beta)^2 / (pi sin beta).
+    # Small-angle form 2 n mu q r^2 cos(beta)^2 / (pi sin beta): the signed
+    # bound leaves only O(a^2), cosh(a pi/2) / (1 + a^2) = 1 + (pi^2/8 - 1) a^2.
     small = 2 * model.n_cores * model.mu_effective * q * r * r
     small *= math.cos(beta) ** 2 / (math.pi * math.sin(beta))
-    assert closed == pytest.approx(small, rel=0.1)
+    assert closed == pytest.approx(small, rel=a * a)
 
 
 @pytest.mark.parametrize("model", ["bounded", "solved"])
@@ -416,5 +426,6 @@ def test_janocha_template_regression(cable):
     res = cx.compute_mkappa(
         cable, k, tension_N=T, contact_model="solved", core_friction=SPEC
     )
-    assert -_descending_zero(k, res.moment_Nm) == pytest.approx(187.1, rel=1e-2)
+    # 180.6 N m with the signed capstan bound (187.1 with the former cap).
+    assert -_descending_zero(k, res.moment_Nm) == pytest.approx(180.6, rel=1e-2)
     assert res.EI_min_Nm2 == pytest.approx(21.0e3, rel=1e-2)

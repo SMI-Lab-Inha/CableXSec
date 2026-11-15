@@ -88,7 +88,11 @@ def verification_checks() -> dict[str, float]:
     model = build_core_friction(cable, JANOCHA, 50e3, contact_model="solved")
     q, b, r = model.loads.total_N_per_m, model.lay_angle_rad, model.r_offset_m
     a = model.mu_effective * math.sin(b)
-    integral = (a * math.exp(a * math.pi / 2) + 1.0) / (1.0 + a * a) - 1.0
+    # Full slip after a reversal, signed capstan bound: the cores of one side
+    # at -sigma0 (1 - exp(-a psi)), the others at sigma0 expm1(a psi); the
+    # moment integrand is their half sum, sinh(a psi) sin(psi), and
+    # int_0^{pi/2} sinh(a psi) sin(psi) dpsi = a cosh(a pi/2) / (1 + a^2).
+    integral = a * math.cosh(a * math.pi / 2) / (1.0 + a * a)
     expected = (
         2 / math.pi * model.n_cores * q * r * r * math.cos(b) ** 2 / math.sin(b) ** 2
     )

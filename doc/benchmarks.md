@@ -18,6 +18,26 @@ of the scorecard.
 Comparison classes: **A** analytical, **M** measured, **MM** model-to-model,
 **I** internal (two CableXSec formulations on the same inputs).
 
+**Signed capstan bound (unreleased correction).** The armour friction bound now
+follows Papailiou (1997, Eqs. 11 and 13–15) with the signed helix angle: a
+rising wire stress is bounded by `σ0 (exp(λψ) − 1)`, a falling one by
+`−σ0 (1 − exp(−λψ))`, `λ = μ |sin α|`; before, the tension bound was used on
+both sides. The rows of the scorecard and the tables produced by
+`check_core_friction.py`, `check_g8_gradual_reversal.py`,
+`check_t1_test_arrangement.py` and `check_saevik2011.py` are regenerated with
+it; the former values are given where a status or a conclusion moved. Tables of
+one-off studies that have no reproduction script in the repository (the Witz
+mechanism and identification studies, the along-wire, two-way and
+rectangular-tendon variants of the Sævik comparison, the identified-state
+Ménard columns taken from the companion article) keep the values computed with
+the former bound and say so. Their slipping-case values move by a few per cent
+(the sectional Sævik ratios by 3–5 %); no conclusion drawn from them changes.
+For orientation, the contact-level helical rod cell of the companion article
+(`transverse_friction_cell.py`, uniform normal load, no capstan term) now gives
+33.7 and 70.4 J/m on the Ménard cable at ±0.05 and ±0.10 1/m against 34.1 and
+70.9 J/m from the section law (35.3 and 73.5 J/m with the former bound), the
+`O(λ²)` agreement the signed bound implies.
+
 **Sheave check.** `compute_sheave` now also reports the
 design utilisation on the capacity envelope (normal factor 0.67). SH-3 checks
 the unchanged characteristic ratio, now `characteristic_utilisation`, against
@@ -61,14 +81,14 @@ model) is the full construction.
 | Armour compression: de Sousa bird-caging tests (via Sævik and Thorsen 2017; Gjøsteen et al. 2027) | M | Straight-beam P2* within 1.4% of the 256 kN test mean; published per-term P2 not reproduced (stated) |
 | Armour compression: Malta et al. (2022), sheath-only FE | MM | Reported only: screen 49% below the FE limit load (conservative) |
 | Ménard and Cartraud (2023) full-slip stiffness | MM | PASS |
-| Ménard and Cartraud (2023) six measured bending ranges, moment | M | Moment errors 3.16–11.48% (transfer) |
-| Ménard and Cartraud (2023) six measured bending ranges, work | M | FAIL at the retained 10% target (range b) |
+| Ménard and Cartraud (2023) six measured bending ranges, moment | M | Moment errors 2.71–10.55% (transfer) |
+| Ménard and Cartraud (2023) six measured bending ranges, work | M | PASS at the retained 10% target (range b, +8.8 %; +12.9 % with the former capstan bound); ranges (a), (c), (d) +32 to +47 % |
 | Armour longitudinal displacement, Ménard and Cartraud FE | MM | Phase and scale reproduced; peaks over-predicted |
 | Tjahjanto et al. (2017), Leroy et al. (2017) FE armour slip | MM | Qualitative agreement only |
 | Sævik and Bruaseth (2005) umbilical axial stiffness | M | NOT VALIDATED |
 | CIGRE TB880 conductor temperature | MM | PARTIAL |
 | Global–local consistency, floating-wind application | I | Full-slip results are upper estimates |
-| Laid-core friction (gap R1b), Ménard and Cartraud (2023) six ranges | M | Moment and work errors increase; BM1-loop still FAIL |
+| Laid-core friction (gap R1b), Ménard and Cartraud (2023) six ranges | M | Moment and work errors increase; range (b) with core friction FAIL (+18.9 %) |
 | Fretting regime and wear (gap 3.1): Mindlin/Cattaneo closed forms, Fouvry ratios, limits, rotation | A | PASS |
 | Fretting transition, Fouvry et al. (1995) Table 4 | MM | PASS with the printed shear moduli; 1.6–1.7 × the measurements with G = E/2(1 + ν) (stated) |
 | Fretting wear volume, crossed steel wires (Poon et al. 2024; Cruzado et al. 2013) | M | PASS (consistency: coefficient identified on the same tests) |
@@ -76,14 +96,14 @@ model) is the full construction.
 | Conductor fatigue version 3 (gap CF3, opt-in): wire curve corrected for the compaction indentations, compaction factor per ring (Jiang et al. 2022), trellis rule at the full-hard threshold of Liaw et al. (1982) | M | FAIL on the registered gate: 300 mm² bending lives ×2.05–2.24 and radius trend 3.7 in band; 95 mm² bending ×4.1–9.5, trend 20–23 (10.3); tension–tension failure in the outer layer as observed, lives ×0.97–3.2 |
 | Conductor trellis fretting, surface SWT (gap 1.3c, G1; `trellis_model="surface_swt"`) | M | FAIL: dry lives ×0.0075–0.12, radius trends 1.02 and 1.06 against 3.6 and 10.3; legacy option, not validated |
 | Witz (1996) 2.5-inch flexible pipe, full-slip EI at 0 bar (WITZ-EI) | M | PASS (1007 against 1014 and 1190 N·m², parameter-free) |
-| Witz (1996) pipe, 300-bar loop predicted after identification on the 0-bar loop (WITZ-ID) | M | FAIL: width −30 to −36%, peaks −16%; energy −12.6% (inside its target); one loop identifies only μ·p₀ |
+| Witz (1996) pipe, 300-bar loop predicted after identification on the 0-bar loop (WITZ-ID) | M | FAIL: width −32 to −37%; energy −14.2% (inside its target); one loop identifies only μ·p₀ |
 | Gradual stick-to-slip transition (gap G8): progressive law, zero-spread, dissipation and rotation limits | A | PASS |
-| Gap G8 against Witz (300 bar), Hu et al. (2022) and Ménard range (b) | M | Hu transition share reproduced by the three-point test arrangement (35.6% against 33.8%); Witz width and ratio, Hu loop area (+37%) and BM1-loop (+12.1%) FAIL |
-| Sævik (2011) 8-inch riser, measured FBG inner-armour stress ranges, 14 load cases (SV11-PLANE); Gjøsteen et al. (2027) absolute LC 14 ranges (SV11-GJ) | M | FAIL: termination-corrected median ratio 1.65 (3 of 14 in band), absolute 1.90; sectional median 1.03 (11 of 14), absolute 1.32; small angles under-predicted about 2× |
+| Gap G8 against Witz (300 bar), Hu et al. (2022) and Ménard range (b) | M | Hu transition share reproduced by the three-point test arrangement (35.6% against 33.8%); BM1-loop with the progressive law PASS (+8.2 %); Witz width and ratio and Hu loop area (+37%) FAIL |
+| Sævik (2011) 8-inch riser, measured FBG inner-armour stress ranges, 14 load cases (SV11-PLANE); Gjøsteen et al. (2027) absolute LC 14 ranges (SV11-GJ) | M | FAIL: termination-corrected median ratio 1.62 (3 of 14 in band), absolute 1.80; sectional median 1.00 (11 of 14), absolute 1.24; small angles under-predicted about 2× |
 | Test-arrangement simulator (gap T1): elastic closed forms, uniform-moment zone against `compute_mkappa`, energy, equilibrium | A, I | PASS |
 | Along-wire redistribution (gap T2): periodic and clamp-layer limits, termination round-off, energy, refinement | A, I | PASS |
-| Gap T2 against Sævik (2011), Gjøsteen et al. (2027), Hu, Ménard and Witz | M | Not explained: Sævik near-bellmouth median ratio 3.36 (2.12 in the clamp convention) against 1.65 for the clamp correction and 1.03 sectional; Hu area +65%, share 11%; Ménard work −3 to +3 points by range; end conditions immaterial |
-| Two-way anchored termination: Sævik rig beam solved with the anchored along-wire chains of both armours | M | FAIL as registered: median ratio 1.18 (9 of 14 in band), absolute 1.46; anchored over-prediction falls from 3.09 one-way (same stick setting) and 1.65 (clamp correction); curvature redistributes along the bellmouth instead of falling (TC-3 fails); hang-off rule stays sectional |
+| Gap T2 against Sævik (2011), Gjøsteen et al. (2027), Hu, Ménard and Witz | M | Not explained (former capstan bound throughout): Sævik near-bellmouth median ratio 3.36 (2.12 in the clamp convention) against 1.65 for the clamp correction and 1.03 sectional; Hu area +65%, share 11%; Ménard work −3 to +3 points by range; end conditions immaterial |
+| Two-way anchored termination: Sævik rig beam solved with the anchored along-wire chains of both armours | M | FAIL as registered (former capstan bound): median ratio 1.18 (9 of 14 in band), absolute 1.46; anchored over-prediction falls from 3.09 one-way (same stick setting) and 1.65 (clamp correction); curvature redistributes along the bellmouth instead of falling (TC-3 fails); hang-off rule stays sectional |
 | Hysteretic bending law for global analysis (gap MX): Iwan law from the exported backbone against `compute_mkappa` | I | MX-1 PASS (≤ 0.05 % of the moment range, work ≤ 0.02 %), MX-3 PASS; MX-2 FAIL (tension interpolation 3.9 % at 100 kN spacing; 0.27 % at 20 kN); MX-5 (global program) open |
 | Cable over a sheave (gap SH): Feyrer (2015) Examples 3.2 and 3.4, groove factors, consistency with the section analyses | A, I | SH-1, SH-2, SH-3 PASS; no measured cable-over-sheave data held |
 | Gap T1, benchmarks in their published arrangements | M | Hu three-point: transition share in its band (32.8–39.4% against 33.8%), loop area FAIL (+37% Papailiou cap, +64% Karlsen-Husøy; +4.9%/+28% at uniform curvature compared a different quantity); Ménard four-point unchanged; Witz arrangement not documented, basis unchanged |
@@ -92,7 +112,7 @@ model) is the full construction.
 | Restrictor and stiffener fields, tapes, copper strain life (gaps P5, P2, P7): rigid-link chain, tensioned beam, chain limit, proportional-field equivalence, tape states, default invariance | A, I | PASS (no restrictor test with curvature data beyond Thies 2016 held) |
 | Torque balance: Kim and Lee (2017) balance angles; Utting and Jones (1987) fixed-end torque | MM, M | PASS (−0.06 to −0.26°; ×1.07–1.14 test, ×1.05–1.06 theory from omitted wire moments, stated) |
 | Rectangular tendons and local tendon bending (gap G1): section closed forms, round limit bit for bit, Sævik (1992) Eqs. 2.30–2.32, 4.1, 4.2, numerical geodesic, Dong et al. (2018, 2025) | A, I, MM | PASS |
-| Gap G1 against Sævik (2011) / Gjøsteen et al. (2027) with the true 5 × 12.5 mm tendons, with and without lateral relief | M | FAIL: sectional 1.09 (11 of 14), GJ 1.32; clamp correction 1.76 (GJ 1.94); along-wire 3.40 (GJ 4.68); lateral relief changes these by 1–3 % (hypothesis not supported); end-restraint layer 0.1 m, 18 decay lengths short of the nearest gauge |
+| Gap G1 against Sævik (2011) / Gjøsteen et al. (2027) with the true 5 × 12.5 mm tendons, with and without lateral relief | M | FAIL: sectional 1.06 (11 of 14), GJ 1.25; clamp correction 1.72 (GJ 1.85); along-wire 3.40 (GJ 4.68, former capstan bound); lateral relief changes these by 1–3 % (hypothesis not supported); end-restraint layer 0.1 m, 18 decay lengths short of the nearest gauge |
 | Gap G1, Witz (1996) WITZ-ID on the true strips, solved radial route | M | FAIL: width −25.3 / −31.3 %, energy −5.9 % |
 
 ## Tier 1: analytical and consistency checks
@@ -111,12 +131,12 @@ All rows are verification, not validation. Source: the scorecard
 | OvM-g | A | Geodesic transverse map (η = 1) at μ = 0 vs Out–von Morgen slip vector; vs exact geodesic | < 1e-12 rel.; < 1e-3 rel. at k = 1e-4 | 1.1e-15 (δ*/Eq. 28: 2.7e-15); 2.6e-4 | PASS |
 | Out89 | A | Contact plastic slip vs Out (1989) Δκ − 2κ_s and damage ratios A8, A11 | < 1e-12 rel.; < 1e-4 abs. | 9.6e-16; 5.0e-7 | PASS |
 | FR | A | Fretting regime: Mindlin energy vs numerical Masing loop; Fouvry A/D/B; strip I(0); μ = ∞ stick energy; planar-path rotation | < 1e-9; < 1e-12; < 1e-12; 0 J; < 1e-12 rel. | 7.8e-12; 4.4e-16; 1.6e-15; 0 J; 4.4e-16 | PASS |
-| CF | A | Laid-core friction: μ = 0 gives the armour-only loop; large μ tangent vs EI_max; full-slip core moment vs closed form; dissipation ≥ 0; rotation equivariance | 0 N·m; < 1e-9; < 5e-3; ≥ 0; < 1e-9 rel. | 0; 2.6e-15; 1.1e-4; 4.8e-6; 5.2e-14 | PASS |
+| CF | A | Laid-core friction: μ = 0 gives the armour-only loop; large μ tangent vs EI_max; full-slip core moment vs closed form; dissipation ≥ 0; rotation equivariance | 0 N·m; < 1e-9; < 5e-3; ≥ 0; < 1e-9 rel. | 0; 4.4e-16; 1.0e-4; 5.0e-6; 5.4e-14 | PASS |
 | A11 | A | Moment–curvature energy closure (loop area vs closed form) | < 0.1% | 0.082% | PASS |
 | σ_B | A | Radial-fibre bending stress vs Ménard Eq. 14 | < 1e-6% | 0 | PASS |
 | M-rec | I | Assembled per-wire moment vs `compute_mkappa`, single core | < 2% | 0.000% | PASS |
 | M-rec-3core | I | As M-rec, offset-core geometry | < 2% | 0.000% | PASS |
-| slip-onset | A | First wire to slip lies at the neutral axis | abs(cos) < 0.2 | 0.000 | PASS |
+| slip-onset | A | First wire to slip lies at the neutral axis (with the signed bound on the compression side, ψ ≈ 3λ/2) | abs(cos) < 0.2 | 0.156 (0.000 with the former bound) | PASS |
 | xsec-K | A | Tangent bounds EI_max (κ→0) and EI_min (κ→∞) | < 0.01% | 0; 7.4e-12% | PASS |
 | QP-KKT | A | Concentric contact complementarity | < 1e-8 N | 1.9e-13 N | PASS |
 | QP-Lamé | A | Cylinder compliances vs compound-cylinder shrink fit | < 1e-6 | 1.3e-16 | PASS |
@@ -169,20 +189,27 @@ path for measurement and model, in J/m.
 
 | Range | Curvature (1/m) | Moment error, transfer (%) | Moment error, identified (%) | Measured work (J/m) | Transfer work (J/m) | Identified work (J/m) |
 | --- | --- | --- | --- | --- | --- | --- |
-| (a) | −0.05 to +0.05 | 11.48 ± 2.03 | 4.56 (fitted) | 20.2 ± 0.9 | 30.8 | 18.7 (fitted) |
-| (b) | −0.10 to +0.10 | 3.16 ± 0.92 | 4.50 | 62.3 ± 3.0 | 70.4 | 45.1 |
-| (c) | −0.10 to 0 | 11.02 ± 1.16 | 5.49 | 20.4 ± 1.0 | 30.6 | 18.6 |
-| (d) | 0 to +0.10 | 9.08 ± 1.06 | 5.55 | 22.5 ± 1.0 | 30.8 | 18.8 |
-| (e) | −0.20 to 0 | 3.98 ± 1.04 | 6.40 | 65.0 ± 3.0 | 68.9 | 44.1 |
-| (f) | 0 to +0.20 | 3.81 ± 2.84 | 7.04 | 69.2 ± 3.1 | 69.2 | 44.4 |
+| (a) | −0.05 to +0.05 | 10.55 | 4.56 (fitted) | 20.2 ± 0.9 | 29.7 | 18.7 (fitted) |
+| (b) | −0.10 to +0.10 | 2.71 | 4.50 | 62.3 ± 3.0 | 67.8 | 45.1 |
+| (c) | −0.10 to 0 | 10.14 | 5.49 | 20.4 ± 1.0 | 29.6 | 18.6 |
+| (d) | 0 to +0.10 | 8.34 | 5.55 | 22.5 ± 1.0 | 29.8 | 18.8 |
+| (e) | −0.20 to 0 | 3.83 | 6.40 | 65.0 ± 3.0 | 66.5 | 44.1 |
+| (f) | 0 to +0.20 | 3.85 | 7.04 | 69.2 ± 3.1 | 66.8 | 44.4 |
 
-- **Transferred inputs.** Moment errors 3.16–11.48%. Work is 12.9–52.3% above
-  the measurement in ranges (a)–(d), beyond the digitisation bound of
-  4.4–4.9%; range (e) is 6.1% above against a 4.7% bound, and range (f) is
-  within its bound (0.1%).
+The transfer columns are those of the signed capstan bound
+(`check_g8_gradual_reversal.py`); with the former bound they were 11.48, 3.16,
+11.02, 9.08, 3.98 and 3.81 % (digitisation spread ±2.03, ±0.92, ±1.16, ±1.06,
+±1.04 and ±2.84 points) and 30.8, 70.4, 30.6, 30.8, 68.9 and 69.2 J/m. The
+identified columns are those of the companion article (former bound).
+
+- **Transferred inputs.** Moment errors 2.71–10.55%. Work is 32.0–47.2% above
+  the measurement in ranges (a), (c) and (d), beyond the digitisation bound of
+  4.4–4.9%; range (b) is 8.8% above, inside the 10 % target; range (e) is
+  2.2% above (bound 4.7 %) and range (f) 3.6% below, both within their
+  digitisation bounds.
 - **Identified state.** Pressure and support-rigidity multipliers (0.666 and
   0.288) fitted to range (a) only. Withheld moment errors 4.50–7.04%; withheld
-  work 8.9–35.9% below the measurement.
+  work 8.9–35.9% below the measurement (former bound).
 - **Identifiability.** Re-identifying at friction 0.1–0.3 gives fit errors of
   4.555–4.566% with the product of friction and clamping constant within 4%.
   The loops constrain the frictional resistance, not friction and clamping
@@ -195,7 +222,7 @@ Scorecard gate:
 
 | ID | Class | Target | Result | Status |
 | --- | --- | --- | --- | --- |
-| BM1-loop | M | Range (b), transferred inputs: ordered RMSE < 5%; matched work within 10% | RMSE 3.16%; work 70.4 vs 62.3 J/m, +12.9% | FAIL |
+| BM1-loop | M | Range (b), transferred inputs: ordered RMSE < 5%; matched work within 10% | RMSE 2.71%; work 67.8 vs 62.3 J/m, +8.8% (former bound: 3.16 %, 70.4 J/m, +12.9 %, FAIL) | PASS |
 
 Since gap T1 the row is computed through the test's four-point arrangement
 (moment `Fa L1`, curvature from a parabola through three LVDTs between the
@@ -203,11 +230,13 @@ actuators); the result is identical, because the measured curvature lies in
 the uniform-moment zone. The uniform-curvature calculation is kept as
 `BM1-loop-uniform`. The 10% work target is retained and pinned by
 `tests/test_validation_report.py`.
-Gap G8 tested whether a gradual stick-to-slip transition explains the
-excess: the progressive (continuity) law lowers it to +12.1% and no other
-mechanism at its physical magnitude does more (section on gap G8 below).
-The 12.9% refers to the transferred-input calculation, in which the model
-over-predicts the work; it is not the identified-state result.
+With the former symmetric capstan bound the row failed (+12.9 %); the signed
+bound lowers the full-slip loop work by 3.7 % at this cable's `λ` (0.069),
+which brings it inside the target. Gap G8 had tested whether a gradual
+stick-to-slip transition explains the excess: the progressive (continuity)
+law lowers it further, to +8.2% (section on gap G8 below). The 8.8% refers to
+the transferred-input calculation, in which the model over-predicts the work;
+it is not the identified-state result.
 
 ### Armour longitudinal displacement
 
@@ -236,24 +265,28 @@ every station (next section).
 power cores and of resolved internal wire rings
 (`cablexsec/mechanics/core_friction.py`). Verification gate CF (Tier 1 table
 above; `tests/test_core_friction.py`): the full-slip core moment equals
-`(2/π) n q r² cos²β/sin²β [(a e^(aπ/2) + 1)/(1 + a²) − 1]`, `a = μ sin β`,
-within 1.1e-4; μ = 0 returns the armour-only loop bitwise; large friction with
-a rigid contact gives `compute_stiffness().ei_max_Nm2` (2.6e-15).
+`(2/π) n q r² cos²β/sin²β · a cosh(aπ/2)/(1 + a²)`, `a = μ sin β`, within
+1.0e-4 (after a reversal the cores of one side sit at the signed lower bound
+`−σ0 (1 − e^(−aψ))` and the others at `σ0 (e^(aψ) − 1)`, so the integrand is
+`sinh(aψ) sin ψ`; the former symmetric bound gave
+`[(a e^(aπ/2) + 1)/(1 + a²) − 1]`); μ = 0 returns the armour-only loop
+bitwise; large friction with a rigid contact gives
+`compute_stiffness().ei_max_Nm2` (4.4e-16).
 
 Published comparisons (`validation/scripts/check_core_friction.py`). Targets were
 registered before the runs; nothing was refitted.
 
 | Case | Class | Target | Armour only | With core friction | Status |
 | --- | --- | --- | --- | --- | --- |
-| Janocha (2024) 66 kV, 50 kN, Fig. 6 loop half-height at κ = 0 | MM | about 1.0 kN·m ± 30 % | 0.083 kN·m (solved) | 0.187 kN·m (μ 0.46, Table 2) | FAIL |
+| Janocha (2024) 66 kV, 50 kN, Fig. 6 loop half-height at κ = 0 | MM | about 1.0 kN·m ± 30 % | 0.081 kN·m (solved) | 0.181 kN·m (μ 0.46, Table 2) | FAIL |
 | Same, slipping slope; IEA Wind Task 49 Table 13 | MM | 42.47 kN·m² ± 15 % (Fig. 6 about 29) | 21.0 kN·m² | 21.0 kN·m² | FAIL |
-| Same, Fig. 12b moment at 0.01 1/m, 10 / 100 / 200 kN | MM | about 5.8 / 9.5 / 12.5 kN·m ± 30 % | 0.23 / 0.37 / 0.54 kN·m | 0.25 / 0.58 / 0.96 kN·m | FAIL |
-| Ménard (2023) range (b), transferred inputs, core μ 0.2 as in the source FE | M | RMSE < 5 %; work within 10 % (BM1-loop) | 3.16 %; +12.9 % | 4.49 %; +23.0 % | FAIL |
-| Ménard (2023) ranges (a), (c)–(f), work | M | — | +52.3, +49.8, +36.6, +6.0, +0.0 % | +64.5, +61.7, +47.5, +15.5, +9.0 % | (worse) |
+| Same, Fig. 12b moment at 0.01 1/m, 10 / 100 / 200 kN | MM | about 5.8 / 9.5 / 12.5 kN·m ± 30 % | 0.23 / 0.37 / 0.53 kN·m | 0.25 / 0.57 / 0.93 kN·m | FAIL |
+| Ménard (2023) range (b), transferred inputs, core μ 0.2 as in the source FE | M | RMSE < 5 %; work within 10 % (BM1-loop) | 2.71 %; +8.8 % | 3.88 %; +18.9 % | FAIL with the cores |
+| Ménard (2023) ranges (a), (c)–(f), work | M | — | +47.2, +44.7, +32.0, +2.2, −3.6 % | +59.2, +56.5, +42.7, +11.6, +5.3 % | (worse) |
 
 - **Janocha.** The source's Fig. 12b knee at 10 kN (5.8 kN·m) exceeds its own
   Fig. 6 half-height at 50 kN (about 1 kN·m); tension-induced Coulomb contact
-  cannot give both. A 1.0 kN·m half-height would need about 107 kN/m of
+  cannot give both. A 1.0 kN·m half-height would need about 112 kN/m of
   normal load per core, against 12.2 kN/m in the solved state. Friction does
   not raise the full-slip slope; the slope gap lies in component bending
   ([template_66kv.md](template_66kv.md) Section 4.1).
@@ -266,10 +299,11 @@ registered before the runs; nothing was refitted.
   --core-lay-stage` evaluates every bending law of a cable with laid cores
   with the stage of the Section properties analysis (core friction 0.2, core
   insulation shear, no internal ring slip) and writes nothing. Rows that
-  move: BM1-loop and BM1-loop-uniform ordered RMSE 3.16 % to 4.49 %, work
-  +12.9 % to +23.0 % (FAIL before and after); CF reads FAIL only because its
-  armour-only reference is switched as well. No other row moves. The stage
-  stays off by default.
+  move: BM1-loop and BM1-loop-uniform ordered RMSE 2.71 % to 3.88 %, work
+  +8.8 % to +18.9 % (PASS to FAIL; with the former capstan bound 3.16 % to
+  4.49 % and +12.9 % to +23.0 %, FAIL before and after); CF reads FAIL only
+  because its armour-only reference is switched as well. No other row moves.
+  The stage stays off by default.
 - **Su et al. (2026).** No bending loop is published for the 35 kV cable
   (axial and torsional results only); not compared.
 
@@ -727,16 +761,19 @@ tests `tests/test_witz1996_benchmark.py`.
 | --- | --- | --- | --- | --- | --- |
 | WITZ-EI | M | Full-slip EI_min, 0 bar (parameter-free) | [913, 1309] N·m² (gradients 1014 and 1190 ± 10%) | 1007 N·m² (−0.7% / −15.4%) | PASS |
 | — | M | Full-slip EI_min, 300 bar | [653, 986] N·m² (725 and 896 ± 10%) | 1007 N·m² | FAIL (EI_min has no pressure or temperature dependence; Witz attributes the measured fall to heating during pressurisation, which was not recorded) |
-| WITZ-ID, identification | M | Loop width at κ = 0, 0 bar | identified | p₀ = 1.037 MPa at μ = 0.10 (bounded chain); 552.7 N·m | IDENTIFIED |
+| WITZ-ID, identification | M | Loop width at κ = 0, 0 bar | identified | p₀ = 1.071 MPa at μ = 0.10 (bounded chain; 1.037 MPa with the former capstan bound); 552.7 N·m | IDENTIFIED |
 | — | M | 0-bar loop energy (withheld, correlated with the width) | ±15% of 1118 J/m | 1114 J/m (−0.3%) | PASS |
 | — | M | 0-bar mean peak moment | ±10% of 1482 N·m | 1301 N·m (−12.2%) | FAIL |
-| WITZ-ID | M | 300-bar loop width at κ = 0, predicted | [1692, 2489] N·m (measured [1990, 2164] ± 15%) | 1383 N·m (−30.5% / −36.1%) | FAIL |
-| WITZ-ID | M | 300-bar loop energy, predicted | ±15% of 3125 J/m | 2732 J/m (−12.6%) | PASS |
+| WITZ-ID | M | 300-bar loop width at κ = 0, predicted | [1692, 2489] N·m (measured [1990, 2164] ± 15%) | 1356 N·m (−31.8% / −37.3%; former bound 1383) | FAIL |
+| WITZ-ID | M | 300-bar loop energy, predicted | ±15% of 3125 J/m | 2682 J/m (−14.2%; former bound 2732, −12.6%) | PASS |
 | — | M | 300-bar mean peak moment, predicted | ±10% of 2043 N·m | 1712 N·m (−16.2%) | FAIL |
 | — | M | 300-bar reversal secants; branch-shape RMS | [11538, 17566] N·m²; ≤ 10% of peak-to-peak | 14865 / 14571 N·m²; 6.6% | PASS |
 
 The WITZ-ID gate requires both the width and the energy; it fails on the
-width. The ISSC model-to-model rows (Witz Tables 3–7) are not tabulated here:
+width. The peak, secant and branch-shape rows above and the studies below were
+computed with the former capstan bound and its identified 1.037 MPa.
+
+The ISSC model-to-model rows (Witz Tables 3–7) are not tabulated here:
 the fixed-radius section matrix reproduces the simple-model
 rows within 0.5% and lies above the participants' axial and torsional means,
 which allowed radial compliance.
@@ -830,12 +867,12 @@ Mechanisms, each at its own computed magnitude:
 
 | Mechanism | How the magnitude is fixed | Witz 300 bar: width, energy, E/W | Ménard (b) work; (a) work | Hu loop area (three-point) |
 | --- | --- | --- | --- | --- |
-| Current law | — | 1383 N·m, 2732 J/m, 1.976 | +12.9%; +52.3% | +64.6% |
+| Current law | — | 1356 N·m, 2682 J/m, 1.977 (former bound 1383, 2732, 1.976) | +8.8%; +47.2% (former +12.9%; +52.3%) | +64.6% |
 | (i) Slip-onset spread over azimuth and layer (Papailiou cap; two armour layers) | in the current law for armour | — | — | — |
 | (i) Same for the conductor: Papailiou cap instead of the Karlsen-Husøy amplitude | same quarter-pitch capacity | n/a | n/a | +36.9% (uniform curvature +4.9%) |
-| (i) Friction continuity across the slip boundary (progressive law, continuity density) | parameter-free | 1383, 2720, 1.967 | +12.1%; +49.9% | n/a |
-| (ii) Shear lag along the helix (distributed law) | package interface stiffness | 1380, 2713 (phase 2.3) | +12.0%; +49.9% | n/a |
-| (iii) Iwan density of contact pressure or friction (uniform, spread h) | no published density; h = 0.5 and 0.9 as sensitivity | 1383, 2726 / 2714, 1.972 / 1.963 | +12.5% (h 0.5) | ±0.1 point |
+| (i) Friction continuity across the slip boundary (progressive law, continuity density) | parameter-free | 1357, 2671, 1.969 (former 1383, 2720, 1.967) | +8.2%; +45.2% (former +12.1%; +49.9%) | n/a |
+| (ii) Shear lag along the helix (distributed law) | package interface stiffness | 1380, 2713 (phase 2.3; former bound) | +12.0%; +49.9% (former bound) | n/a |
+| (iii) Iwan density of contact pressure or friction (uniform, spread h) | no published density; h = 0.5 and 0.9 as sensitivity | 1383, 2726 / 2714, 1.972 / 1.963 (former bound) | +12.5% (h 0.5; former bound) | ±0.1 point |
 | (iii) Three-core contact shape (package helper) | ring on Winkler foundation | n/a | not available: the Ménard section has an inner sheath and no filler | n/a |
 | (iv) Interface compliance: ξ × 0.25 to ξ = 1 (Witz phase 2.3); Mindlin trellis compliance (conductor, ξ 0.54–0.56 for rings 2–4) | Yun ξ; Hertz–Mindlin crossings | 0.0% width | — | −2.4 points |
 | (v) Test arrangement: curvature varying along the specimen (added) | Hu: three-point bend, span 440 mm, κ = 12 w/L²; Ménard: four-point, uniform moment; Witz: not reported | n/a | none | transition share 1.7% → 35.6% (measured 33.8%) |
@@ -844,22 +881,24 @@ Gates (registered):
 
 | ID | Quantity | Target | Before | After (progressive law; conductor with Papailiou cap) | Status |
 | --- | --- | --- | --- | --- | --- |
-| G8-W1 | Witz 300-bar width, predicted | [1692, 2489] N·m | 1383 | 1383 | FAIL |
-| G8-W2 | Witz 300-bar energy, predicted | 3125 J/m ± 15% | 2732 (−12.6%) | 2720 (−13.0%) | PASS |
-| G8-W3 | Witz 300-bar energy/width | [1.41, 1.73] 1/m | 1.976 | 1.967 | FAIL |
-| G8-W4 | Witz secants (W10), 0-bar energy (W4) | unchanged bands | PASS | PASS (14570/14299 N·m²; 1113 J/m) | PASS |
+| G8-W1 | Witz 300-bar width, predicted | [1692, 2489] N·m | 1356 | 1357 | FAIL |
+| G8-W2 | Witz 300-bar energy, predicted | 3125 J/m ± 15% | 2682 (−14.2%) | 2671 (−14.5%) | PASS |
+| G8-W3 | Witz 300-bar energy/width | [1.41, 1.73] 1/m | 1.977 | 1.969 | FAIL |
+| G8-W4 | Witz secants (W10), 0-bar energy (W4) | unchanged bands | PASS | PASS (14570/14299 N·m²; 1113 J/m; former bound) | PASS |
 | G8-H1 | Hu loop area, three-point reduction | 3.185 N·m/m ± 15% | 5.241 (+64.6%) | 4.359 (+36.9%) | FAIL |
 | G8-H2 | Hu transition share, three-point reduction | 34% ± 10 points | 35.6% | 32.1% | PASS (from the test arrangement) |
-| G8-M | Ménard BM1-loop, range (b) | RMSE < 5%, work within 10%; not worse | 3.16%, +12.9% | 2.94%, +12.1% | FAIL (not worse) |
+| G8-M | Ménard BM1-loop, range (b) | RMSE < 5%, work within 10%; not worse | 2.71%, +8.8% | 2.52%, +8.2% | PASS (former bound: 3.16%, +12.9% and 2.94%, +12.1%, FAIL) |
 | G8-L1–L3 | zero spread bitwise; dissipation ≥ 0; rotation equivariance | exact; ≥ 0; < 1e-12 | — | bitwise; ≥ 0; 9e-15 | PASS |
 
-**BM1-loop.** It fails because, with the source's calibration transferred
-(μ 0.2, 0.3 MPa), the model loop is a near-parallelogram whose friction
-moment is mobilised within about 0.012 1/m of each reversal, while the
-measured moment is mobilised over 0.02–0.05 1/m: the work excess falls with
-amplitude (+52.3% at ±0.05 1/m, +12.9% at ±0.10, +6.0% and 0.0% at
-0–0.2 1/m). The progressive law removes 0.8 points; no mechanism tested
-closes it, so BM1-loop stays an expected failure.
+**BM1-loop.** With the source's calibration transferred (μ 0.2, 0.3 MPa),
+the model loop is a near-parallelogram whose friction moment is mobilised
+within about 0.012 1/m of each reversal, while the measured moment is
+mobilised over 0.02–0.05 1/m: the work excess falls with amplitude (+47.2% at
+±0.05 1/m, +8.8% at ±0.10, +2.2% and −3.6% at 0–0.2 1/m). With the former
+symmetric capstan bound the row failed (+12.9 %) and no mechanism tested
+closed it; the signed bound brings it inside the 10 % target, and the
+progressive law removes a further 0.6 points. The small-amplitude ranges (a),
+(c) and (d) keep their large excess.
 
 **Witz.** Diagnosis only (two numbers solved from two targets, not adopted):
 one added Jenkins population with stick stiffness 623 N·m² and capacity
@@ -942,12 +981,12 @@ as shape).
 
 | ID | Class | Quantity | Target | Result | Status |
 | --- | --- | --- | --- | --- | --- |
-| SV11-PLANE | M | Per load case, R = mean predicted / mean measured normalised axial range at the 8 bending-plane stations (x.1 and x.5), termination-corrected | median R in [0.85, 1.18] and ≥ 12 of 14 R in [0.70, 1.43] | median 1.65 (0.45-3.65), 3 of 14 | FAIL |
-| — | M | Same, sectional (reported beside the gate) | as above | median 1.03 (0.45-2.28), 11 of 14 | reported |
-| SV11-GJ | M | LC 14, ±8°: mean predicted / mean measured absolute range at 2.1, 2.5, 3.1, 3.5, termination-corrected | [0.72, 1.38] | 1.90 (477, 262, 299, 94 against 186, 146, 187, 78 MPa) | FAIL |
-| — | M | Same, sectional | as above | 1.32 | reported |
+| SV11-PLANE | M | Per load case, R = mean predicted / mean measured normalised axial range at the 8 bending-plane stations (x.1 and x.5), termination-corrected | median R in [0.85, 1.18] and ≥ 12 of 14 R in [0.70, 1.43] | median 1.62 (0.45-3.59), 3 of 14 (former capstan bound 1.65) | FAIL |
+| — | M | Same, sectional (reported beside the gate) | as above | median 1.00 (0.45-2.17), 11 of 14 (former 1.03) | reported |
+| SV11-GJ | M | LC 14, ±8°: mean predicted / mean measured absolute range at 2.1, 2.5, 3.1, 3.5, termination-corrected | [0.72, 1.38] | 1.80 (455, 249, 282, 88 against 186, 146, 187, 78 MPa; former 1.90) | FAIL |
+| — | M | Same, sectional | as above | 1.24 (former 1.32) | reported |
 | — | M | Static stress at LC 14 against the value implied by Gjøsteen absolute / Sævik normalised ranges (281, 238, 341, 278 MPa) | none | 271 against 285 MPa (−5%) | INFO |
-| — | M | μ identified on LC 14 (termination R = 1), other cases predicted | as SV11-PLANE | μ = 0.091; median 1.16, 8 of 14 | reported (identified) |
+| — | M | μ identified on LC 14 (termination R = 1), other cases predicted | as SV11-PLANE | μ = 0.091; median 1.16, 8 of 14 (former capstan bound; not re-run) | reported (identified) |
 
 The band of the gate follows from the data: the coincident bending-plane
 pairs 1.5/2.1, 2.5/3.1 and 3.5/4.1 should read the same under a symmetric
@@ -955,18 +994,20 @@ cycle, and they differ by an RMS of 0.45 in ln (one sensor ≈ 0.32), so an
 8-station mean scatters by about 0.11 in ln.
 
 Per load case (R termination / sectional): 0.5° 0.45/0.45; 1° 0.54/0.54;
-1.5° 0.73/0.73; 2° 0.97/0.97; 4° (250 kN, 17 MPa) 3.65/2.28; 4° 1.60/1.32;
-7.5° 2.18/1.14; 8° 2.28/1.17; 15° 1.76/1.09 (500 kN), 1.84/1.17 (250 kN),
-1.42/0.91 (750 kN), 2.46/1.39 (17 MPa); 24° 1.70/0.89; 32° 1.59/0.79.
-Station-wise RMS of ln(pred/meas): 0.73 (termination), 0.50 (sectional),
-against 0.32 for one sensor.
+1.5° 0.73/0.73; 2° 0.98/0.98; 4° (250 kN, 17 MPa) 3.59/2.17; 4° 1.57/1.26;
+7.5° 2.15/1.09; 8° 2.25/1.11; 15° 1.70/1.03 (500 kN), 1.77/1.11 (250 kN),
+1.38/0.87 (750 kN), 2.38/1.32 (17 MPa); 24° 1.66/0.84; 32° 1.56/0.74.
+Station-wise RMS of ln(pred/meas): 0.72 (termination), 0.49 (sectional),
+against 0.32 for one sensor. The signed capstan bound lowers the slipping
+cases by 3–5 % (sectional LC 4 2.28 to 2.17, LC 14 1.09 to 1.03, LC 19 1.39
+to 1.32) and leaves the stick cases (0.5–2°) unchanged.
 
 **What matches and what does not.**
 
 - *Large angles, sectional.* From 4° up the sectional prediction at the
-  bending-plane stations is 0.79-1.39 of the measurement (LC 4 aside), and
-  the mean absolute LC 14 range is 1.32 times the measured one; at 15° and
-  250, 500 and 750 kN, R is 1.17, 1.09 and 0.91. The section state also reproduces the
+  bending-plane stations is 0.74-1.32 of the measurement (LC 4 aside), and
+  the mean absolute LC 14 range is 1.24 times the measured one; at 15° and
+  250, 500 and 750 kN, R is 1.11, 1.03 and 0.87. The section state also reproduces the
   normalising static stress within 5%. This holds at a declared μ; with the
   full-slip friction stress proportional to μ (P1+P2), it tests μ (P1+P2),
   not μ alone.
@@ -1048,8 +1089,8 @@ displacement, the test's moment formula and its curvature definition).
 | Hu, Papailiou cap | same | loop area | 3.185 | 3.340 (+4.9%) | 4.354 (+36.7%) | FAIL |
 | same | same | transition share | 33.8% | 1.7% | 32.8% (24, 48 and 96 stations) | PASS |
 | same | same | maximum moment | 8.18 | 7.07 (−13.6%) | 8.11 (−0.9%) | reported |
-| Ménard and Cartraud (2023), ranges (a)–(f), transferred inputs | four-point, 2.5 m bench, actuators at the quarter points, ends pivot and slide; M = Fa L1; curvature from a parabola through three LVDTs between the actuators (Sec. 3) | ordered RMSE; work error | — | 11.48/3.16/11.02/9.08/3.98/3.81%; +52.3/+12.9/+49.8/+36.6/+6.0/+0.0% | identical (largest moment difference 3e-8 N·m) | BM1-loop FAIL (unchanged) |
-| Witz (1996), WITZ-ID | not documented (p. 888: "No detailed information was supplied on the test equipment or procedures") | 300-bar width; energy; energy/width | [1990, 2164] N·m; 3125 J/m; 1.57 1/m | 1383 N·m; 2732 J/m; 1.976 1/m | basis unchanged; three-point reading of both loops as a sensitivity (p₀ re-identified on the 0-bar width: 0.715 MPa): width 1621 N·m (−18.6% / −25.1%), energy 3057 J/m (−2.2%), energy/width 1.886 1/m; 0-bar energy 1072 J/m (−4.1%) | FAIL (unchanged) |
+| Ménard and Cartraud (2023), ranges (a)–(f), transferred inputs | four-point, 2.5 m bench, actuators at the quarter points, ends pivot and slide; M = Fa L1; curvature from a parabola through three LVDTs between the actuators (Sec. 3) | ordered RMSE; work error | — | 10.55/2.71/10.14/8.34/3.83/3.85%; +47.2/+8.8/+44.7/+32.0/+2.2/−3.6% | identical (largest moment difference 3e-8 N·m) | BM1-loop PASS (unchanged by the arrangement; FAIL with the former capstan bound) |
+| Witz (1996), WITZ-ID | not documented (p. 888: "No detailed information was supplied on the test equipment or procedures") | 300-bar width; energy; energy/width | [1990, 2164] N·m; 3125 J/m; 1.57 1/m | 1356 N·m; 2682 J/m; 1.977 1/m | basis unchanged; three-point reading of both loops as a sensitivity (p₀ re-identified on the 0-bar width: 0.739 MPa): width 1589 N·m (−20.2% / −26.6%), energy 2998 J/m (−4.1%), energy/width 1.886 1/m; 0-bar energy 1072 J/m (−4.1%) (former capstan bound: 0.715 MPa, 1621 N·m, 3057 J/m) | FAIL (unchanged) |
 | Zeidan (2025/2026), Komperød (2017) | — | — | — | not in the package (no published construction or not yet registered) | — | — |
 
 The Ménard positions of the three LVDTs are not reported; quarter points of
@@ -1075,7 +1116,7 @@ Witz sensitivity needs no assumed dimension.
   (+4.9%) compared a different quantity; in the test's terms the section's
   friction work is 37% too large (64% with the Karlsen-Husøy amplitude).
 - **Ménard.** The measured curvature lies in the uniform-moment zone, so the
-  arrangement changes nothing; BM1-loop (+12.9%) and the excess work of ranges
+  arrangement changes nothing; BM1-loop (+8.8%) and the excess work of ranges
   (a)–(d) remain, with the transition mobilised within about 0.012 1/m of a
   reversal against 0.02–0.05 1/m measured (gap G8).
 - **Witz.** The source does not document its arrangement, so the
@@ -1135,6 +1176,11 @@ taken from the backbone beam at every angle sample of the symmetric cycle
 (the bellmouth wrap grows with the angle: non-proportional). All 55
 inner-armour wires are solved between the two end fittings (anchored);
 station range at the station azimuth, normalised by the static stress.
+
+Values in this subsection and in the two-way study below were computed with
+the former symmetric capstan bound (no reproduction script for them is in the
+repository); the scorecard SV11 rows now read 1.62 (termination) and 1.00
+(sectional).
 
 | ID | Class | Quantity | Target | Along-wire (spring, capstan) | Before | Status |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -1201,7 +1247,9 @@ route is the two-way coupling of the global model
 
 **Short specimens** (arrangements, protocols and reductions of T1; the wire
 end conditions are not reported, so each row is a sensitivity over the end
-conditions, none is a basis).
+conditions, none is a basis). The Ménard and Witz rows were computed with the
+former capstan bound; the Hu rows (conductor operator, no capstan term) are
+unchanged.
 
 | ID | Class | Benchmark and quantity | Target | Sectional reference | Along-wire (end-condition set) | Status |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -1212,14 +1260,15 @@ conditions, none is a basis).
 | T2-MEN | M | same, ordered RMSE | — | 11.48/3.16/11.02/9.08/3.98/3.81% | 11.98/3.13/11.46/9.52/4.33/4.47% | reported |
 | T2-WITZ | M | Witz (1996) WITZ-ID, four-point sensitivity, wires anchored at the supports, p₀ = 1.037 MPa not re-identified: 300-bar width; energy; energy/width; 0-bar width | [1692, 2489] N·m; 3125 ± 15% J/m; [1.41, 1.73] 1/m; 552.7 N·m (identified) | 1383; 2732; 1.976; 552.6 | span 2P: 1657; 3212; 1.939; 668 (+21%). Span 4P: 1248; 2572; 2.060; 552.5 | FAIL (unchanged) |
 
-The scorecard BM1-loop work (+12.9%) integrates the section's energy
-fields; the along-wire run has no exact station energy field, so all rows
-above use the trapezoid of the reported M dκ between inserted crossings,
-in which the direction-tied law reads +12.2%. In that quadrature the
-along-wire range (b) is +9.1–9.2% (RMSE 3.13%), 0.8 points inside the 10%
-target; the scorecard row is not changed (decision rule: no change of a
-basis from a sensitivity, and the same mechanism moves ranges (a), (c) and
-(d) further from the measurement).
+The scorecard BM1-loop work (+12.9% with the former capstan bound, +8.8%
+now) integrates the section's energy fields; the along-wire run has no exact
+station energy field, so all rows above use the trapezoid of the reported
+M dκ between inserted crossings, in which the direction-tied law read +12.2%.
+In that quadrature the along-wire range (b) was +9.1–9.2% (RMSE 3.13%), 0.8
+points inside the 10% target; the scorecard row was not changed by it
+(decision rule: no change of a basis from a sensitivity, and the same
+mechanism moves ranges (a), (c) and (d) further from the measurement). The
+scorecard row now passes on its own basis, through the signed capstan bound.
 
 **Reading.**
 
@@ -1238,7 +1287,11 @@ basis from a sensitivity, and the same mechanism moves ranges (a), (c) and
 - **Stick stiffness.** In slip the spring and rigid conventions carry the
   full geometric slip demand and agree within 5%; the `scaled` convention
   reduces the demand by ξ = 0.52 and the over-prediction to about 2. The
-  capstan term adds 9–11%. The proportional-loading assumption of the clamp
+  capstan term added 9–11% in the former symmetric form, which raised the
+  bound of a falling force as well as of a rising one; with the signed term
+  its share of a full reversal range is of third order in `λ`
+  (`2 σ0 sinh(λψ)` against `2 σ0 λψ`), so that figure overstates it. It has
+  not been re-measured. The proportional-loading assumption of the clamp
   correction under-states the along-wire effect at this rig by 20–50%.
 - **Short specimens: the end conditions do not matter, the gradient does.**
   Hu and Ménard are insensitive to the wire end condition and to overhangs
@@ -1326,7 +1379,7 @@ screen or sheath fatigue test with locations is held.
 | P6-C | A | Masing branches: doubled curve, closed-loop memory, return to the cyclic curve | 1e-12 | PASS | PASS |
 | P6-D | A | Concentric sheath strain-life route: strain amplitude `SCF f_corr κ r`, damage `n / N_f`; elastic route unchanged and strict | 1e-6 | PASS | PASS |
 | P6-E | I | Thies (2016) laminate, free core, nominal assumed foil inputs: damage per cycle against the hand `κ r` calculation | 0.2% aligned, 1% laid | +0.05% aligned (laminate hoop-strain factor), +0.7% laid (core-lay bending factor) | PASS |
-| P1-T | I | Thies (2016) screen, free core, aligned: range, slip, bulk damage and fretting count of the hand core-level calculation | 1% | 254 MPa, 822 µm, 7.2e-6 per cycle, fretting 43 on 4 wires | PASS |
+| P1-T | I | Thies (2016) screen, free core, aligned: range, slip, bulk damage and fretting count of the hand core-level calculation (former capstan bound), corrected for the signed bound in full slip: range less `2σ0 (cosh(λπ/2) − 1)` (6.07 MPa), damage by the range ratio to the curve slope | 1% | 248 MPa, 822 µm, 6.2e-6 per cycle, fretting 37 on 4 wires | PASS |
 
 Published strain-life points (`ε_a`, `N_f`) of a sheath, foil or screen
 material are not in the reference library, so the registered constants are
@@ -1359,11 +1412,11 @@ damage summed over the four blocks:
 
 | Quantity | Lock from MBR 2.54 m | 4.75° per joint (4.34 m) | Constant-radius models (Part A) |
 | --- | --- | --- | --- |
-| Smallest radius 28/14/14/7° [m] (video 2.0/3.5/3.5/7.0) | 1.80/2.22/1.83/4.08 | 3.33/3.45/3.39/4.08 (reverse 2.01 m at the tailstock, 28°) | 2.54 or 2.0/3.5/7.0 |
+| Smallest radius 28/14/14/7° [m] (video 2.0/3.5/3.5/7.0) | 1.79/2.21/1.82/4.05 | 3.32/3.43/3.37/4.05 (reverse 2.00 m at the tailstock, 28°) | 2.54 or 2.0/3.5/7.0 |
 | Locked elements at 28° (length) | 3 (1.08 m) | 7 (2.52 m) | – |
 | Al laminate D at x = 0.05/0.6/1.2/2.0 m | 49/6.1/0.56/0.002 | 20/11/1.3/0.24 | 49/33/0.74/0 (lock 2.54) |
 | Cu tape D, stuck, 50°, 20 mm (assumed) | 0.11 at 0.05 m | 0.013 at 0.05 m | not run |
-| Screen wires D at 0.05 m: elastic S–N / strain life | 0.55 / 0.11 | 0.45 / 0.097 | 0.55 / – |
+| Screen wires D at 0.05 m: elastic S–N / strain life | 0.47 / 0.10 | 0.38 / 0.092 | 0.47 / – |
 | Armour at the clamp (OC2017 in-air design curve): peak range, D at 0.02 m | 635 MPa, 7.5 | 416 MPa, 0.75 | 318–642 MPa, 11–13 (lock 2.54, anchored) |
 
 The restrictor kinematics reduce the armour damage at the clamp of the
@@ -1405,12 +1458,17 @@ in [0.72, 1.38]); entries are median R, count in band, GJ ratio:
 
 | Model | Round (record) | Rectangle | Rectangle + lateral relief |
 | --- | --- | --- | --- |
-| Sectional, direction-tied | 1.03, 11, 1.32 | 1.09, 11, 1.32 | - |
+| Sectional, direction-tied | 1.00, 11, 1.24 | 1.06, 11, 1.25 | - |
 | Sectional, distributed | 1.03, 11, 1.31 | 1.08, 11, 1.31 | 1.08, 11, 1.30 |
-| Clamp correction (clamp solver) | 1.65, 3, 1.90 | 1.76, 2, 1.94 | - |
+| Clamp correction (clamp solver) | 1.62, 3, 1.80 | 1.72, 2, 1.85 | - |
 | Clamp convention, along-wire termination | 1.63, 3, 1.74 | 1.73, 2, 1.80 | 1.72, 3, 1.77 |
 | Along-wire, spring stick and capstan (T2 basis) | 3.36, 2, 4.62 | 3.40, 2, 4.68 | 3.37, 2, 4.68 |
 | 0.5/1/1.5° ranges | 0.45/0.54/0.73 | 0.50/0.59/0.80 | 0.50/0.59/0.81 |
+
+The direction-tied sectional and clamp-correction rows are regenerated with the
+signed capstan bound (`check_saevik2011.py`, `--tendons rectangular`; former
+values 1.03, 11, 1.32 / 1.09, 11, 1.32 and 1.65, 3, 1.90 / 1.76, 2, 1.94); the
+other rows were computed with the former bound.
 
 All rectangle variants FAIL SV11-PLANE; SV11-GJ passes for the sectional
 variants only. The registered hypothesis that lateral/transverse relief near

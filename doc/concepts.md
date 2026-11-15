@@ -70,22 +70,28 @@ direction `φ_b`, and `k = ξ E cos² α` the stick stiffness of a wire of modul
 `E` and lay angle `α`.
 
 Friction has to carry that stress along the wire, and friction is capped
-(Papailiou 1997). The cap is proportional to the {term}`contact pressure` and to
-`expm1(μ |sin α| ψ)`, with `μ` the friction coefficient and `ψ = asin c`. It
-is zero on the {term}`neutral axis` of bending and largest on the extreme fibres.
-As the curvature grows:
+(Papailiou 1997). The cap is proportional to the {term}`contact pressure`,
+through the friction-setting stress `σ0`, and changes along the curved wire
+with the wire's own force (the capstan term), with `λ = μ |sin α|`, `μ` the
+friction coefficient and `ψ = asin c`. A rising wire
+stress presses the wire harder onto its bed, so it is capped at
+`σ0 expm1(λψ)`; a falling one unloads the bed, so it can fall only to
+`−σ0 (1 − exp(−λψ))` (Papailiou's Eq. 14 with the signed helix angle). Both
+are zero on the {term}`neutral axis` of bending and largest on the extreme
+fibres, and a full reversal spans `2 σ0 sinh(λψ)`. As the curvature grows:
 
 1. Below the slip-onset curvature `κ_on` every wire sticks and the section
    bends with the no-slip stiffness.
 2. At `κ_on` the wires next to the neutral axis reach their cap and start to
-   slip. `κ_on` is proportional to the friction coefficient and the contact
+   slip (on the compression side slightly earlier, at `(1 − 3λ²/8) κ_on`).
+   `κ_on` is proportional to the friction coefficient and the contact
    pressure.
 3. The slip front spreads from the neutral axis towards the extreme fibres. A
    slipping wire keeps the friction stress of its cap (Coulomb saturation) and
    from then on adds only its own bending stiffness.
-4. When the wire on the extreme fibre slips, at
-   `κ_on expm1(μ |sin α| π/2) / (μ |sin α|)`, the whole layer is in full slip
-   and the moment rises with the full-slip stiffness.
+4. When the wire on the tension-side extreme fibre slips, at
+   `κ_on expm1(λ π/2) / λ`, the whole layer is in full slip and the moment
+   rises with the full-slip stiffness.
 
 On a reversal the wires stick again, and slip in the opposite sense once the
 change of curvature is large enough. The moment–curvature path is therefore a

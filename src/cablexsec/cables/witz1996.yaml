@@ -36,7 +36,7 @@ cable:
   source_document: "Witz, Marine Structures 9 (1996) 885-904, Table 2; Ramos and Pesce, JOMAE 126 (2004) 141-146, Table 3"
 
 initial_state:
-  external_pressure_Pa: 1037264.0
+  external_pressure_Pa: 1071328.0
   identification: identified
   source: "Identified on [Witz1996] Fig. 5 loop width at zero curvature (552.7 N m), mu = 0.10, bounded chain; scripts/run_validation.py WITZ-ID"
 

@@ -14,10 +14,29 @@ Per [Papailiou1997], a wire at helix angle ``phi`` (Fig. 1, ``phi`` in
 
 * stick (parallel-axis) stiffness, Eq. 20:
   ``EJ_stick(phi) = E A (r sin phi)^2 cos^3(beta)``
-* slip (frozen friction) stress, Eq. 14:
-  ``sigma_slip(phi) = sigma_0 (exp(mu sin(beta) |phi|) - 1)``
+* slip (frozen friction) stress, Eq. 14, signed helix angle:
+  ``sigma_slip(phi) = sigma_0 (exp(mu sin(beta) phi) - 1)``
 * critical curvature, Eq. 15:
-  ``kappa_c(phi) = sigma_0 (exp(mu sin(beta)|phi|) - 1) / (E r sin|phi| cos^2 beta)``
+  ``kappa_c(phi) = sigma_0 (exp(mu sin(beta) phi) - 1) / (E r sin(phi) cos^2 beta)``
+
+Eq. 11 integrates the capstan equation ``dZ = mu Z sin(beta) dphi`` (Eq. 9)
+from the neutral axis with the wire's own force ``Z`` and the signed helix
+angle: on the tension side (``phi > 0``) the force can grow to
+``Z_T exp(lam phi)``, on the compression side it can fall only to
+``Z_T exp(-lam |phi|)``, because a falling wire force also lowers the normal
+load it puts on the support (Papailiou: the slip stress increases or decreases
+``sigma_T`` "depending on the sign of the wire helix angle"). With a distance
+``psi`` from the neutral axis the admissible friction stress of a wire is
+therefore the asymmetric interval
+
+    -sigma_0 (1 - exp(-lam psi)) <= sigma <= sigma_0 (exp(lam psi) - 1),
+
+``lam = mu |sin(beta)|`` (:func:`wire_slip_stress_bounds`). The bounds belong
+to the wire, not to its side of the neutral axis: a rising stress is bounded
+by the upper value and a falling one by the lower value, wherever the wire
+lies. The full reversal range is ``2 sigma_0 sinh(lam psi)``, odd in ``lam``,
+so the capstan term changes it only at ``O(lam^3)`` relative to the linear
+Coulomb range ``2 sigma_0 lam psi``.
 
 ``sigma_0`` is the friction-setting stress. The friction-continuity balance
 uses normal line load ``q_wire`` per unit *wire-axis* length, not pressure:
@@ -47,17 +66,20 @@ assumption must be stated when comparing with experiment.
 
 Implementation
 --------------
-Each helix-angle station uses the same verified Coulomb return-mapping element
-(:func:`coulomb_return_map`), unchanged, with per-station stiffness
-``k_phi = EJ_stick(phi)`` and yield ``f_y_phi = sigma_slip(phi) A r |sin phi|
-cos(beta)``; it therefore slips exactly at ``kappa_c(phi)``. The slip front is
-encoded entirely in the ``(k_phi, f_y_phi)`` distribution. Stations are
-integrated over ``phi`` with density ``n_w / pi`` so the full-stick limit
-recovers the Witz-Tan bound ``1/2 n_w E A r^2 cos^3(beta)`` (gate A8b).
+Each helix-angle station is an elastic--Coulomb spring-slider with
+per-station stiffness ``k_phi = EJ_stick(phi)`` and the asymmetric yield
+interval of its wire (:meth:`PapailiouLayer.station_bounds`): the station
+force is the moment share ``sigma A r sin(phi) cos(beta)``, so the tension
+bound ``sigma_0 expm1(lam |phi|) A r |sin phi| cos(beta)`` limits a positive
+force for ``phi > 0`` and a negative one for ``phi < 0``. A station
+therefore slips exactly at ``kappa_c(phi)``. The slip front is encoded
+entirely in the distribution of stiffness and bounds. Stations are integrated
+over ``phi`` with density ``n_w / pi`` so the full-stick limit recovers the
+Witz-Tan bound ``1/2 n_w E A r^2 cos^3(beta)`` (gate A8b).
 
 References
 ----------
-[Papailiou1997] Eqs. (14), (15), (19)-(23).
+[Papailiou1997] Eqs. (9)-(15), (19)-(23).
 """
 
 from __future__ import annotations
@@ -71,11 +93,7 @@ from numpy.typing import NDArray
 
 from cablexsec.exceptions import CableInputError
 from cablexsec.mechanics.mkappa import HelicalLayerSpec
-from cablexsec.mechanics.return_mapping import (
-    CoulombElement,
-    _scalar_return_map,
-    coulomb_return_map,
-)
+from cablexsec.mechanics.return_mapping import CoulombElement
 
 if TYPE_CHECKING:
     from cablexsec.mechanics.progressive_friction import ProgressiveFriction
@@ -90,6 +108,7 @@ __all__ = [
     "direction_threshold_curvature",
     "full_slip_curvature",
     "slip_onset_curvature",
+    "wire_slip_stress_bounds",
     "wire_slip_stress_cap",
     "wire_slip_history",
 ]
@@ -213,6 +232,25 @@ class PapailiouLayer:
         weight = (self.n_wires / math.pi) * d_phi
         return np.asarray(k_phi), np.asarray(f_y_phi), weight
 
+    def station_bounds(self) -> tuple[FloatArray, FloatArray, FloatArray, float]:
+        """Return ``(k_phi, upper, lower, weight)``: ``-lower <= f <= upper``.
+
+        ``f_y_phi`` of :meth:`station_params` is the tension bound of the
+        station's wire in moment units; the compression bound is
+        ``f_y_phi exp(-lam |phi|)`` (``sigma_0 (1 - exp(-lam |phi|))``). The
+        station force is the moment share ``sigma A r sin(phi) cos(beta)``:
+        for ``phi > 0`` a positive force is a tensile wire stress, for
+        ``phi < 0`` a compressive one, so the two bounds swap there.
+        """
+        k_phi, f_y_phi, weight = self.station_params()
+        edges = np.linspace(-math.pi / 2, math.pi / 2, self.n_stations + 1)
+        phi = 0.5 * (edges[:-1] + edges[1:])
+        lam = self.mu * abs(math.sin(self.lay_angle_rad))
+        reduced = f_y_phi * np.exp(-lam * np.abs(phi))
+        upper = np.where(phi > 0.0, f_y_phi, reduced)
+        lower = np.where(phi > 0.0, reduced, f_y_phi)
+        return k_phi, np.asarray(upper), np.asarray(lower), weight
+
     @property
     def EI_stick(self) -> float:
         """Full-stick parallel-axis stiffness ``1/2 n E A r^2 cos^3(beta)``."""
@@ -311,6 +349,49 @@ def wire_slip_stress_cap(
     return np.asarray(sigma0 * g * np.expm1(layer.mu * sin_a * psi))
 
 
+def wire_slip_stress_bounds(
+    layer: HelicalLayerSpec,
+    phi_bend: float,
+    *,
+    contact_pressure_Pa: float | None = None,
+) -> tuple[FloatArray, FloatArray]:
+    r"""Tension and compression friction-stress bounds of every wire [Pa].
+
+    Returns ``(upper, lower)`` magnitudes with ``-lower <= sigma <= upper``:
+    ``upper = sigma0 g expm1(lam psi)`` (:func:`wire_slip_stress_cap`) and
+    ``lower = -sigma0 g expm1(-lam psi) = upper exp(-lam psi)``. The capstan
+    growth acts on the wire's own force, so a wire whose force falls also
+    loses normal load ([Papailiou1997] Eqs. 9-14 with signed ``phi``).
+    """
+    pressure = (
+        layer.contact_pressure_Pa
+        if contact_pressure_Pa is None
+        else contact_pressure_Pa
+    )
+    sin_a = abs(math.sin(layer.lay_angle_rad))
+    if pressure <= 0.0 or sin_a < 1.0e-12:
+        zero = np.zeros(layer.n_wires, dtype=np.float64)
+        return zero, zero.copy()
+    width = 2.0 * math.pi * layer.r_helix_m / layer.n_wires
+    sigma0 = (
+        layer.r_helix_m
+        * pressure
+        * width
+        * math.cos(layer.lay_angle_rad)
+        / (layer.A_wire_m2 * sin_a**2)
+    )
+    g = (
+        np.ones(layer.n_wires, dtype=np.float64)
+        if layer.shape_g is None
+        else np.asarray(layer.shape_g, dtype=np.float64)
+    )
+    cphi = np.cos(layer.phi_wires - phi_bend)
+    psi = np.arcsin(np.clip(np.abs(cphi), 0.0, 1.0))
+    upper = sigma0 * g * np.expm1(layer.mu * sin_a * psi)
+    lower = -sigma0 * g * np.expm1(-layer.mu * sin_a * psi)
+    return np.asarray(upper), np.asarray(lower)
+
+
 def slip_onset_curvature(
     layer: HelicalLayerSpec,
     *,
@@ -335,8 +416,13 @@ def slip_onset_curvature(
 
     with ``k = xi E cos^2 a`` the stick stiffness. For ``xi = 1`` this is the
     module-level small-angle onset ``mu q_wire / (E A cos^2 a sin a)``. It is a
-    lower bound for a finite wire population. Zero clamping, zero friction or
-    a vanishing shape factor gives zero.
+    lower bound for a finite wire population on the tension side. On the
+    compression side the bound ``sigma0 g (1 - exp(-lam psi))`` gives the onset
+    ``kappa_on (1 - exp(-lam psi)) / (lam sin psi)``, whose minimum
+    ``kappa_on m(lam)``, ``m = 1 - 3 lam^2 / 8 + O(lam^3)``, lies at
+    ``psi ~ 3 lam / 2`` (:func:`_compression_onset_factor`); the value returned
+    here stays the neutral-axis unit used to normalise curvature. Zero
+    clamping, zero friction or a vanishing shape factor gives zero.
     """
     pressure = (
         layer.contact_pressure_Pa
@@ -349,6 +435,32 @@ def slip_onset_curvature(
         return 0.0
     g_min = 1.0 if layer.shape_g is None else float(np.min(layer.shape_g))
     return _onset_coefficient(layer, max(g_min, 0.0)) * pressure / stiffness
+
+
+def _compression_onset_factor(lam: float) -> float:
+    """``min_psi (1 - exp(-lam psi)) / (lam sin psi)`` over ``(0, pi/2]``.
+
+    Ratio of the compression-side first-slip curvature to the neutral-axis
+    onset; 1 for ``lam -> 0``.
+    """
+    if lam <= 0.0:
+        return 1.0
+
+    def ratio(p: float) -> float:
+        return -math.expm1(-lam * p) / (lam * math.sin(p))
+
+    psi = np.linspace(1.0e-6, math.pi / 2, 4001)
+    values = -np.expm1(-lam * psi) / (lam * np.sin(psi))
+    i = int(np.argmin(values))
+    lo, hi = psi[max(i - 1, 0)], psi[min(i + 1, psi.size - 1)]
+    for _ in range(80):  # golden-section refinement of the bracketed minimum
+        a = hi - 0.6180339887498949 * (hi - lo)
+        b = lo + 0.6180339887498949 * (hi - lo)
+        if ratio(a) < ratio(b):
+            hi = b
+        else:
+            lo = a
+    return float(min(1.0, values[i], ratio(0.5 * (lo + hi))))
 
 
 def _onset_coefficient(layer: HelicalLayerSpec, g_min: float) -> float:
@@ -376,8 +488,9 @@ def full_slip_curvature(
     r"""Curvature at which the last wire of the layer starts to slip [1/m].
 
     Under planar bending of increasing magnitude from a stress-free state,
-    wire ``k`` sticks until its stick stress ``k_f r kappa c_k`` reaches its
-    cap from :func:`wire_slip_stress_cap`, with
+    wire ``k`` sticks until its stick stress ``k_f r kappa c_k`` reaches the
+    bound on its side from :func:`wire_slip_stress_bounds` (upper on the
+    tension side, lower on the compression side), with
     ``c_k = |cos(phi_k - phi_bend)|``. It slips from
 
     .. math::
@@ -387,7 +500,7 @@ def full_slip_curvature(
     and every wire is slipping from ``max_k kappa_k``, which this function
     returns. Wires on the neutral axis (``c_k = 0``) carry no stick stress
     and are left out. For a uniform contact (``g = 1``) the largest value is
-    the extreme-fibre wire (``c = 1``),
+    the tension-side extreme-fibre wire (``c = 1``),
     ``sigma0 expm1(mu |sin a| pi/2) / (k_f r)``, when a wire lies on that
     fibre (``phi_bend`` on a wire azimuth). The ratio to
     :func:`slip_onset_curvature` is ``expm1(mu |sin a| pi/2) / (mu |sin a|)``,
@@ -399,8 +512,12 @@ def full_slip_curvature(
         raise CableInputError("bending direction must be finite")
     if stiffness <= 0.0:
         return 0.0
-    cap = wire_slip_stress_cap(layer, phi_bend, contact_pressure_Pa=contact_pressure_Pa)
-    c = np.abs(np.cos(layer.phi_wires - phi_bend))
+    upper, lower = wire_slip_stress_bounds(
+        layer, phi_bend, contact_pressure_Pa=contact_pressure_Pa
+    )
+    cosine = np.cos(layer.phi_wires - phi_bend)
+    cap = np.where(cosine >= 0.0, upper, lower)
+    c = np.abs(cosine)
     loaded = c > 1.0e-12
     if not np.any(loaded) or not np.any(cap > 0.0):
         return 0.0
@@ -415,25 +532,40 @@ def direction_threshold_curvature(
     contact_pressure_Pa: float | None = None,
     stick_modulus_Pa: float | None = None,
 ) -> float:
-    """Curvature ``f * kappa_on`` below which the bending direction is held."""
+    """Curvature ``f m(lam) kappa_on`` below which the bending direction is held.
+
+    ``m(lam)`` (:func:`_compression_onset_factor`) is the compression-side
+    first-slip factor, so that every wire, on either side, is in stick below
+    the threshold.
+    """
     hold_fraction = float(hold_fraction)
     if not math.isfinite(hold_fraction) or not 0.0 <= hold_fraction <= 1.0:
         raise CableInputError("direction hold fraction must lie in [0, 1]")
-    return hold_fraction * slip_onset_curvature(
-        layer,
-        contact_pressure_Pa=contact_pressure_Pa,
-        stick_modulus_Pa=stick_modulus_Pa,
+    lam = layer.mu * abs(math.sin(layer.lay_angle_rad))
+    return (
+        hold_fraction
+        * _compression_onset_factor(lam)
+        * slip_onset_curvature(
+            layer,
+            contact_pressure_Pa=contact_pressure_Pa,
+            stick_modulus_Pa=stick_modulus_Pa,
+        )
     )
 
 
 def _threshold_coefficient(layer: HelicalLayerSpec, hold_fraction: float) -> float:
-    """``f * kappa_on * k / P``: the per-sample threshold is this times ``P/k``."""
+    """``f m kappa_on k / P``: the per-sample threshold is this times ``P/k``."""
     if not math.isfinite(hold_fraction) or not 0.0 <= hold_fraction <= 1.0:
         raise CableInputError("direction hold fraction must lie in [0, 1]")
     if hold_fraction == 0.0:
         return 0.0
     g_min = 1.0 if layer.shape_g is None else float(np.min(layer.shape_g))
-    return hold_fraction * _onset_coefficient(layer, max(g_min, 0.0))
+    lam = layer.mu * abs(math.sin(layer.lay_angle_rad))
+    return (
+        hold_fraction
+        * _compression_onset_factor(lam)
+        * _onset_coefficient(layer, max(g_min, 0.0))
+    )
 
 
 def compute_mkappa_wire_slip_front(
@@ -518,8 +650,8 @@ class WireSlipHistory:
     drive is a reduced axial-strain variable, not a crossing slip in metres.
     Material work accounts for a prescribed change of elastic/shear stiffness
     at fixed strain and plastic state; it is not frictional dissipation.
-    ``cap_Pa`` is the friction cap each wire was held to at each sample, shape
-    (wires, samples), kept only on request (``keep_cap=True``).
+    ``cap_Pa`` is the friction bound on the side of each wire's stress at each
+    sample, shape (wires, samples), kept only on request (``keep_cap=True``).
     """
 
     stress_Pa: FloatArray
@@ -544,31 +676,35 @@ def wire_slip_history(
 ) -> WireSlipHistory:
     """Shared small-strain, mean-clamping update for bending and bulk fatigue.
 
-    No spatial contact solve is introduced. The existing Papailiou cap and
-    scalar spring-slider describe each physical wire. Their virtual work
-    yields both bending-moment components.
+    No spatial contact solve is introduced. The Papailiou bounds of
+    :func:`wire_slip_stress_bounds` and a scalar spring-slider describe each
+    physical wire: its friction stress stays in ``[-lower, upper]``. Their
+    virtual work yields both bending-moment components.
 
     Bending direction of the slip cap. Near zero curvature the direction
     ``atan2(kappa_y, kappa_x)`` is not a physical quantity; re-orienting the
     cap there clipped the locked friction stress to the cap of an arbitrary
     neutral axis, so that results jumped under perturbations of 1e-12 1/m.
     The held direction ``phi_h`` is therefore updated only when
-    ``|kappa| >= kappa_th = f * kappa_on(P_i, k_i)``
-    (``f = direction_hold_fraction``, :func:`slip_onset_curvature`). Below
-    ``kappa_th`` the cap is ``(1 - w) cap(phi_h) + w cap(phi)`` with
-    ``w = |kappa|/kappa_th`` and ``phi`` the current direction. The cap is then
-    continuous in the curvature, equal to ``cap(phi_h)`` at zero, and
-    ``w cap(phi) >= k r |kappa| |cos(phi_k - phi)| / f`` guarantees that a
-    sub-threshold path from a stress-free state stays in stick for any
-    ``0 <= f <= 1``, exactly as before (a plain hold would make wires on the
-    held neutral axis slip under rotating sub-threshold curvature). Histories
+    ``|kappa| >= kappa_th = f m(lam) kappa_on(P_i, k_i)``
+    (``f = direction_hold_fraction``, :func:`slip_onset_curvature`,
+    :func:`direction_threshold_curvature`). Below ``kappa_th`` each bound is
+    ``(1 - w) bound(phi_h) + w bound(phi)`` with ``w = |kappa|/kappa_th`` and
+    ``phi`` the current direction. The bounds are then continuous in the
+    curvature, equal to ``bound(phi_h)`` at zero, and, because the smaller
+    (compression) bound of a wire is at least ``m kappa_on k r |cos(phi_k -
+    phi)|``, ``w bound(phi) >= k r |kappa| |cos(phi_k - phi)| / f``
+    guarantees that a sub-threshold path from a stress-free state stays in
+    stick for any ``0 <= f <= 1`` (a plain hold would make wires on the held
+    neutral axis slip under rotating sub-threshold curvature). Histories
     whose nonzero samples all satisfy ``|kappa| >= kappa_th`` are reproduced
     bitwise, and ``f = 0`` reproduces the earlier update exactly.
     Changing clamping still updates the return map at held curvature.
 
-    ``keep_cap=True`` also returns the cap of every wire at every sample
-    (``cap_Pa``); a wire whose stress is below its cap is in stick. The
-    other results are unchanged.
+    ``keep_cap=True`` also returns, for every wire and sample, the bound on
+    the side of its current stress (``cap_Pa``: ``upper`` for a nonnegative
+    stress, ``lower`` for a negative one); a wire whose stress magnitude is
+    below it is in stick. The other results are unchanged.
 
     Friction work under rotating curvature. ``work.friction_J_per_m`` is the
     dissipation of this population. In planar bending it agrees with the
@@ -580,21 +716,22 @@ def wire_slip_history(
     a wire passes the extreme fibre, where its cap is largest, while its
     drive is stationary, and it slips mostly near the neutral axis, where its
     cap is close to zero. For a circular orbit of radius ``R`` much larger
-    than the slip onset, with the linearised cap
-    ``sigma_0 lam asin|cos(phi - phi_bend)|`` (``lam = mu |sin a|``), a wire
-    dissipates ``4 (pi/2 - 1) sigma_0 lam r R`` per revolution (times
-    ``A cos a``), against an average of ``16 sigma_0 lam r R / pi`` for the
-    two planar cycles of amplitude ``R`` about the two axes: ratio
-    ``pi (pi/2 - 1) / 4 = 0.448``. In the distributed model every helix node
-    slips through the full ``4 R`` per revolution at its own traction bound,
-    and the ratio is ``pi / 4``. The
-    direction-tied work is thus 0.57 of the distributed work at large
-    amplitude, and less closer to slip onset (0.16 at twice the onset and 0.38
-    at eight times on the 66 kV template). The per-wire stress ranges, which
-    fatigue uses, agree with the distributed model within 10 % on the same
-    orbits: the cap bounds the stress amplitude much as the distributed bound
-    does, but narrows the stress-drive loop of each wire. Frictional heat
-    uses the distributed dissipation
+    than the slip onset a wire sits at the bound of the sign of its drive
+    rate and dissipates ``4 sigma_0 r R (sinh x0 - lam) / (1 + lam^2)`` per
+    revolution (times ``A cos a``; ``x0 = lam pi / 2``, ``lam = mu |sin a|``),
+    against a wire mean of ``(16 / pi) sigma_0 r R lam cosh x0 / (1 + lam^2)``
+    for the two planar cycles of amplitude ``R`` about the two axes: ratio
+    ``pi (sinh x0 - lam) / (4 lam cosh x0) = pi (pi/2 - 1) / 4 + O(lam^2)``,
+    0.448. In the distributed model every helix node slips through the full
+    ``4 R`` per revolution at its own traction bound; its rotating full-slip
+    field is the planar one turned to the slip-reversal axes, and the ratio is
+    ``pi / 4`` for any ``lam``. The direction-tied work is thus 0.57 of the
+    distributed work at large amplitude, and less closer to slip onset (0.16
+    at twice the onset and 0.39 at eight times on the 66 kV template). The
+    per-wire stress ranges, which fatigue uses, agree with the distributed
+    model within 10 % on the same orbits: the cap bounds the stress amplitude
+    much as the distributed bound does, but narrows the stress-drive loop of
+    each wire. Frictional heat uses the distributed dissipation
     (:func:`~cablexsec.analysis.thermal_coupling.record_friction_work`).
     """
     kx, ky = np.asarray(kappa_x, dtype=float), np.asarray(kappa_y, dtype=float)
@@ -648,23 +785,29 @@ def wire_slip_history(
     )  # friction, endpoint work, integration remainder, material work
     old_drive = np.zeros(layer.n_wires)
     held = current = initial_bending_angle
-    caches: dict[str, tuple[tuple[float, float] | None, FloatArray]] = {
-        "held": (None, np.zeros(layer.n_wires)),
-        "current": (None, np.zeros(layer.n_wires)),
+    zero = np.zeros(layer.n_wires)
+    caches: dict[
+        str, tuple[tuple[float, float] | None, tuple[FloatArray, FloatArray]]
+    ] = {
+        "held": (None, (zero, zero)),
+        "current": (None, (zero, zero)),
     }
 
-    def oriented_cap(slot: str, angle: float, load: float) -> FloatArray:
+    def oriented_cap(
+        slot: str, angle: float, load: float
+    ) -> tuple[FloatArray, FloatArray]:
         key, value = caches[slot]
         if key != (angle, load):
-            value = wire_slip_stress_cap(layer, angle, contact_pressure_Pa=load)
-            if (
-                value.shape != (layer.n_wires,)
-                or not np.isfinite(value).all()
-                or np.any(value < 0)
-            ):
-                raise CableInputError(
-                    "wire caps must be finite, nonnegative and match the population"
-                )
+            value = wire_slip_stress_bounds(layer, angle, contact_pressure_Pa=load)
+            for part in value:
+                if (
+                    part.shape != (layer.n_wires,)
+                    or not np.isfinite(part).all()
+                    or np.any(part < 0)
+                ):
+                    raise CableInputError(
+                        "wire caps must be finite, nonnegative and match the population"
+                    )
             caches[slot] = ((angle, load), value)
         return value
 
@@ -692,23 +835,25 @@ def wire_slip_history(
                 magnitude = math.sqrt(x * x + y * y)
                 if magnitude >= threshold:
                     held = current
-                    cap = oriented_cap("held", held, load)
+                    cap, cap_lo = oriented_cap("held", held, load)
                 else:
                     # Ill-defined direction: blend the cap of the last
                     # well-defined axis with that of the current direction.
                     blend = magnitude / threshold
-                    cap = oriented_cap("held", held, load)
+                    cap, cap_lo = oriented_cap("held", held, load)
                     if blend > 0.0:
-                        cap = (1.0 - blend) * cap + blend * oriented_cap(
-                            "current", current, load
-                        )
+                        cur_hi, cur_lo = oriented_cap("current", current, load)
+                        cap = (1.0 - blend) * cap + blend * cur_hi
+                        cap_lo = (1.0 - blend) * cap_lo + blend * cur_lo
                 drive = drive_map @ np.array([x, y])
                 increment = drive - old_drive
                 if not np.isfinite(increment).all():
                     raise CableInputError("derived wire increment must be finite")
-                force, slip, slipping = _scalar_return_map(
-                    element.f, increment, element.k, cap
+                force, slip, slipping = _station_return(
+                    element.f, increment, element.k, cap, cap_lo
                 )
+                # Active bound for ``keep_cap`` (the side of the current force).
+                cap = np.where(force < 0.0, cap_lo, cap)
                 element.f = force
                 element.slip_total = element.slip_total + slip
                 stress[:, index] = force
@@ -763,6 +908,21 @@ def wire_slip_history(
     )
 
 
+def _station_return(
+    previous: FloatArray,
+    increment: float | FloatArray,
+    stiffness: float | FloatArray,
+    upper: FloatArray,
+    lower: FloatArray,
+) -> tuple[FloatArray, FloatArray, NDArray[np.bool_]]:
+    """Return map of spring-sliders with the yield interval ``[-lower, upper]``."""
+    trial = previous + stiffness * increment
+    force = np.minimum(np.maximum(trial, -lower), upper)
+    slipping = force != trial
+    slip = np.where(slipping, increment - (force - previous) / stiffness, 0.0)
+    return np.asarray(force), np.asarray(slip), np.asarray(slipping)
+
+
 def compute_mkappa_papailiou(
     layers: list[PapailiouLayer],
     kappa_history: FloatArray,
@@ -771,26 +931,28 @@ def compute_mkappa_papailiou(
 ) -> PapailiouResult:
     """Integrate the Papailiou slip-front M-κ loop over a curvature history.
 
-    Each helix-angle station is advanced with the unchanged Coulomb
-    return-mapping element; the smooth knee arises from the ``kappa_c(phi)``
-    distribution (slip starts at the neutral axis).
+    Each helix-angle station is advanced as a spring-slider with the signed
+    capstan interval of :meth:`PapailiouLayer.station_bounds`; the smooth
+    knee arises from the ``kappa_c(phi)`` distribution (slip starts at the
+    neutral axis).
     """
     kappa = np.asarray(kappa_history, dtype=np.float64)
     n_steps = kappa.size
     moment = np.zeros(n_steps, dtype=np.float64)
 
     k_phis: list[FloatArray] = []
-    f_y_phis: list[FloatArray] = []
+    f_y_phis: list[tuple[FloatArray, FloatArray]] = []
     weights: list[float] = []
     forces: list[FloatArray] = []
     for lyr in layers:
-        k_phi, f_y_phi, weight = lyr.station_params()
+        k_phi, upper, lower, weight = lyr.station_bounds()
         # Odd station counts include the neutral axis. Its zero stiffness,
         # zero force and zero moment carry no energy; omit it from division.
         active = k_phi > 0.0
-        k_phi, f_y_phi = k_phi[active], f_y_phi[active]
+        k_phi = k_phi[active]
         k_phis.append(k_phi)
-        f_y_phis.append(f_y_phi)
+        # (upper, lower) magnitudes of the station interval, active stations.
+        f_y_phis.append((upper[active], lower[active]))
         weights.append(weight)
         forces.append(np.zeros_like(k_phi))
 
@@ -804,8 +966,8 @@ def compute_mkappa_papailiou(
         stored_i = 0.5 * EI_min_Nm2 * kappa[t] ** 2
         cumulative_remainder += 0.5 * EI_min_Nm2 * d_kappa**2
         for i in range(len(layers)):
-            f_new, slip, _slp = coulomb_return_map(
-                forces[i], d_kappa, k_phis[i], f_y_phis[i]
+            f_new, slip, _slipping = _station_return(
+                forces[i], d_kappa, k_phis[i], *f_y_phis[i]
             )
             stored_i += float(np.sum(f_new**2 / (2 * k_phis[i])) * weights[i])
             cumulative_dissipation += float(np.sum(f_new * slip) * weights[i])

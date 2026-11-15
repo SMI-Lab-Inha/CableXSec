@@ -39,17 +39,21 @@ towards increasing ``z``, is
 
 integrated exactly over the piecewise-linear field between the stations
 (trapezoids). A uniform curvature cannot slide a wire as a whole over a
-pitch, so the pitch mean of ``gamma`` (zero in planar bending by symmetry;
-round-off or a turning curvature otherwise) is taken out before the
-integration, which keeps ``u`` periodic; the largest share taken out is kept
+pitch, so the pitch mean of ``gamma`` is taken out before the integration
+(a turning curvature, and in planar bending the net friction axial force that
+the signed capstan bound leaves the pointwise laws, ``O(lam^2)`` with
+``lam = mu |sin a|``), which keeps ``u`` periodic; the largest share taken out is kept
 as ``mean_slip_share``. The pointwise law gives the slip strain, not the
 constant ``C``; it is fixed step by step by the stick zones, where the wire
 does not move on its bed: over each step ``C`` changes so that the stations
 in stick (a station whose slip strain did not change, with both neighbours)
 keep their displacement on average, and so that the pitch mean of ``u`` keeps
 its value when no station sticks. In planar bending the stick zones round the
-two extreme fibres then stay exactly in place. From the stress-free start
-``p = 0`` and ``u = 0`` until a wire slips. In frictionless slip
+two extreme fibres then keep their mean position exactly (by the mirror
+symmetry ``phi -> -phi`` the centred slip strain integrates to zero over each
+half pitch); taking out the mean tilts each zone about its centre by at most
+``(r / |sin a|) (pi / 2)`` times the change of the mean per step. From the
+stress-free start ``p = 0`` and ``u = 0`` until a wire slips. In frictionless slip
 ``sigma_f = 0``, ``p = d`` and
 ``u = -s (r^2 cos^2 a / |sin a|) (kx sin phi - ky cos phi)``: the full-slip
 kinematic slip of [KraincanicKebadze2001], ``r^2 cos^2 a / sin a`` times the

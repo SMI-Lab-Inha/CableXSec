@@ -118,8 +118,9 @@ fallback is recorded in `notes`. A temperature history then raises an error.
   neutral-axis wire.
 - **sectional friction**: the package direction-tied stick–slip stress
   (`wire_friction_stress`) with the pressure history. This is the ξ-reduced
-  stick stress below slip and the Papailiou cap `σ0 expm1(μ|sin α|ψ)` in
-  slip. It vanishes on the neutral-axis wire.
+  stick stress below slip and the signed Papailiou bounds in slip,
+  `σ0 expm1(μ|sin α|ψ)` for a rising and `−σ0 (1 − exp(−μ|sin α|ψ))` for a
+  falling stress. It vanishes on the neutral-axis wire.
 
 **Clamp increment.** Every wire of the layer is followed along the whole
 specimen, between anchors at both clamps (`anchored_wire_response`). The
@@ -279,7 +280,7 @@ Practical consequences for a test plan:
     (`profile="field"`, gap P5) is solved segment by segment.
 
   The clamp increment uses the linearised Papailiou cap; the sectional part
-  uses the package `expm1` cap.
+  uses the package's signed Papailiou bounds.
 - The averaged clamp law over-predicts for `a ≲ 10`. The solver is exact for
   the stated model at any `a`.
 - Bending-induced redistribution of contact pressure (three-core ovalisation)

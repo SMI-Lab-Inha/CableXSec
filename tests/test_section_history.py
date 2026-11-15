@@ -92,22 +92,19 @@ def test_variable_modulus_wire_history_matches_independent_plastic_strain_update
         stick_modulus_Pa=stiffness,
     )
     # Independent constitutive implementation stores plastic strain, not force.
-    # At the extreme wire psi=pi/2, so the slip cap has a direct scalar form.
+    # At the extreme wire psi=pi/2, so the slip bounds have a direct scalar
+    # form: sigma0 (exp(lam pi/2) - 1) for a rising and sigma0 (1 - exp(-lam
+    # pi/2)) for a falling stress (signed capstan, [Papailiou1997] Eq. 14).
     sine, cosine = math.sin(0.4), math.cos(0.4)
     width = 2 * math.pi * spec.r_helix_m / spec.n_wires
-    cap = (
-        spec.r_helix_m
-        * width
-        * cosine
-        / (spec.A_wire_m2 * sine**2)
-        * np.expm1(spec.mu * sine * math.pi / 2)
-        * pressure
-    )
+    sigma0 = spec.r_helix_m * width * cosine / (spec.A_wire_m2 * sine**2) * pressure
+    upper = sigma0 * (math.exp(spec.mu * sine * math.pi / 2) - 1)
+    lower = sigma0 * (1 - math.exp(-spec.mu * sine * math.pi / 2))
     plastic = 0.0
     expected = []
     for t, value in enumerate(kappa):
         drive = spec.r_helix_m * value
-        friction = np.clip(stiffness[t] * (drive - plastic), -cap[t], cap[t])
+        friction = np.clip(stiffness[t] * (drive - plastic), -lower[t], upper[t])
         plastic = drive - friction / stiffness[t]
         bending = modulus[t] * value * cosine**2 * math.cos(0.8) * 0.003 / 2
         expected.append(normal[t] + friction + bending)

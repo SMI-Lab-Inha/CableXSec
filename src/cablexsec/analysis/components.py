@@ -99,7 +99,7 @@ from cablexsec.materials import library
 from cablexsec.mechanics.core_friction import CoreFrictionSpec, build_core_friction
 from cablexsec.mechanics.core_kinematics import CORE_SLIP_STATES, CoreSlipState
 from cablexsec.mechanics.core_lay import core_angle, core_bending_components
-from cablexsec.mechanics.papailiou import wire_slip_stress_cap
+from cablexsec.mechanics.papailiou import wire_slip_stress_bounds
 from cablexsec.mechanics.section_geometry import axial_cosine
 from cablexsec.mechanics.section_state import (
     LayerNormalState,
@@ -480,8 +480,9 @@ def _core_axis(
     else:
         phi_bend = math.atan2(kappa_y, kappa_x)
         stations = np.arange(layer.n_cores) * model.spec.n_stations_per_core
-        cap = wire_slip_stress_cap(population, phi_bend)[stations]
+        cap_hi, cap_lo = wire_slip_stress_bounds(population, phi_bend)
         cosine = np.cos(phases - phi_bend)
+        cap = np.where(cosine >= 0.0, cap_hi[stations], cap_lo[stations])
         stick = population.k_f * population.r_helix_m * np.abs(cosine) * kappa
         frictional = np.sign(cosine) * np.minimum(stick, cap) / population.E_wire_Pa
         slipping = int(np.count_nonzero(stick >= cap))

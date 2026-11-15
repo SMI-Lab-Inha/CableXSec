@@ -1591,7 +1591,7 @@ def simulate_rig_test(
             "wire, one wire per layer without layer interaction, planar proportional "
             "curvature; not verified against helix FE or a test",
             "clamp increment uses the linearised Papailiou cap; the sectional part "
-            "uses the package expm1 cap",
+            "uses the package's signed Papailiou bounds",
             "moment-curvature loops use the mean protocol tension; the end-rotation "
             "profile is frozen at the mean tension and secant stiffness",
             "gauge strain is mechanical wire strain on the outward fibre, zeroed at "

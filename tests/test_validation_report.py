@@ -37,9 +37,12 @@ def test_changed_wire_bending_fails_reported_comparison(monkeypatch):
 def test_bending_work_report_compares_identical_measured_paths_and_units():
     row = next(r for r in run_validation._rows() if r.ident == "BM1-loop")
     assert "matched experimental" in row.target
-    assert "70.4 J/m vs measured 62.3 J/m" in row.value
-    assert "12.9%" in row.value
-    assert row.status == "FAIL"  # The existing 10% threshold is not relaxed.
+    # Signed capstan bound: 67.8 J/m (+8.8 %; the former symmetric cap gave
+    # 70.4 J/m, +12.9 %). The 10 % threshold is unchanged.
+    assert "67.8 J/m vs measured 62.3 J/m" in row.value
+    assert "difference 8.8%" in row.value
+    assert "within 10%" in row.target
+    assert row.status.startswith("PASS")
 
 
 _XSEC = run_validation.Row(

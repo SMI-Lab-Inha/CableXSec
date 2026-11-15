@@ -92,16 +92,49 @@ def test_slip_is_zero_in_stick() -> None:
 
 
 def test_stick_zones_stay_in_place_in_planar_bending() -> None:
+    """The stick zones round the two extreme fibres stay in place on average.
+
+    By the mirror symmetry of planar bending (``phi -> -phi``) the slip strain
+    less its pitch mean integrates to zero over each half pitch, so each zone
+    keeps its mean position exactly. The signed capstan bound leaves the
+    pointwise law a net friction axial force (``O(lam^2)``), hence a nonzero
+    pitch mean ``gbar`` of the slip strain ``gamma = cos^2 a (d - sigma_f /
+    k_f)``; taking it out tilts each zone about its centre by at most
+    ``(r / |sin a|) (pi / 2) |d gbar|`` per step.
+    """
     kappa = 0.004 * np.sin(np.linspace(0.0, 2.5 * np.pi, 400))
     history = kinematic_history(CABLE, kappa, np.zeros(400), tension_N=200e3)
+    specs = {
+        layer.name: layer.spec
+        for layer in cx.cable_to_fatigue_layers(CABLE, contact_tension_N=200e3)
+    }
     for layer in history.layers:
         held = _held(layer.slipping)[:, 1:]
         assert held.any() and (~held).any()
-        moved = np.abs(np.diff(layer.slip_m, axis=1))[held]
+        step = np.diff(layer.slip_m, axis=1)
         amplitude = kinematic_slip_amplitude(
             layer.r_helix_m, layer.lay_angle_rad, 0.004
         )
-        assert moved.max() < 1e-4 * amplitude
+        for zone in (np.cos(layer.azimuth_rad) > 0.0, np.cos(layer.azimuth_rad) < 0.0):
+            for t in np.flatnonzero(held[zone].any(axis=0)):
+                mean = step[zone, t][held[zone, t]].mean()
+                assert abs(mean) < 1e-12 * amplitude
+        assert layer.friction_Pa is not None
+        drive = layer.r_helix_m * np.cos(layer.azimuth_rad)[:, None] * kappa[None, :]
+        gamma = math.cos(layer.lay_angle_rad) ** 2 * (
+            drive - layer.friction_Pa / specs[layer.name].k_f
+        )
+        tilt = (
+            layer.r_helix_m
+            / abs(math.sin(layer.lay_angle_rad))
+            * (math.pi / 2)
+            * np.abs(np.diff(gamma.mean(axis=0)))
+        )
+        assert np.all(
+            np.abs(step)[held]
+            <= np.broadcast_to(tilt, step.shape)[held] + 1e-12 * amplitude
+        )
+        assert np.abs(step)[held].max() < 2e-3 * amplitude
         # Slip while slipping, of the order of the kinematic slip.
         assert 0.3 * amplitude < np.abs(layer.slip_m).max() <= 1.001 * amplitude
 

@@ -14,7 +14,7 @@ Model (normalised; one wire on a rigid core, uniform curvature, periodic over
 one pitch, axial slip only)::
 
     n = e + du/dphi,   dn/dphi = t,   t = k_hat (u - p),   |t| <= b,
-    b = rho(t) g(phi) + lam |n|,      dp/dt != 0 only where |t| = b,
+    b = rho(t) g(phi) + lam n,        dp/dt != 0 only where |t| = b,
 
 with ``e = a_x cos(phi) + a_y sin(phi)``, ``a = kappa / kappa_c``,
 ``kappa_c = xi * kappa_on`` the rigid-stick onset curvature,
@@ -22,12 +22,22 @@ with ``e = a_x cos(phi) + a_y sin(phi)``, ``a = kappa / kappa_c``,
 package (``k_f = xi E cos^2 a``), ``k_hat = xi / (1 - xi)`` (Yun ``xi``;
 below slip the periodic solution is ``n = a xi cos(phi)``, i.e. the
 ``xi``-reduced stick stiffness of the package), ``lam = mu |sin a|`` (capstan
-bound; ``lam -> 0`` is the constant bound), ``rho = P(t) / P_ref`` the
-clamping-pressure ratio and ``g(phi)`` the optional azimuthal contact shape
-(periodic linear interpolation of ``shape_g``). The wire stress is
+bound on the signed force: a rising force raises its normal load, a falling
+one lowers it, as in [Papailiou1997] Eqs. 9-14 with the signed helix angle;
+``b`` is floored at zero; ``lam -> 0`` is the constant bound),
+``rho = P(t) / P_ref`` the clamping-pressure ratio and ``g(phi)`` the
+optional azimuthal contact shape (periodic linear interpolation of
+``shape_g``). The wire stress is
 ``sigma = (g_0 / A) n`` with ``g_0 / A = sigma_0(P_ref) mu |sin a|``, the
 slope of the linearised Papailiou cap. In planar monotonic loading to full slip
-the field is the package cap ``sigma_0 expm1(mu |sin a| psi)``.
+``dn/dphi = +-(g + lam n)`` between the extreme fibres and the zero pitch mean
+of ``n`` (periodic ``u``) give, for ``g = 1``,
+``sigma = sigma_0 (C exp(lam x) - 1)``, ``C = lam pi / (2 sinh(lam pi / 2))``,
+``x`` the azimuth from the geometric neutral axis toward the tension side: the
+neutral axis moves toward the tension side and the extreme-fibre range is
+``2 sigma_0 sinh(lam pi / 2) C = sigma_0 lam pi``, the linear Coulomb value.
+The pointwise model holds each wire to its own interval instead (zero at the
+geometric neutral axis); in full slip the two differ by ``O(lam^2)``.
 
 Discretisation: ``N`` nodes per pitch, ``h = 2 pi / N``; segment ``j`` sits
 at the section azimuth ``j h`` and carries ``n_j``; node ``j`` (between
@@ -235,7 +245,7 @@ def _solve_capstan_newton(
     """Coupled semismooth Newton for the capstan bound ``b = b(n(v))``.
 
     Solves ``n_j - n_{j-1} = h clip(k_hat (z0_j + v_j), -b_j, b_j)`` with
-    ``b_j = rho g_j + lam (|n_j| + |n_{j-1}|) / 2`` directly (the same
+    ``b_j = rho g_j + lam (n_j + n_{j-1}) / 2`` directly (the same
     equations as the fixed point on ``b``), using the tridiagonal generalised
     Jacobian. Returns iterations, or -1 (caller falls back to the fixed point).
     """
@@ -252,7 +262,9 @@ def _solve_capstan_newton(
         gap = math.inf
         for j in range(n):
             jm = j - 1 if j > 0 else n - 1
-            b[j] = rho * gnode[j] + lam * 0.5 * (abs(nn[j]) + abs(nn[jm]))
+            b[j] = rho * gnode[j] + lam * 0.5 * (nn[j] + nn[jm])
+            if b[j] < 0.0:
+                b[j] = 0.0
             excess = abs(khat * (z0[j] + v[j])) - b[j]
             if excess < gap:
                 gap = excess
@@ -268,8 +280,9 @@ def _solve_capstan_newton(
             else:
                 state = 1.0 if r > 0.0 else -1.0
                 t = state * b[j]
-            sm = 1.0 if nn[jm] > 0.0 else (-1.0 if nn[jm] < 0.0 else 0.0)
-            sj = 1.0 if nn[j] > 0.0 else (-1.0 if nn[j] < 0.0 else 0.0)
+            # Signed capstan: db/dn = lam / 2 on both segments (zero if floored).
+            sm = 1.0 if b[j] > 0.0 else 0.0
+            sj = sm
             # The equations are linear for a fixed stick/slip state and sign
             # pattern of n; a repeated pattern makes the last step exact.
             key = state + 4.0 * sj
@@ -611,7 +624,9 @@ def _advance(
     for it in range(0 if converged else _MAX_FIXED_POINT):
         for j in range(n):
             jm = j - 1 if j > 0 else n - 1
-            b[j] = rho * gnode[j] + lam * 0.5 * (abs(ncur[j]) + abs(ncur[jm]))
+            b[j] = rho * gnode[j] + lam * 0.5 * (ncur[j] + ncur[jm])
+            if b[j] < 0.0:
+                b[j] = 0.0
         iters = _solve_fixed_bound(
             y, z0, b, khat, h, tol, v, vn, vt, dv, d, rhs, cp, wy, wz
         )
@@ -645,7 +660,9 @@ def _advance(
     rem = 0.0
     for j in range(n):
         jm = j - 1 if j > 0 else n - 1
-        bj = rho * gnode[j] + lam * 0.5 * (abs(ncur[j]) + abs(ncur[jm]))
+        bj = rho * gnode[j] + lam * 0.5 * (ncur[j] + ncur[jm])
+        if bj < 0.0:
+            bj = 0.0
         t = khat * (z0[j] + v[j])
         if t > bj:
             t = bj
@@ -796,7 +813,9 @@ def _distributed_kernel(
         for j in range(n):
             jm = j - 1 if j > 0 else n - 1
             stored += 0.5 * h * (nf[j] * nf[j] + tau[j] * tau[j] / khat)
-            bj = rho1 * gnode[j] + lam * 0.5 * (abs(nf[j]) + abs(nf[jm]))
+            bj = rho1 * gnode[j] + lam * 0.5 * (nf[j] + nf[jm])
+            if bj < 0.0:
+                bj = 0.0
             if bj > 0.0 and abs(tau[j]) >= bj * (1.0 - 1e-9):
                 n_slip += 1
         hist[i, 0] = energy[0]
