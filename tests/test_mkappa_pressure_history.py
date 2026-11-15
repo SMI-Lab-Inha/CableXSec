@@ -147,18 +147,45 @@ def _touching_alternate_wires() -> Any:
     return CableData(cable=CableMeta(name="touching alternate wires"), layers=layers)
 
 
-# (the qp contact model does not factor this sheath-free synthetic section even
-# at a fixed tension, so it is not a case of this check)
-@pytest.mark.parametrize("contact_model", ["bounded", "solved"])
-def test_tension_history_needs_no_crossing_loads(contact_model: str) -> None:
+def test_tension_history_on_a_stack_the_crossing_loads_refuse() -> None:
+    # Bounded contact: the qp and solved models do not solve this sheath-free
+    # synthetic section reliably even at a fixed tension (singular on some
+    # platforms); the next test covers them on a real cable.
     cable = _touching_alternate_wires()
     with pytest.raises(CableSchemaError):
         cx.armour_contact_histories(cable, np.array([1.0e4]))
     tension = 1.0e4
     kappa = 0.05 * np.sin(np.linspace(0.0, 4.0 * np.pi, 121))
+    ref = cx.compute_mkappa(cable, kappa, tension_N=tension)
+    got = cx.compute_mkappa(
+        cable, kappa, contact_tension_history_N=np.full(kappa.size, tension)
+    )
+    scale = float(np.max(np.abs(ref.moment_Nm)))
+    np.testing.assert_allclose(got.moment_Nm, ref.moment_Nm, rtol=0, atol=1e-12 * scale)
+
+
+@pytest.mark.parametrize("contact_model", ["bounded", "qp", "solved"])
+def test_tension_history_never_forms_crossing_loads(
+    contact_model: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import cablexsec.api as api_module
+    import cablexsec.cable_adapters as adapters
+
+    # concentric, so the coupled radial contact of qp applies
+    cable = cx.load_cable(
+        cx.inter_array_single_core_yaml_path(), geometry_override=None
+    )
+    tension = 2.0e4
+    kappa = 0.03 * np.sin(np.linspace(0.0, 4.0 * np.pi, 61))
     ref = cx.compute_mkappa(
         cable, kappa, tension_N=tension, contact_model=contact_model
     )
+
+    def refuse(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("crossing loads formed on the bending route")
+
+    monkeypatch.setattr(api_module, "armour_crossing_line_loads", refuse)
+    monkeypatch.setattr(adapters, "armour_crossing_line_loads", refuse)
     got = cx.compute_mkappa(
         cable,
         kappa,
