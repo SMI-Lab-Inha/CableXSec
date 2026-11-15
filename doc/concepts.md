@@ -189,8 +189,17 @@ Three contact models turn these loads into pressures:
 | `"solved"` | elastic contact problem of the whole section, three-core bundles included | `solve_cable_radial_state`; [solved radial contact state](radial_model.md) |
 
 On the same cable the models can differ by tens of per cent, as Tutorial 1
-shows. The pressure is held fixed within one bending calculation. In a fatigue
-calculation it can follow the tension history.
+shows. By default a bending calculation holds the pressure of one contact
+state. `compute_mkappa` can let it follow a tension history
+(`contact_tension_history_N`) or take a per-sample pressure for each armour
+layer (`contact_pressure_Pa`), as a fatigue calculation does with its tension
+history. The friction bound of each wire then changes from sample to sample in
+the same return map, with the slip state carried across. A falling bound clips
+a slipping wire's friction stress, and the released elastic energy is friction
+work; a rising bound leaves a sticking wire unchanged. Only the armour bound
+follows the history: the stick stiffness, the full-slip stiffness and the
+contact loads of the laid cores stay at the reference state. The bending-test
+simulator and the exported bending law keep a fixed pressure.
 
 ## Fatigue is counted at fixed material points
 

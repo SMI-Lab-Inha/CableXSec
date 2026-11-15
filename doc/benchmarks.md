@@ -136,6 +136,7 @@ All rows are verification, not validation. Source: the scorecard
 | σ_B | A | Radial-fibre bending stress vs Ménard Eq. 14 | < 1e-6% | 0 | PASS |
 | M-rec | I | Assembled per-wire moment vs `compute_mkappa`, single core | < 2% | 0.000% | PASS |
 | M-rec-3core | I | As M-rec, offset-core geometry | < 2% | 0.000% | PASS |
+| MK-Tcyc | I | `compute_mkappa` with a contact-tension history cycling inside the bending cycles vs the moment of the fatigue-path friction stress on the same history; work-balance residual over the friction work | < 1e-12 rel.; < 1e-12 rel. | 3.4e-16; 1.1e-15 | PASS |
 | slip-onset | A | First wire to slip lies at the neutral axis (with the signed bound on the compression side, ψ ≈ 3λ/2) | abs(cos) < 0.2 | 0.156 (0.000 with the former bound) | PASS |
 | xsec-K | A | Tangent bounds EI_max (κ→0) and EI_min (κ→∞) | < 0.01% | 0; 7.4e-12% | PASS |
 | QP-KKT | A | Concentric contact complementarity | < 1e-8 N | 1.9e-13 N | PASS |
