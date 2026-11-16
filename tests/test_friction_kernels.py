@@ -282,7 +282,8 @@ def test_distributed_contact_shape_is_checked(armour):
 
 
 def test_unconverged_kernel_names_the_sample(armour, monkeypatch):
-    kernel = dfm._distributed_kernel
+    name = "_distributed_kernel_fast" if dfm._FAST_KERNEL else "_distributed_kernel"
+    kernel = getattr(dfm, name)
 
     def failing_at_sample_2(*args):
         out, hist, slip, stats, fld = kernel(*args)
@@ -290,7 +291,7 @@ def test_unconverged_kernel_names_the_sample(armour, monkeypatch):
         stats[0] = -3  # the kernel's status for sample index 2
         return out, hist, slip, stats, fld
 
-    monkeypatch.setattr(dfm, "_distributed_kernel", failing_at_sample_2)
+    monkeypatch.setattr(dfm, name, failing_at_sample_2)
     with pytest.raises(CableInputError, match="did not converge at sample 2"):
         dfm.distributed_friction_history(
             armour, np.full(4, 0.01), np.zeros(4), nodes_per_pitch=16
