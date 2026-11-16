@@ -52,6 +52,7 @@ from cablexsec.analysis.beam_test import (
 from cablexsec.analysis.bending_law import (
     BendingLawExport,
     IwanBendingLaw,
+    SlipScaleTable,
     export_bending_law,
 )
 from cablexsec.analysis.capacity_check import (
@@ -327,6 +328,7 @@ from cablexsec.project import (  # noqa: E402
 __all__ = [
     "BendingLawExport",
     "IwanBendingLaw",
+    "SlipScaleTable",
     "export_bending_law",
     "LayerSlipCurvatures",
     "armour_slip_curvatures",

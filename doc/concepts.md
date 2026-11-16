@@ -272,9 +272,14 @@ moment–curvature curve at a set of tensions and decomposes it into parallel
 elastic–perfectly-plastic elements, an Iwan model. For planar bending at fixed
 contact pressure the armour law is itself a set of parallel spring–sliders,
 so the exported law follows Masing's rules and reproduces `compute_mkappa`,
-memory of earlier reversals included. The law is planar, and tension and
-annulus state are fixed within one law. Export tension levels no more than
-about 20 kN apart (Section 8 of the global–local guide).
+memory of earlier reversals included, to about 0.1 % of the moment range (the
+asymmetric slip interval of the signed capstan bound). The law is planar, and
+tension and annulus state are fixed within one law. Export tension levels no
+more than about 20 kN apart, or export the slip scale (`slip_scale=True`):
+tension and external pressure scale the friction caps of each armour layer and
+of the cores, not their stiffness, so one law with scaled yield curvatures
+covers the table and its sliders follow a changing tension (Section 8 of the
+global–local guide).
 
 ## Every result says where it came from
 

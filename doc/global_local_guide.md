@@ -372,8 +372,12 @@ Two findings shape stage 2:
 set of tensions it computes the virgin moment–curvature backbone with `compute_mkappa` and decomposes it into
 parallel elastic, perfectly plastic elements (an Iwan model, Iwan 1966) plus the full-slip stiffness. For planar
 bending at fixed contact pressure the default and the progressive armour laws are themselves sets of parallel
-spring–sliders, so the Iwan law follows Masing's rules exactly and reproduces `compute_mkappa` on any planar
-history, including the memory of earlier reversals.
+spring–sliders, so the Iwan law follows Masing's rules and reproduces `compute_mkappa` on planar histories,
+including the memory of earlier reversals. It is exact when every wire's slip interval is symmetric. The signed
+capstan bound (Papailiou 1997) makes it asymmetric: the falling bound of a wire is its rising bound times
+`exp(-λψ)`, which no Masing element carries. The residual is about 0.1 % of the moment range on bending cycles
+near full slip (Ménard ±0.03 1/m: 0.14 % at 10 kN, 0.16 % at 70 kN; 66 kV template 0.08–0.11 %; 33 kV
+three-core 0.26 %) and falls with the friction coefficient (66 kV at μ = 0.02: 0.02 %).
 
 ```python
 import numpy as np
@@ -395,12 +399,85 @@ reproduces `compute_mkappa` within 0.05 % of the moment range and the work withi
 an irregular history, for the Ménard cable at 0 and 50 kN and the 66 kV template at 50 kN; the decomposition
 identities hold to round-off. Interpolation in tension is the limiting step: between levels 100 kN apart the
 backbone at the midpoint is missed by 3.9 % of the moment range (Ménard; registered target FAIL), 1.5 % at 50 kN,
-0.27 % at 20 kN and 0.07 % at 10 kN. Export tension levels no more than about 20 kN apart.
+0.27 % at 20 kN and 0.07 % at 10 kN. Export tension levels no more than about 20 kN apart, or use the slip scale
+below.
+
+### 8.1 Slip scaling variable
+
+The tension and the external pressure change the armour contact pressure `P1+P2`, not the stick stiffness
+`k_f = ξ E cos²α`. In the direction-tied law every wire is a spring–slider whose friction bounds are proportional to
+its layer's `P1+P2`, and the return map `f ← clip(f + k Δd, −ρ l, ρ u)` is positively homogeneous. A layer whose
+bounds scale by `ρ` therefore obeys `M(κ; ρ) = ρ M(κ/ρ; 1)` over any curvature history, loops and the asymmetric
+capstan bound included, and its Iwan elements keep their stiffnesses `k_i` while their yield curvatures become
+`ρ κ_y,i`. With `slip_scale=True` the export carries this form as `BendingLawExport.slip_scale`, a `SlipScaleTable`:
+
+- the law at a reference tension split into friction groups, one per structural armour layer and `laid_cores` for
+  the core lay stage, each with its elements (`k_i`, `κ_y,i`), plus the full-slip stiffness `EI_slip`;
+- the cap `R_g` of every group (its planar full-slip friction moment) over a table of tensions and, optionally,
+  external pressures, the group scale `ρ_g = R_g / R_g,ref`, the single cap-weighted scale
+  `s = Σ R_g / Σ R_g,ref`, and their derivatives `∂/∂T` and `∂/∂p_e` (central differences of the contact model,
+  one-sided at zero; the bounded chain is affine, so they are its slopes).
+
+```python
+export = cx.export_bending_law(
+    cable, tensions_N=[10e3, 70e3], kappa_max_1_m=0.036, n_points=300,
+    slip_scale=True, slip_scale_tensions_N=np.linspace(10e3, 70e3, 7),
+    slip_scale_external_pressure_Pa=[0.0, 1e6, 2e6],   # optional pressure axis
+)
+table = export.slip_scale
+law = table.law_at(35e3, 0.5e6)                  # scaled law at one state
+moment = table.moment(kappa, tension, pressure)  # sliders follow the changing caps
+table.to_csv("slip_scale.csv")                   # s, rho_g and derivatives per state
+```
+
+Slider update. When the state changes, every element follows the return map with the new cap,
+`e_i ← clip(e_i + Δκ, −ρ_g κ_y,i, ρ_g κ_y,i)` and `M = EI_slip κ + Σ k_i e_i`: the slip state is carried across, a
+falling cap clips a sticking or slipping element at fixed curvature (friction work, `k_i |e_1| |e_0 − e_1|` in the
+backward-Euler form the section law reports) and a rising cap leaves it where it is. This is the rule the fatigue
+kernels and `compute_mkappa(..., contact_tension_history_N=...)` apply to every wire.
+
+Checks (`tests/test_bending_law_slip_scale.py`; row MX-scale of the [benchmark register](benchmarks.md)):
+
+- `compute_mkappa` at 70 kN equals the 20 kN law with the bound scaled, `EI κ + ρ F(κ/ρ)`, over a loop history on
+  the 66 kV template (no manufacturing clamping, so both layers and the cores scale by `T`): 4e-16 of the moment.
+- Every group law decomposed at 60 kN on the grid `ρ_g κ` is the 10 kN group law with fixed `k_i` and yield
+  curvatures times `ρ_g` (Ménard, layers scaling by 2.06 and 1.40; 33 kV three-core with its cores): below 1e-13.
+- With symmetric wire bounds and a grid through every wire's slip curvature, the scaled law under a tension cycle
+  (10–70 kN) inside bending cycles is the contact-tension history of `compute_mkappa`, moment and friction work,
+  to 1e-14. With the signed bound the scaled law misses the history route by at most 1.02 times the
+  fixed-tension residual above (Ménard 0.17 %, 66 kV 0.11 %); the law frozen at the reference misses by 19 % and
+  43 %.
+
+One scale or one per group. The single scale `s` keeps the stick stiffness and the full-slip moment exact and is
+exact when every group scales alike. Otherwise it misplaces the transition. Largest error of the single-scale law
+against the per-group law over 10–150 kN, reference 10 kN, on the virgin backbone and on cycles up to 1.5 times the
+full-slip curvature (moment in % of the range; work per cycle at 1.5 times full slip):
+
+| Template | Tension only | Tension and p_e 0–2 MPa |
+| --- | --- | --- |
+| 66 kV IEA Task 49 | 0 (both layers ∝ T) | 21 %; work 32 % |
+| 66 kV with cores | 0 (cores ∝ T too) | not run |
+| 33 kV three-core | 0.10 %; work 0.14 % | 12 %; work 16 % |
+| 33 kV three-core with cores | 0.29 %; work 0.36 % | not run |
+| Ménard | 12 %; work 11 % | 19 %; work 19 % |
+
+The external pressure adds the same `P1+P2` to layers whose tension parts differ (on the 66 kV template, with no
+clamping, `ρ` is 467 for the inner and 1 735 for the outer layer at 10 kN and 2 MPa), so a pressure axis needs the
+per-group scales. A group of scale `ρ` reproduces its law at the state up to `ρ κ_max`; beyond, the full-slip slope
+continues, as in every exported law. The default reference is the smallest exported tension at which every group
+has contact, so caps that rise with tension give `ρ ≥ 1`.
+
+Limits of the scale. The laid-core group scales with its own contact load; it is exact while the load-weighted
+friction coefficient of its contacts is unchanged (one contact type, or equal coefficients, as by default). The
+internal-ring slip of resolved strands (`strand_layers`) has no cap scaling and is refused. Torque is not a table
+variable: the section states that carry a torque (the coupled qp and solved models with a free twist) differ at
+zero torque from the fixed-twist states of the backbones, and a torque moves the `P1+P2` of contra-wound layers in
+opposite senses. The stick stiffness and `EI_slip` are those of the reference state; at a different temperature the
+moduli change, which the scale does not represent.
 
 Limits. The law is planar. CableXSec's biaxial response is per wire and tied to the current bending direction; a
 global solver that applies an isotropic hysteretic law to the resultant curvature makes an assumption the section
-model does not. Tension and annulus state are fixed within one law; the section law itself can follow a tension
-history within a bending cycle (`compute_mkappa(..., contact_tension_history_N=...)`), but the exported law has no
-rule yet for its slider states when the tension changes. Whether a global program's hysteretic bending option
-applies Masing's rules to the exported table is target MX-5, open until checked; CableDyn does not yet have a
-bending-law interface (its stage 2, Section 7).
+model does not. Tension and annulus state are fixed within one law of the tension table; the slip scale (Section
+8.1) carries the change of the friction caps with tension and external pressure. Whether a global program's
+hysteretic bending option applies Masing's rules to the exported table is target MX-5, open until checked; CableDyn
+does not yet have a bending-law interface (its stage 2, Section 7).
