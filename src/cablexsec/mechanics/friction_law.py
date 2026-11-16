@@ -108,7 +108,7 @@ import math
 from dataclasses import dataclass
 
 import numpy as np
-from numpy.typing import NDArray
+from numpy.typing import ArrayLike, NDArray
 
 from cablexsec._numba import njit
 from cablexsec.exceptions import CableInputError
@@ -325,7 +325,7 @@ class FrictionLaw:
 
 
 def _checked_pressure_table(
-    table: object,
+    table: ArrayLike | None,
 ) -> tuple[tuple[float, float], ...] | None:
     """The pressure factor as a tuple of ``(P, f)`` float pairs (checked)."""
     if table is None:
