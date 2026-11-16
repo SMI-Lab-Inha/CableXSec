@@ -173,6 +173,11 @@ from cablexsec.mechanics.core_friction import (
 )
 from cablexsec.mechanics.core_kinematics import CoreSlipState
 from cablexsec.mechanics.distributed_friction import DEFAULT_MAX_INCREMENT
+from cablexsec.mechanics.friction_law import (
+    FrictionLaw,
+    active_friction_law,
+    friction_law_time_steps,
+)
 from cablexsec.mechanics.mindlin_contact import TransverseMap
 from cablexsec.mechanics.mkappa import HelicalLayerSpec
 from cablexsec.mechanics.papailiou import (
@@ -271,6 +276,7 @@ __all__ = [
     "ContactQPResult",
     "CoreFrictionSpec",
     "CriticalDistanceSpec",
+    "FrictionLaw",
     "ProgressiveFriction",
     "CoreFrictionHistory",
     # cable -> frozen-spec adapters
@@ -455,6 +461,8 @@ class MkappaResult:
         Frictional work per cable-axis metre accumulated over the complete
         supplied history [J/m], including initialisation if supplied. Not
         mechanical work on an open path and not automatically a per-cycle loss.
+        Under a rate-dependent friction law it includes the rate-dependent
+        (viscous) part, ``work.viscous_J_per_m``.
     EI_apparent_Nm2 : float
         Secant bending stiffness over the loop [N·m²].
     EI_max_Nm2, EI_min_Nm2 : float
@@ -535,11 +543,23 @@ class _MkappaLaw:
         self,
         kappa: FloatArray,
         contact_pressure_Pa: Sequence[FloatArray] | None = None,
+        friction_law: FrictionLaw | None = None,
+        time_s: FloatArray | None = None,
     ) -> _MkappaRun:
         """Evaluate the law; ``contact_pressure_Pa`` is one armour ``P1+P2``
         history per layer (order of ``layers``), ``None`` for fixed pressure.
-        The laid-core model keeps its own fixed contact loads."""
+        The laid-core model keeps its own fixed contact loads. A non-neutral
+        ``friction_law`` (armour wires, direction-tied law) is refused with
+        the progressive law and the laid-core model."""
         phi_bend = self.phi_bend
+        law = active_friction_law(friction_law)
+        if law is not None and (
+            self.progressive is not None or self.core_model is not None
+        ):
+            raise CableSchemaError(
+                "a friction law is implemented for the direction-tied armour law "
+                "only; not with the progressive law or core friction"
+            )
         if self.progressive is None:
             res = compute_mkappa_wire_slip_front(
                 self.layers,
@@ -547,6 +567,8 @@ class _MkappaLaw:
                 phi_bend=phi_bend,
                 EI_min_Nm2=self.ei_min,
                 contact_pressure_Pa=contact_pressure_Pa,
+                friction_law=law,
+                time_s=time_s,
             )
         else:
             res = compute_mkappa_wire_slip_front(
@@ -648,6 +670,8 @@ def compute_mkappa(
     progressive: ProgressiveFriction | None = None,
     contact_pressure_Pa: Mapping[str, FloatArray] | None = None,
     contact_tension_history_N: FloatArray | None = None,
+    friction_law: FrictionLaw | None = None,
+    time_s: FloatArray | None = None,
 ) -> MkappaResult:
     r"""Moment-curvature hysteresis of a cable over a curvature history.
 
@@ -745,6 +769,20 @@ def compute_mkappa(
         reference state is the first sample; the wire-yield range check uses
         the largest tension. Not with ``tension_N``, ``section_state``,
         ``radial_state`` or ``contact_pressure_Pa``.
+    friction_law : FrictionLaw, optional
+        Static/dynamic and rate-dependent armour friction coefficient
+        (:class:`~cablexsec.mechanics.friction_law.FrictionLaw`) of every
+        armour wire: a static factor until a wire slips, a dynamic factor
+        while it slips and after it until it has stuck for the healing time,
+        and a logarithmic and viscous rate term. Only with the
+        direction-tied law and without ``core_friction``. ``work`` then
+        carries the rate-dependent dissipation in ``viscous_J_per_m``.
+        ``None`` (default) or a neutral law is the rate-independent law, bit
+        for bit.
+    time_s : numpy.ndarray, optional
+        Sample times [s] of ``kappa_history``, required by a law that depends
+        on time (a slip rate or a finite positive healing time); refused
+        otherwise.
 
     Returns
     -------
@@ -805,6 +843,20 @@ def compute_mkappa(
         if friction_model == "progressive"
         else None
     )
+    if friction_law is not None and not isinstance(friction_law, FrictionLaw):
+        raise CableSchemaError("friction_law must be a FrictionLaw or None.")
+    law = active_friction_law(friction_law)
+    if law is not None and (
+        friction_model != "direction_tied" or core_friction not in (None, False)
+    ):
+        raise CableSchemaError(
+            "a friction law is implemented for the direction-tied armour law "
+            "only; not with the progressive law or core friction"
+        )
+    try:
+        friction_law_time_steps(law, time_s, kappa.size)
+    except CableInputError as error:
+        raise CableSchemaError(str(error)) from error
     tension_history = None
     if contact_tension_history_N is not None:
         if (
@@ -863,7 +915,7 @@ def compute_mkappa(
         pressure_history = _mkappa_pressure_history(
             contact_pressure_Pa, names, kappa.shape
         )
-    law = _prepare_mkappa_law(
+    mkappa_law = _prepare_mkappa_law(
         cable,
         tension_N,
         mu=mu,
@@ -910,11 +962,13 @@ def compute_mkappa(
     except (ValueError, KeyError):
         pass  # no yield-strength armour: no curvature bound to check
 
-    run = law.run(
+    run = mkappa_law.run(
         kappa,
         None
         if pressure_history is None
         else [pressure_history[name] for name in names],
+        friction_law=law,
+        time_s=time_s,
     )
     res, moment, work, ei_max = run.armour, run.moment_Nm, run.work, run.EI_max_Nm2
     w_diss, core_history = run.W_diss_J_per_m, run.core_history
@@ -924,6 +978,8 @@ def compute_mkappa(
         else "; progressive (Iwan) armour friction law, "
         + progressive_settings.describe()
     )
+    if law is not None:
+        law_extra += "; armour friction law: " + law.describe()
     history_extra = (
         ""
         if pressure_history is None
@@ -943,7 +999,7 @@ def compute_mkappa(
             "contact loads and the wire-yield check use the reference state",
         )
     )
-    model = law.core_model
+    model = mkappa_law.core_model
     if model is None:
         # Armour-only law: the historical path, bitwise unchanged.
         method_extra = ""
@@ -1027,6 +1083,16 @@ def compute_mkappa(
                 "three-core state depends on the declared filler representation",
                 *limitations_extra,
                 *history_limitations,
+                *(
+                    ()
+                    if law is None
+                    else (
+                        "friction law: no rate-dependent or static/dynamic "
+                        "friction data of armour interfaces is in the validation "
+                        "set; the wire slip rate is the representative value "
+                        "(r / |sin a|) times the plastic strain rate",
+                    )
+                ),
             ),
         ),
     )
@@ -1902,6 +1968,7 @@ def compute_fatigue(
     mean_stress: MeanStressOption | Mapping[str, MeanStressOption] | None = None,
     scf: ComponentSCF | Mapping[str, ComponentSCF] | None = None,
     count_from_sample: int = 0,
+    friction_law: FrictionLaw | None = None,
 ) -> FatigueResult:
     r"""Per-wire fatigue of a cable over a biaxial curvature (and tension) history.
 
@@ -2035,7 +2102,8 @@ def compute_fatigue(
         for block-weighted damage.
     time_s : numpy.ndarray, optional
         Sample times [s] of the curvature record, placing it on the slow time
-        axis of a multi-node ``ThermalHistory``.
+        axis of a multi-node ``ThermalHistory``, and the time base of a
+        time-dependent ``friction_law``. Refused when neither uses it.
     sn_curves : dict[str, str or SNcurve], optional
         Bulk S-N curve per armour layer name, replacing the layer's
         ``bulk_sn`` (a registered name, see
@@ -2056,6 +2124,15 @@ def compute_fatigue(
         stress-free section, and the bulk cycles are counted from this sample
         on (default 0, every sample, bit for bit as before). Not available
         with a contact-life branch or with ``section_states``.
+    friction_law : FrictionLaw, optional
+        Static/dynamic and rate-dependent armour friction coefficient
+        (:class:`~cablexsec.mechanics.friction_law.FrictionLaw`), with the
+        sample times ``time_s`` when it depends on time: the direction-tied
+        model takes every option, the distributed model the static/dynamic
+        option; refused with the progressive model and a termination
+        correction. The crossing contact-life branches keep their
+        rate-independent coefficient. ``None`` (default) or a neutral law
+        gives the earlier result, bit for bit.
 
     Returns
     -------
@@ -2110,8 +2187,21 @@ def compute_fatigue(
                 "strain, a frozen contact tension or a separate thermal stress "
                 "conflict with it"
             )
-    elif time_s is not None:
-        raise CableSchemaError("time_s is used only with a thermal history")
+    if friction_law is not None and not isinstance(friction_law, FrictionLaw):
+        raise CableSchemaError("friction_law must be a FrictionLaw or None.")
+    law = active_friction_law(friction_law)
+    law_time = law is not None and law.needs_time
+    if thermal is None and time_s is not None and not law_time:
+        raise CableSchemaError(
+            "time_s is used only with a thermal history or a time-dependent "
+            "friction law"
+        )
+    if law_time:
+        try:
+            friction_law_time_steps(law, time_s, kx.size)
+        except CableInputError as error:
+            raise CableSchemaError(str(error)) from error
+    law_time_s = time_s if law_time else None
     if contact_model is None:
         contact_model = (
             section_states[0].contact_model
@@ -2225,6 +2315,8 @@ def compute_fatigue(
             termination=termination,
             progressive=progressive,
             sn_options=(sn_curves, mean_stress, scf),
+            friction_law=law,
+            time_s=law_time_s,
         )
 
     reference_tension = (
@@ -2296,6 +2388,8 @@ def compute_fatigue(
         termination=termination,
         progressive=progressive,
         count_from_sample=count_from_sample,
+        friction_law=law,
+        time_s=law_time_s,
     )
     if thermal_notes and result.provenance is not None:
         result = replace(
@@ -2459,6 +2553,8 @@ def _fatigue_from_section_states(
     termination: TerminationSpec | Mapping[str, TerminationSpec] | None = None,
     progressive: ProgressiveFriction | None = None,
     sn_options: tuple[Any, Any, Any] = (None, None, None),
+    friction_law: FrictionLaw | None = None,
+    time_s: FloatArray | None = None,
 ) -> FatigueResult:
     """Use each normal equilibrium for wire stress, stiffness and contact.
 
@@ -2528,6 +2624,8 @@ def _fatigue_from_section_states(
         partial_slip_cycles=partial_slip_cycles,
         termination=termination,
         progressive=progressive,
+        friction_law=friction_law,
+        time_s=time_s,
     )
     # Called from compute_fatigue: point the warning at that caller.
     return _flag_unevaluated_curves(cable, initial, result, stacklevel=4)

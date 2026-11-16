@@ -30,6 +30,17 @@ Bending and stress
 .. autofunction:: cablexsec.compute_stress
 .. autofunction:: cablexsec.compute_component_response
 
+Friction law
+------------
+
+The static/dynamic and rate-dependent armour friction coefficient taken by
+``compute_mkappa`` and ``compute_fatigue`` (``friction_law``, with ``time_s``),
+and the single spring-slider that shows its closed forms.
+
+.. autoclass:: cablexsec.FrictionLaw
+   :members: rate_factor, describe, is_neutral, needs_time
+.. autofunction:: cablexsec.mechanics.friction_law.slider_history
+
 Fatigue
 -------
 

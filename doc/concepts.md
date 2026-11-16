@@ -201,6 +201,70 @@ follows the history: the stick stiffness, the full-slip stiffness and the
 contact loads of the laid cores stay at the reference state. The bending-test
 simulator and the exported bending law keep a fixed pressure.
 
+## The friction coefficient can depend on slip state and rate
+
+By default every contact pair has one rate-independent Coulomb coefficient
+`mu`. A `FrictionLaw` replaces it by an effective coefficient `m mu`, with a
+factor `m` that each wire (direction-tied model) or helix node (distributed
+model) carries on its own. The factor enters where the kernel uses `mu`: in
+the capstan exponent of the wire bounds, `sigma0 g expm1(m lam psi)` and
+`sigma0 g (1 - exp(-m lam psi))`, and on the whole node bound
+`m (rho g + lam n)` of the distributed model.
+
+**Static and dynamic coefficient.** A wire keeps the static factor
+`static_factor` (`mu_s / mu`) until it slips, then the dynamic factor
+`dynamic_factor` (`mu_d / mu`) while it slips, and returns to the static one
+after `stick_time_s` of stick. Each step is a backward-Euler return map with
+the factor of the end of the step. A wire whose trial stress leaves the
+interval of its current factor starts or continues a slip episode and is
+returned to the dynamic interval. With `mu_s > mu_d` the loop has a breakaway
+peak: the stress drops from the static to the dynamic bound in the step of
+breakaway. With `mu_s < mu_d` (velocity strengthening) the stick episode ends
+at the static bound without slip, and the wire continues elastically up to
+the dynamic bound. A healing time of `inf` (default) never heals, `0` heals
+after one stick step.
+
+**Rate dependence.** At slip rate `v` the dynamic factor becomes `m_d R(v)`,
+
+$$
+R(v) = 1 + c \ln(1 + v / v_0) + v / v_\eta ,
+$$
+
+the logarithmic law `mu(v) = mu_d (1 + c ln(1 + v/v_0))` plus a regularised
+(viscous) Coulomb term `t = b sign(v) + eta v` with `eta = b / v_eta`, a
+Perzyna overstress proportional to the rate-independent bound `b`. The slip
+increment `dp` of a slipping wire solves
+`|sigma_trial| - k dp = B(m_d R(L dp / dt))` with `B` the bound on its side;
+the left side falls and the right side rises with `dp`, so the root is
+unique and the return is exact for the step. Only `c >= 0` is accepted
+(velocity weakening loses this uniqueness). The direction-tied wire slips in
+a reduced strain; its slip rate is that strain rate times `L = r / |sin a|`,
+the wire length per radian of helix, which turns the extreme-fibre strain
+`r kappa` into the largest slip displacement of a freely sliding wire. It is
+a representative wire velocity, not a local one. The distributed model takes
+the static/dynamic option only.
+
+**Energy.** The work of a slipping wire splits into the rate-independent
+friction work `B(m_d) |dp|` and the rate-dependent (viscous) part
+`[B(m_d R) - B(m_d)] |dp|`; `BendingWork.viscous_J_per_m` reports the second,
+and the balance input work = stored energy + friction + viscous dissipation +
+backward-Euler remainder closes to round-off. One slider driven at full slip
+by `x0 sin(omega t)` dissipates `4 b x0` by friction and `pi eta omega x0^2`
+by the viscous term per cycle (`slider_history` reproduces both).
+
+**Where it applies.** `compute_mkappa` and `compute_fatigue` take
+`friction_law` with the sample times `time_s` when the law needs them (a rate
+term or a finite positive healing time); without a time base such a law is
+refused, and `time_s` without one is refused too. The stress-free start lies
+one sampling interval before the first sample. The progressive (Iwan) model,
+the laid-core friction, the termination clamp increment and the bending-test
+simulator keep the rate-independent coefficient and refuse a non-neutral law.
+The exported bending law refuses one as well: its parallel elastic-plastic
+elements with Masing's rules are rate independent and cannot represent it.
+Neutral parameters (`mu_s = mu_d = mu`, `c = 0`, `v_eta = inf`) leave every
+result unchanged, bit for bit. No rate-dependent or static/dynamic friction
+data of armour interfaces is in the validation set.
+
 ## Fatigue is counted at fixed material points
 
 A fatigue crack starts at a point of the material, so CableXSec counts fatigue

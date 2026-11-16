@@ -34,6 +34,24 @@ All notable changes to CableXSec are recorded in this file. The format follows
   curvature is about 1% of its peak, so the wire next to it stays in stick and the anchor
   condition does not reach the stations; the over-prediction is a curvature-gradient effect.
   Section records of the sea-state batch carry the new key; records without it load as rigid.
+- A friction law with a static/dynamic and a rate-dependent coefficient (`FrictionLaw`,
+  `compute_mkappa(..., friction_law=, time_s=)`, `compute_fatigue(..., friction_law=, time_s=)`).
+  Before, every contact pair had one rate-independent Coulomb coefficient. The law gives each
+  wire (direction-tied model) or helix node (distributed model) a factor on its coefficient:
+  `static_factor` until it slips, `dynamic_factor` while it slips and until it has stuck for
+  `stick_time_s`, either order (`mu_s > mu_d` gives a breakaway peak, `mu_s < mu_d` velocity
+  strengthening), times `R(v) = 1 + c ln(1 + v/v0) + v/v_eta` at slip rate `v`. The last term
+  is a regularised Coulomb law `t = b sign(v) + eta v` with `eta = b/v_eta`, solved as a
+  backward-Euler (Perzyna) return that is exact for each step; `BendingWork.viscous_J_per_m`
+  reports its dissipation and the work balance closes with it to round-off. The direction-tied
+  kernel takes every option (NumPy reference and compiled kernel), the distributed kernel the
+  static/dynamic option; the progressive model, the laid-core friction and the termination
+  clamp increment refuse a non-neutral law, and so does the exported bending law (a Masing/Iwan
+  law is rate independent). A law that depends on time needs the sample times and is refused
+  without them. Neutral parameters reproduce every result bit for bit. `slider_history` runs
+  the law on one spring-slider: breakaway peak, healing, steady logarithmic rate and the
+  viscous loop area `pi eta omega x0^2` are tested in closed form. No rate-dependent friction
+  data of armour interfaces is in the validation set.
 - `compute_mkappa` can let the armour contact pressure follow the bending history:
   `contact_tension_history_N` sets the per-sample `P1+P2` from a tension history through the
   contact model (the histories `compute_fatigue` forms from `tension_N`), and

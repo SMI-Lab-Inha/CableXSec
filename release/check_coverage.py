@@ -32,6 +32,7 @@ KERNEL_TESTS = (
     "tests/test_along_wire_test_inputs.py",
     "tests/test_along_wire_chain.py",
     "tests/test_friction_kernels.py",
+    "tests/test_friction_law.py",
 )
 
 

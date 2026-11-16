@@ -84,6 +84,7 @@ References
 
 from __future__ import annotations
 
+import dataclasses
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -93,6 +94,12 @@ import numpy as np
 from numpy.typing import NDArray
 
 from cablexsec.exceptions import CableInputError
+from cablexsec.mechanics.friction_law import (
+    FrictionLaw,
+    _slip_magnitude_array,
+    active_friction_law,
+    friction_law_time_steps,
+)
 from cablexsec.mechanics.mkappa import HelicalLayerSpec
 from cablexsec.mechanics.return_mapping import CoulombElement
 
@@ -275,6 +282,11 @@ class BendingWork:
     that contribution enters the balance on the input side. Neither it nor
     the integration remainder is frictional dissipation. Open-path mechanical
     work must not be reported as loop loss.
+
+    ``viscous_J_per_m`` is the rate-dependent part of the dissipation under a
+    rate-dependent :class:`~cablexsec.mechanics.friction_law.FrictionLaw`
+    (``None`` otherwise); ``friction_J_per_m`` is then the rate-independent
+    part, and the balance subtracts both.
     """
 
     stored_J_per_m: FloatArray
@@ -282,6 +294,14 @@ class BendingWork:
     endpoint_work_J_per_m: FloatArray
     integration_remainder_J_per_m: FloatArray
     balance_residual_J_per_m: FloatArray
+    viscous_J_per_m: FloatArray | None = None
+
+    @property
+    def dissipation_J_per_m(self) -> FloatArray:
+        """Total interface dissipation, friction plus viscous [J/m]."""
+        if self.viscous_J_per_m is None:
+            return self.friction_J_per_m
+        return np.asarray(self.friction_J_per_m + self.viscous_J_per_m)
 
 
 @dataclass(frozen=True)
@@ -577,6 +597,8 @@ def compute_mkappa_wire_slip_front(
     EI_min_Nm2: float = 0.0,
     progressive: ProgressiveFriction | None = None,
     contact_pressure_Pa: Sequence[FloatArray | None] | None = None,
+    friction_law: FrictionLaw | None = None,
+    time_s: FloatArray | None = None,
 ) -> PapailiouWireResult:
     """Integrate one shared Papailiou return map over physical cable wires.
 
@@ -594,11 +616,23 @@ def compute_mkappa_wire_slip_front(
     fixed ``contact_pressure_Pa``. The pressure moves only the friction bound;
     stick stiffness and ``EI_min`` stay those of the layer specifications.
     ``None`` for the whole argument keeps the fixed-pressure law.
+
+    ``friction_law`` (:class:`~cablexsec.mechanics.friction_law.FrictionLaw`)
+    and ``time_s`` pass to :func:`wire_slip_history`; a non-neutral law is
+    refused with ``progressive``. ``work.viscous_J_per_m`` and
+    ``W_diss_J_per_m`` then include the rate-dependent dissipation.
     """
     kappa = np.asarray(kappa_history, dtype=np.float64)
+    law = active_friction_law(friction_law)
+    if law is not None and progressive is not None:
+        raise CableInputError(
+            "a friction law acts on the single spring-slider per wire; the "
+            "progressive law is not implemented with it"
+        )
     moment = np.zeros(kappa.size, dtype=np.float64)
     slip_fraction = np.zeros(kappa.size, dtype=np.float64)
     stored, friction, endpoint, remainder = (np.zeros(kappa.size) for _ in range(4))
+    viscous = None if law is None or not law.rate_dependent else np.zeros(kappa.size)
     total_wires = sum(layer.n_wires for layer in layers) or 1
     if contact_pressure_Pa is not None and len(contact_pressure_Pa) != len(layers):
         raise CableInputError("one contact-pressure history (or None) per layer")
@@ -613,6 +647,8 @@ def compute_mkappa_wire_slip_front(
                 kappa * math.sin(phi_bend),
                 contact_pressure_Pa=pressure,
                 initial_bending_angle=phi_bend,
+                friction_law=law,
+                time_s=time_s,
             )
             slipping: FloatArray | NDArray[np.int64] = history.slipping_count
         else:
@@ -635,26 +671,40 @@ def compute_mkappa_wire_slip_front(
         friction += history.work.friction_J_per_m
         endpoint += history.work.endpoint_work_J_per_m
         remainder += history.work.integration_remainder_J_per_m
+        if viscous is not None and history.work.viscous_J_per_m is not None:
+            viscous += history.work.viscous_J_per_m
         slip_fraction += slipping / total_wires
     increments = np.diff(kappa, prepend=0.0)
     moment += EI_min_Nm2 * kappa
     stored += 0.5 * EI_min_Nm2 * kappa**2
     endpoint += np.cumsum(EI_min_Nm2 * kappa * increments)
     remainder += np.cumsum(0.5 * EI_min_Nm2 * increments**2)
-    return PapailiouWireResult(
-        kappa=kappa,
-        moment_Nm=moment,
-        W_diss_J_per_m=float(friction[-1]) if friction.size else 0.0,
-        EI_max_Nm2=sum(layer.EI_stick for layer in layers) + EI_min_Nm2,
-        EI_min_Nm2=EI_min_Nm2,
-        slip_fraction=slip_fraction,
-        work=BendingWork(
+    if viscous is None:
+        work = BendingWork(
             stored,
             friction,
             endpoint,
             remainder,
             endpoint - stored - friction - remainder,
-        ),
+        )
+    else:
+        work = BendingWork(
+            stored,
+            friction,
+            endpoint,
+            remainder,
+            endpoint - stored - friction - viscous - remainder,
+            viscous,
+        )
+    total = work.dissipation_J_per_m
+    return PapailiouWireResult(
+        kappa=kappa,
+        moment_Nm=moment,
+        W_diss_J_per_m=float(total[-1]) if total.size else 0.0,
+        EI_max_Nm2=sum(layer.EI_stick for layer in layers) + EI_min_Nm2,
+        EI_min_Nm2=EI_min_Nm2,
+        slip_fraction=slip_fraction,
+        work=work,
     )
 
 
@@ -689,6 +739,8 @@ def wire_slip_history(
     initial_bending_angle: float = 0.0,
     direction_hold_fraction: float = DIRECTION_HOLD_FRACTION,
     keep_cap: bool = False,
+    friction_law: FrictionLaw | None = None,
+    time_s: FloatArray | None = None,
 ) -> WireSlipHistory:
     """Shared small-strain, mean-clamping update for bending and bulk fatigue.
 
@@ -749,6 +801,19 @@ def wire_slip_history(
     much as the distributed bound does, but narrows the stress-drive loop of
     each wire. Frictional heat uses the distributed dissipation
     (:func:`~cablexsec.analysis.thermal_coupling.record_friction_work`).
+
+    Friction law. ``friction_law``
+    (:class:`~cablexsec.mechanics.friction_law.FrictionLaw`) scales the
+    coefficient of every wire by its static, dynamic and rate factor: the
+    bounds become ``sigma0 g expm1(m lam psi)`` and ``sigma0 g (1 - exp(-m lam
+    psi))`` (blended below the direction threshold as above), each wire keeps
+    its own stick timer, and the slip rate is ``(r / |sin a|) dp / dt`` with
+    ``dp`` the increment of the plastic drive (module notes of
+    :mod:`cablexsec.mechanics.friction_law`). The direction threshold uses
+    the smallest factor of the law. ``time_s`` gives the sample times when the
+    law needs them. ``work.viscous_J_per_m`` is the rate-dependent
+    dissipation of a rate-dependent law. ``None`` or a neutral law keeps the
+    rate-independent update, bit for bit.
     """
     kx, ky = np.asarray(kappa_x, dtype=float), np.asarray(kappa_y, dtype=float)
     if (
@@ -762,8 +827,11 @@ def wire_slip_history(
         )
     if not math.isfinite(initial_bending_angle):
         raise CableInputError("initial bending angle must be finite")
+    law = active_friction_law(friction_law)
+    steps = friction_law_time_steps(law, time_s, kx.size)
     threshold_coefficient = _threshold_coefficient(
-        layer, float(direction_hold_fraction)
+        layer if law is None else _law_threshold_layer(layer, law),
+        float(direction_hold_fraction),
     )
     count = kx.size
     pressure = (
@@ -784,6 +852,19 @@ def wire_slip_history(
     if np.any(pressure < 0) or np.any(stiffness <= 0):
         raise CableInputError(
             "nonnegative pressure and positive stiffness are required"
+        )
+    if law is not None:
+        return _law_wire_slip_history(
+            layer,
+            kx,
+            ky,
+            pressure,
+            stiffness,
+            law,
+            steps,
+            initial_bending_angle,
+            threshold_coefficient,
+            keep_cap,
         )
     element = CoulombElement(k=float(stiffness[0]), shape=(layer.n_wires,))
     directions = np.column_stack((np.cos(layer.phi_wires), np.sin(layer.phi_wires)))
@@ -919,6 +1000,269 @@ def wire_slip_history(
             endpoint,
             remainder,
             balance,
+        ),
+        caps,
+    )
+
+
+def _law_threshold_layer(layer: HelicalLayerSpec, law: FrictionLaw) -> HelicalLayerSpec:
+    """Layer with the smallest coefficient of the law (direction threshold)."""
+    factor = law.minimum_factor
+    if factor == 1.0:
+        return layer
+    return dataclasses.replace(layer, mu=layer.mu * factor)
+
+
+def _bound_parts(
+    layer: HelicalLayerSpec, angle: float, load: float
+) -> tuple[FloatArray, FloatArray]:
+    """``(sigma0 g, mu |sin a| psi)`` of every wire: the bounds of factor ``m``
+    are ``sigma0 g expm1(m x)`` and ``-sigma0 g expm1(-m x)``."""
+    sin_a = abs(math.sin(layer.lay_angle_rad))
+    if load <= 0.0 or sin_a < 1.0e-12:
+        zero = np.zeros(layer.n_wires, dtype=np.float64)
+        return zero, zero.copy()
+    width = 2.0 * math.pi * layer.r_helix_m / layer.n_wires
+    sigma0 = (
+        layer.r_helix_m
+        * load
+        * width
+        * math.cos(layer.lay_angle_rad)
+        / (layer.A_wire_m2 * sin_a**2)
+    )
+    g = (
+        np.ones(layer.n_wires, dtype=np.float64)
+        if layer.shape_g is None
+        else np.asarray(layer.shape_g, dtype=np.float64)
+    )
+    cphi = np.cos(layer.phi_wires - angle)
+    psi = np.arcsin(np.clip(np.abs(cphi), 0.0, 1.0))
+    scale = np.asarray(sigma0 * g, dtype=np.float64)
+    x = np.asarray(layer.mu * sin_a * psi, dtype=np.float64)
+    if (
+        scale.shape != (layer.n_wires,)
+        or not np.isfinite(scale).all()
+        or np.any(scale < 0)
+        or not np.isfinite(x).all()
+    ):
+        raise CableInputError(
+            "wire caps must be finite, nonnegative and match the population"
+        )
+    return scale, x
+
+
+def _law_bounds(
+    factor: FloatArray,
+    c0: FloatArray,
+    x0: FloatArray,
+    c1: FloatArray,
+    x1: FloatArray,
+) -> tuple[FloatArray, FloatArray]:
+    """Rising and falling bounds of every wire at its factor."""
+    upper = c0 * np.expm1(factor * x0) + c1 * np.expm1(factor * x1)
+    lower = -(c0 * np.expm1(-factor * x0) + c1 * np.expm1(-factor * x1))
+    return np.asarray(upper), np.asarray(lower)
+
+
+def _law_wire_slip_history(
+    layer: HelicalLayerSpec,
+    kx: FloatArray,
+    ky: FloatArray,
+    pressure: FloatArray,
+    stiffness: FloatArray,
+    law: FrictionLaw,
+    steps: FloatArray | None,
+    initial_bending_angle: float,
+    threshold_coefficient: float,
+    keep_cap: bool,
+) -> WireSlipHistory:
+    """:func:`wire_slip_history` under a non-neutral friction law (reference)."""
+    count = kx.size
+    n_w = layer.n_wires
+    element = CoulombElement(k=float(stiffness[0]), shape=(n_w,))
+    directions = np.column_stack((np.cos(layer.phi_wires), np.sin(layer.phi_wires)))
+    drive_map = layer.r_helix_m * directions
+    weight = layer.A_wire_m2 * math.cos(layer.lay_angle_rad)
+    slip_length = layer.r_helix_m / abs(math.sin(layer.lay_angle_rad))
+    stress = np.empty((n_w, count))
+    caps = np.empty((n_w, count)) if keep_cap else None
+    moment = np.empty((count, 2))
+    slipping_count = np.empty(count, dtype=np.int64)
+    stored, friction, viscous, endpoint, remainder, material = (
+        np.zeros(count) for _ in range(6)
+    )
+    # friction, viscous, endpoint work, integration remainder, material work
+    totals = np.zeros(5)
+    old_drive = np.zeros(n_w)
+    held = current = initial_bending_angle
+    healed = np.ones(n_w, dtype=bool)
+    timer = np.zeros(n_w)
+    ms, md = law.static_factor, law.dynamic_factor
+    rc, v0 = law.rate_coefficient, law.rate_reference_m_per_s
+    inv_veta = law.inverse_viscous_velocity
+    rate = law.rate_dependent
+    cache: dict[str, tuple[tuple[float, float] | None, tuple[FloatArray, FloatArray]]]
+    zero = np.zeros(n_w)
+    cache = {"held": (None, (zero, zero)), "current": (None, (zero, zero))}
+
+    def parts(slot: str, angle: float, load: float) -> tuple[FloatArray, FloatArray]:
+        key, value = cache[slot]
+        if key != (angle, load):
+            value = _bound_parts(layer, angle, load)
+            cache[slot] = ((angle, load), value)
+        return value
+
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        try:
+            for index, (x, y) in enumerate(zip(kx, ky, strict=True)):
+                current_stiffness = float(stiffness[index])
+                if current_stiffness != element.k:
+                    elastic_strain = element.f / element.k
+                    totals[4] += (
+                        0.5
+                        * weight
+                        * (current_stiffness - element.k)
+                        * (elastic_strain**2).sum()
+                    )
+                    element.set_stiffness(current_stiffness)
+                old_stress = element.f
+                load = float(pressure[index])
+                if x != 0 or y != 0:
+                    current = math.atan2(y, x)
+                threshold = threshold_coefficient * load / current_stiffness
+                magnitude = math.sqrt(x * x + y * y)
+                blend = 0.0
+                if magnitude >= threshold:
+                    held = current
+                else:
+                    blend = magnitude / threshold
+                scale, x_held = parts("held", held, load)
+                x_cur = x_held
+                if blend > 0.0:
+                    x_cur = parts("current", current, load)[1]
+                c0 = (1.0 - blend) * scale
+                c1 = blend * scale
+                drive = drive_map @ np.array([x, y])
+                increment = drive - old_drive
+                if not np.isfinite(increment).all():
+                    raise CableInputError("derived wire increment must be finite")
+                k = element.k
+                trial = element.f + k * increment
+                available = np.where(healed, ms, md)
+                upper, lower = _law_bounds(available, c0, x_held, c1, x_cur)
+                leaves = (trial > upper) | (trial < -lower)
+                side = np.where(trial > 0.0, 1.0, -1.0)
+                size = np.abs(trial)
+                dyn_upper, dyn_lower = _law_bounds(
+                    np.full(n_w, md), c0, x_held, c1, x_cur
+                )
+                dynamic = np.where(side > 0.0, dyn_upper, dyn_lower)
+                slips = leaves & (size > dynamic)
+                magnitude_slip = np.zeros(n_w)
+                if np.any(slips):
+                    dt = 1.0 if steps is None else float(steps[index])
+                    with np.errstate(over="ignore", invalid="ignore"):
+                        magnitude_slip[slips] = _slip_magnitude_array(
+                            size[slips],
+                            k,
+                            md,
+                            side[slips],
+                            c0[slips],
+                            x_held[slips],
+                            c1[slips],
+                            x_cur[slips],
+                            slip_length / dt,
+                            rc,
+                            v0,
+                            inv_veta,
+                        )
+                # Factor at the end of the step: the available one in stick,
+                # the dynamic one (times the rate factor) after leaving it.
+                end_factor = np.where(leaves, md, available)
+                if rate and np.any(slips):
+                    dt = 1.0 if steps is None else float(steps[index])
+                    end_factor = np.where(
+                        slips,
+                        md * law.rate_factor(slip_length * magnitude_slip / dt),
+                        end_factor,
+                    )
+                end_upper, end_lower = _law_bounds(end_factor, c0, x_held, c1, x_cur)
+                # A slipping wire sits on its end-of-step bound (exactly, as
+                # the rate-independent clip); the slip closes the step.
+                force = np.where(
+                    slips, np.where(side > 0.0, end_upper, -end_lower), trial
+                )
+                slip = np.where(slips, (trial - force) / k, 0.0)
+                element.f = force
+                element.slip_total = element.slip_total + slip
+                stress[:, index] = force
+                if caps is not None:
+                    caps[:, index] = np.where(force < 0.0, end_lower, end_upper)
+                moment[index] = weight * (force @ drive_map)
+                slipping_count[index] = np.count_nonzero(force != trial)
+                stored[index] = weight * (force**2).sum() / (2 * current_stiffness)
+                dissipated = weight * (force * slip).sum()
+                if rate:
+                    coulomb = weight * (dynamic * np.abs(slip))[slips].sum()
+                    totals[0] += coulomb
+                    totals[1] += dissipated - coulomb
+                else:
+                    totals[0] += dissipated
+                totals[2] += weight * (force * increment).sum()
+                totals[3] += (
+                    weight * ((force - old_stress) ** 2).sum() / (2 * current_stiffness)
+                )
+                (
+                    friction[index],
+                    viscous[index],
+                    endpoint[index],
+                    remainder[index],
+                    material[index],
+                ) = totals
+                # Stick timers: a step that leaves the current interval ends
+                # the stick episode; completed stick steps count towards
+                # healing.
+                dt_stick = 0.0 if steps is None else float(steps[index])
+                waiting = ~leaves & ~healed
+                timer = np.where(
+                    leaves, 0.0, np.where(waiting, timer + dt_stick, timer)
+                )
+                healed = (healed & ~leaves) | (waiting & (timer >= law.stick_time_s))
+                old_drive = drive
+            balance = endpoint + material - stored - friction - viscous - remainder
+        except FloatingPointError as error:
+            raise CableInputError(
+                "wire history exceeds floating-point range"
+            ) from error
+    if not all(
+        np.isfinite(v).all()
+        for v in (
+            stress,
+            moment,
+            element.slip_total,
+            stored,
+            friction,
+            viscous,
+            endpoint,
+            remainder,
+            material,
+            balance,
+        )
+    ):
+        raise CableInputError("wire history produced nonfinite results")
+    return WireSlipHistory(
+        stress,
+        moment,
+        slipping_count,
+        element.slip_total.copy(),
+        material,
+        BendingWork(
+            stored,
+            friction,
+            endpoint,
+            remainder,
+            balance,
+            viscous if rate else None,
         ),
         caps,
     )

@@ -85,6 +85,11 @@ from numpy.typing import NDArray
 
 from cablexsec._numba import HAVE_NUMBA, njit
 from cablexsec.exceptions import CableInputError
+from cablexsec.mechanics.friction_law import (
+    FrictionLaw,
+    active_friction_law,
+    friction_law_time_steps,
+)
 
 if TYPE_CHECKING:
     from cablexsec.mechanics.mkappa import HelicalLayerSpec
@@ -241,12 +246,14 @@ def _solve_capstan_newton(
     wy: FloatArray,
     wz: FloatArray,
     prev: FloatArray,
+    mfac: FloatArray,
 ) -> int:
     """Coupled semismooth Newton for the capstan bound ``b = b(n(v))``.
 
     Solves ``n_j - n_{j-1} = h clip(k_hat (z0_j + v_j), -b_j, b_j)`` with
-    ``b_j = rho g_j + lam (n_j + n_{j-1}) / 2`` directly (the same
-    equations as the fixed point on ``b``), using the tridiagonal generalised
+    ``b_j = m_j (rho g_j + lam (n_j + n_{j-1}) / 2)`` directly (the same
+    equations as the fixed point on ``b``; ``m_j`` the friction-law factor of
+    the node, one without a law), using the tridiagonal generalised
     Jacobian. Returns iterations, or -1 (caller falls back to the fixed point).
     """
     n = y.size
@@ -262,7 +269,7 @@ def _solve_capstan_newton(
         gap = math.inf
         for j in range(n):
             jm = j - 1 if j > 0 else n - 1
-            b[j] = rho * gnode[j] + lam * 0.5 * (nn[j] + nn[jm])
+            b[j] = mfac[j] * (rho * gnode[j] + lam * 0.5 * (nn[j] + nn[jm]))
             if b[j] < 0.0:
                 b[j] = 0.0
             excess = abs(khat * (z0[j] + v[j])) - b[j]
@@ -280,7 +287,8 @@ def _solve_capstan_newton(
             else:
                 state = 1.0 if r > 0.0 else -1.0
                 t = state * b[j]
-            # Signed capstan: db/dn = lam / 2 on both segments (zero if floored).
+            # Signed capstan: db/dn = m lam / 2 on both segments (zero if floored).
+            lm = lam * mfac[j]
             sm = 1.0 if b[j] > 0.0 else 0.0
             sj = sm
             # The equations are linear for a fixed stick/slip state and sign
@@ -300,9 +308,9 @@ def _solve_capstan_newton(
                 d[j] = 2.0 / h + h * khat
                 uc[j] = -1.0 / h
             else:
-                la[j] = -(1.0 / h + 0.5 * lam * state * sm)
-                d[j] = 2.0 / h + 0.5 * lam * state * (sm - sj)
-                uc[j] = -(1.0 / h - 0.5 * lam * state * sj)
+                la[j] = -(1.0 / h + 0.5 * lm * state * sm)
+                d[j] = 2.0 / h + 0.5 * lm * state * (sm - sj)
+                uc[j] = -(1.0 / h - 0.5 * lm * state * sj)
         if res <= tol or (same and any_elastic and res <= 1e6 * tol):
             return it
         if not math.isfinite(res):
@@ -539,6 +547,9 @@ def _advance(
     work: FloatArray,
     stats: NDArray[np.int64],
     capstan_newton: bool,
+    mfac: FloatArray,
+    law: FloatArray,
+    lstate: FloatArray,
 ) -> bool:
     """One backward-Euler increment to ``(ax, ay, rho)``; False on failure.
 
@@ -547,6 +558,12 @@ def _advance(
     failure), otherwise by the fixed point alone.
 
     ``energy`` accumulates [W_be, D, R]; ``work`` holds N-sized scratch rows.
+    ``mfac`` is the friction-law factor of every node's bound; ``law`` =
+    ``[active, m_s, m_d, t_stick, dt]`` and ``lstate`` = rows ``[healed,
+    timer]`` carry the static/dynamic state. A healed node whose trial
+    traction leaves its static bound breaks away: its factor becomes ``m_d``
+    and the increment is solved again, until no node breaks away (each node
+    at most once per increment).
     """
     n = u.size
     y = work[0]
@@ -567,6 +584,8 @@ def _advance(
     la = work[15]
     uc = work[16]
     prev = work[17]
+    broke = work[18]
+    bend = work[19]
     # Residual scale: the largest term entering the force differences.
     scale = 1.0
     for j in range(n):
@@ -583,6 +602,136 @@ def _advance(
     if rho > scale:
         scale = rho
     tol = 1e-12 * h * scale
+    law_on = law[0] != 0.0 and law[1] != law[2]
+    for j in range(n):
+        broke[j] = 0.0
+    for attempt in range(n + 1):
+        if attempt > 0:
+            for j in range(n):
+                v[j] = 0.0
+                ncur[j] = nf[j]
+        if not _solve_increment(
+            y,
+            z0,
+            rho,
+            gnode,
+            khat,
+            lam,
+            h,
+            tol,
+            v,
+            b,
+            nn,
+            la,
+            d,
+            uc,
+            rhs,
+            dv,
+            cp,
+            wy,
+            wz,
+            prev,
+            vn,
+            vt,
+            ncur,
+            stats,
+            capstan_newton,
+            mfac,
+        ):
+            return False
+        if not law_on:
+            break
+        changed = False
+        for j in range(n):
+            if lstate[0, j] != 0.0:
+                jm = j - 1 if j > 0 else n - 1
+                bj = mfac[j] * (rho * gnode[j] + lam * 0.5 * (ncur[j] + ncur[jm]))
+                if bj < 0.0:
+                    bj = 0.0
+                if abs(khat * (z0[j] + v[j])) > bj:
+                    mfac[j] = law[2]
+                    lstate[0, j] = 0.0
+                    broke[j] = 1.0
+                    changed = True
+        if not changed:
+            break
+    w_be = 0.0
+    diss = 0.0
+    rem = 0.0
+    for j in range(n):
+        jm = j - 1 if j > 0 else n - 1
+        bj = mfac[j] * (rho * gnode[j] + lam * 0.5 * (ncur[j] + ncur[jm]))
+        if bj < 0.0:
+            bj = 0.0
+        bend[j] = bj
+        t = khat * (z0[j] + v[j])
+        slipped = False
+        if t > bj:
+            t = bj
+            slipped = True
+        elif t < -bj:
+            t = -bj
+            slipped = True
+        unew = u[j] + v[j]
+        dp = (unew - t / khat) - p[j]
+        diss += h * t * dp
+        w_be += h * ncur[j] * (enew[j] - e[j])
+        dn = ncur[j] - nf[j]
+        dt = t - tau[j]
+        rem += 0.5 * h * dn * dn + 0.5 * h * dt * dt / khat
+        u[j] = unew
+        p[j] += dp
+        tau[j] = t
+        nf[j] = ncur[j]
+        e[j] = enew[j]
+        if law_on:
+            if slipped or broke[j] != 0.0:
+                lstate[0, j] = 0.0
+                lstate[1, j] = 0.0
+                mfac[j] = law[2]
+            elif lstate[0, j] == 0.0:
+                lstate[1, j] += law[4]
+                if lstate[1, j] >= law[3]:
+                    lstate[0, j] = 1.0
+                    mfac[j] = law[1]
+    energy[0] += w_be
+    energy[1] += diss
+    energy[2] += rem
+    return True
+
+
+@njit(cache=True)
+def _solve_increment(
+    y: FloatArray,
+    z0: FloatArray,
+    rho: float,
+    gnode: FloatArray,
+    khat: float,
+    lam: float,
+    h: float,
+    tol: float,
+    v: FloatArray,
+    b: FloatArray,
+    nn: FloatArray,
+    la: FloatArray,
+    d: FloatArray,
+    uc: FloatArray,
+    rhs: FloatArray,
+    dv: FloatArray,
+    cp: FloatArray,
+    wy: FloatArray,
+    wz: FloatArray,
+    prev: FloatArray,
+    vn: FloatArray,
+    vt: FloatArray,
+    ncur: FloatArray,
+    stats: NDArray[np.int64],
+    capstan_newton: bool,
+    mfac: FloatArray,
+) -> bool:
+    """Solve the increment ``v`` (and the segment forces ``ncur``) for the
+    node factors ``mfac``; False if neither scheme converges."""
+    n = y.size
     converged = False
     if lam > 0.0 and capstan_newton:
         for j in range(n):
@@ -608,6 +757,7 @@ def _advance(
             wy,
             wz,
             prev,
+            mfac,
         )
         if iters >= 0:
             if iters > stats[1]:
@@ -624,7 +774,7 @@ def _advance(
     for it in range(0 if converged else _MAX_FIXED_POINT):
         for j in range(n):
             jm = j - 1 if j > 0 else n - 1
-            b[j] = rho * gnode[j] + lam * 0.5 * (ncur[j] + ncur[jm])
+            b[j] = mfac[j] * (rho * gnode[j] + lam * 0.5 * (ncur[j] + ncur[jm]))
             if b[j] < 0.0:
                 b[j] = 0.0
         iters = _solve_fixed_bound(
@@ -653,37 +803,7 @@ def _advance(
             stats[5] += it + 1
             converged = True
             break
-    if not converged:
-        return False
-    w_be = 0.0
-    diss = 0.0
-    rem = 0.0
-    for j in range(n):
-        jm = j - 1 if j > 0 else n - 1
-        bj = rho * gnode[j] + lam * 0.5 * (ncur[j] + ncur[jm])
-        if bj < 0.0:
-            bj = 0.0
-        t = khat * (z0[j] + v[j])
-        if t > bj:
-            t = bj
-        elif t < -bj:
-            t = -bj
-        unew = u[j] + v[j]
-        dp = (unew - t / khat) - p[j]
-        diss += h * t * dp
-        w_be += h * ncur[j] * (enew[j] - e[j])
-        dn = ncur[j] - nf[j]
-        dt = t - tau[j]
-        rem += 0.5 * h * dn * dn + 0.5 * h * dt * dt / khat
-        u[j] = unew
-        p[j] += dp
-        tau[j] = t
-        nf[j] = ncur[j]
-        e[j] = enew[j]
-    energy[0] += w_be
-    energy[1] += diss
-    energy[2] += rem
-    return True
+    return converged
 
 
 @njit(cache=True)
@@ -703,6 +823,8 @@ def _distributed_kernel(
     capstan_newton: bool = True,
     record_index: NDArray[np.int64] | None = None,
     kinematics: FloatArray | None = None,
+    law: FloatArray | None = None,
+    dt_path: FloatArray | None = None,
 ) -> tuple[FloatArray, FloatArray, FloatArray, NDArray[np.int64], FloatArray]:
     """Normalised wire force history.
 
@@ -716,6 +838,11 @@ def _distributed_kernel(
     ``kinematics`` (kept samples, 4, N) keep the helix field of chosen
     samples: the nodal displacement ``u``, the nodal slip ``p``, the slip of
     the step to the sample ``p - p_before`` and the segment force ``n``.
+
+    ``law`` = ``[m_s, m_d, t_stick]`` (static and dynamic factors, healing
+    time) and ``dt_path`` (the duration of every sample step, divided equally
+    among its substeps) switch on the static/dynamic friction law; ``None``
+    keeps a unit factor on every node.
     """
     n = gnode.size
     h = 2.0 * math.pi / n
@@ -736,7 +863,20 @@ def _distributed_kernel(
     snf = np.empty(n)
     stau = np.empty(n)
     se = np.empty(n)
-    work = np.zeros((18, n))
+    work = np.zeros((20, n))
+    mfac = np.ones(n)
+    smfac = np.ones(n)
+    lstate = np.zeros((2, n))
+    slstate = np.zeros((2, n))
+    lparams = np.zeros(5)
+    if law is not None:
+        lparams[0] = 1.0
+        lparams[1] = law[0]
+        lparams[2] = law[1]
+        lparams[3] = law[2]
+        for j in range(n):
+            mfac[j] = law[0]
+            lstate[0, j] = 1.0
     energy = np.zeros(3)
     senergy = np.zeros(3)
     stats = np.zeros(7, dtype=np.int64)
@@ -763,9 +903,15 @@ def _distributed_kernel(
             se[j] = e[j]
         for k in range(3):
             senergy[k] = energy[k]
+        for j in range(n):
+            smfac[j] = mfac[j]
+            slstate[0, j] = lstate[0, j]
+            slstate[1, j] = lstate[1, j]
         ok = False
         for _attempt in range(_MAX_HALVINGS + 1):
             ok = True
+            if dt_path is not None:
+                lparams[4] = dt_path[i] / nsub
             for s in range(1, nsub + 1):
                 f = s / nsub
                 if not _advance(
@@ -787,6 +933,9 @@ def _distributed_kernel(
                     work,
                     stats,
                     capstan_newton,
+                    mfac,
+                    lparams,
+                    lstate,
                 ):
                     ok = False
                     break
@@ -800,6 +949,10 @@ def _distributed_kernel(
                 e[j] = se[j]
             for k in range(3):
                 energy[k] = senergy[k]
+            for j in range(n):
+                mfac[j] = smfac[j]
+                lstate[0, j] = slstate[0, j]
+                lstate[1, j] = slstate[1, j]
             nsub *= 2
         if not ok:
             stats[0] = -(i + 1)
@@ -813,9 +966,12 @@ def _distributed_kernel(
         for j in range(n):
             jm = j - 1 if j > 0 else n - 1
             stored += 0.5 * h * (nf[j] * nf[j] + tau[j] * tau[j] / khat)
-            bj = rho1 * gnode[j] + lam * 0.5 * (nf[j] + nf[jm])
-            if bj < 0.0:
-                bj = 0.0
+            if law is None:
+                bj = rho1 * gnode[j] + lam * 0.5 * (nf[j] + nf[jm])
+                if bj < 0.0:
+                    bj = 0.0
+            else:
+                bj = work[19, j]  # bound of the last increment
             if bj > 0.0 and abs(tau[j]) >= bj * (1.0 - 1e-9):
                 n_slip += 1
         hist[i, 0] = energy[0]
@@ -910,6 +1066,8 @@ def distributed_friction_history(
     max_increment: float = DEFAULT_MAX_INCREMENT,
     record_field: bool = False,
     field_samples: NDArray[np.int64] | None = None,
+    friction_law: FrictionLaw | None = None,
+    time_s: FloatArray | None = None,
 ) -> DistributedFrictionHistory:
     """Friction stress of every wire from the distributed helix model [Pa].
 
@@ -941,6 +1099,19 @@ def distributed_friction_history(
         Samples (increasing indices) whose helix field of displacement, slip
         and force is kept (``kinematic_field``). The results are otherwise
         unchanged.
+    friction_law : FrictionLaw, optional
+        Static/dynamic friction law
+        (:class:`~cablexsec.mechanics.friction_law.FrictionLaw`): every helix
+        node carries its own factor ``m_s`` or ``m_d`` on the whole bound
+        ``m (rho g + lam n)`` and its own stick timer. A healed node whose
+        trial traction leaves its static bound breaks away and the increment
+        is solved again with the dynamic factor (each node at most once per
+        increment). Rate-dependent terms are not implemented for this model
+        and are refused. ``None`` or a neutral law is the rate-independent
+        model, bit for bit.
+    time_s : numpy.ndarray, optional
+        Sample times [s] for a finite positive healing time; each sample step
+        is divided equally among its substeps.
     """
     kx = np.ascontiguousarray(kappa_x, dtype=np.float64)
     ky = np.ascontiguousarray(kappa_y, dtype=np.float64)
@@ -957,6 +1128,14 @@ def distributed_friction_history(
     count = kx.size
     n_nodes = _validated_nodes(spec, nodes_per_pitch)
     increment = _validated_increment(max_increment)
+    law = active_friction_law(friction_law)
+    if law is not None and law.rate_dependent:
+        raise CableInputError(
+            "the distributed friction model takes the static/dynamic option of a "
+            "friction law only; rate-dependent terms are implemented for the "
+            "direction-tied model"
+        )
+    steps = friction_law_time_steps(law, time_s, count)
     pressure = (
         np.full(count, float(spec.contact_pressure_Pa))
         if contact_pressure_Pa is None
@@ -1014,6 +1193,8 @@ def distributed_friction_history(
         "reference_pressure_Pa": p_ref,
         "stress_unit_Pa": stress_unit,
     }
+    if law is not None:
+        params["friction_law"] = law.describe()
     if zero or stress_unit == 0.0:
         zeros = np.zeros(count)
         params.update(kappa_on=math.inf, substeps=0, max_newton=0, max_fixed_point=0)
@@ -1057,7 +1238,7 @@ def distributed_friction_history(
             raise CableInputError(
                 "field samples must be increasing indices of the history"
             )
-    if kept is None:
+    if kept is None and law is None:
         out, hist, slip, stats, fld = _distributed_kernel(
             kx / kappa_c,
             ky / kappa_c,
@@ -1073,7 +1254,8 @@ def distributed_friction_history(
             bool(record_field),
         )
         kinematics = None
-    else:
+    elif law is None:
+        assert kept is not None
         index = np.full(count, -1, dtype=np.int64)
         index[kept] = np.arange(kept.size)
         kinematics = np.zeros((kept.size, 4, n_nodes))
@@ -1093,6 +1275,31 @@ def distributed_friction_history(
             True,
             index,
             kinematics,
+        )
+    else:
+        index = np.full(count, -1, dtype=np.int64)
+        kinematics = None
+        if kept is not None:
+            index[kept] = np.arange(kept.size)
+            kinematics = np.zeros((kept.size, 4, n_nodes))
+        out, hist, slip, stats, fld = _distributed_kernel(
+            kx / kappa_c,
+            ky / kappa_c,
+            pressure / p_ref,
+            khat,
+            lam,
+            gnode,
+            0.0,
+            xi,
+            increment,
+            wire_index,
+            np.ascontiguousarray(wire_frac),
+            bool(record_field),
+            True,
+            index,
+            np.zeros((0, 4, n_nodes)) if kinematics is None else kinematics,
+            np.array([law.static_factor, law.dynamic_factor, law.stick_time_s]),
+            np.zeros(count) if steps is None else steps,
         )
     if stats[0] != 0:
         raise CableInputError(
@@ -1141,6 +1348,8 @@ def distributed_wire_friction_stress(
     stick_modulus_Pa: FloatArray | None = None,
     nodes_per_pitch: int | None = None,
     max_increment: float = DEFAULT_MAX_INCREMENT,
+    friction_law: FrictionLaw | None = None,
+    time_s: FloatArray | None = None,
 ) -> FloatArray:
     """Friction stress [Pa], shape (wires, samples); see
     :func:`distributed_friction_history`."""
@@ -1152,4 +1361,6 @@ def distributed_wire_friction_stress(
         stick_modulus_Pa=stick_modulus_Pa,
         nodes_per_pitch=nodes_per_pitch,
         max_increment=max_increment,
+        friction_law=friction_law,
+        time_s=time_s,
     ).stress_Pa
