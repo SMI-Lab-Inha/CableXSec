@@ -452,6 +452,67 @@ def test_project_settings_pass_the_slip_scale(iea66):
     assert export.slip_scale.reference_tension_N == 2e4
 
 
+@pytest.mark.parametrize(
+    "axes",
+    [
+        {"slip_scale_tensions_N": [3e4, 6e4]},
+        {
+            "slip_scale_tensions_N": [2e4, 6e4],
+            "slip_scale_external_pressure_Pa": [1e6, 2e6],
+        },
+    ],
+    ids=["tension_axis", "pressure_axis"],
+)
+def test_reference_outside_the_table_axes_serialises(iea66, axes):
+    # The default reference (20 kN, the cable's own external pressure) lies
+    # outside these axes: the table refuses it as a state, but the reference
+    # elements are the group elements at scale 1 and still serialise.
+    export = export_bending_law(
+        iea66,
+        tensions_N=[2e4, 6e4],
+        kappa_max_1_m=2e-3,
+        n_points=30,
+        slip_scale=True,
+        **axes,
+    )
+    table = export.slip_scale
+    assert table is not None and table.reference_tension_N == 2e4
+    with pytest.raises(CableInputError):
+        table.law_at(
+            table.reference_tension_N,
+            None
+            if table.external_pressure_Pa is None
+            else table.reference_external_pressure_Pa,
+        )
+    block = json.loads(export.json_text())["slip_scale"]
+    reference = table.reference_law()
+    assert (
+        block["reference_elements"]["stiffness_Nm2"] == reference.stiffness_Nm2.tolist()
+    )
+    assert block["reference_elements"]["yield_curvature_1_m"] == (
+        reference.yield_curvature_1_m.tolist()
+    )
+    # The same merge as law_at on a table that holds the reference state.
+    inside = export_bending_law(
+        iea66,
+        tensions_N=[2e4, 6e4],
+        kappa_max_1_m=2e-3,
+        n_points=30,
+        slip_scale=True,
+        slip_scale_tensions_N=[2e4, 6e4],
+    ).slip_scale
+    assert inside is not None
+    at_reference = inside.law_at(inside.reference_tension_N)
+    np.testing.assert_allclose(
+        inside.reference_law().stiffness_Nm2, at_reference.stiffness_Nm2, rtol=1e-12
+    )
+    np.testing.assert_allclose(
+        inside.reference_law().yield_curvature_1_m,
+        at_reference.yield_curvature_1_m,
+        rtol=1e-12,
+    )
+
+
 def test_export_checks(iea66):
     args = {"tensions_N": [0.0, 2e4], "kappa_max_1_m": 1e-3, "n_points": 20}
     with pytest.raises(CableInputError, match="need slip_scale=True"):

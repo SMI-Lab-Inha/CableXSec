@@ -525,6 +525,19 @@ class SlipScaleTable:
             None if external_pressure_Pa is None else [external_pressure_Pa],
             per_group=per_group,
         )[:, 0]
+        return self._merged(rho)
+
+    def reference_law(self) -> IwanBendingLaw:
+        """The law at the reference state, where every group scale is 1.
+
+        Built from the group laws alone, so it exists when the reference
+        state lies outside the table's axes (the default reference is the
+        first exported tension with contact).
+        """
+        return self._merged(np.ones(len(self.group_laws)))
+
+    def _merged(self, rho: FloatArray) -> IwanBendingLaw:
+        """The group elements with yield curvatures times ``rho[g]``, merged."""
         k, y, group = self._elements()
         y = y * rho[group]
         keep = y > 0.0
@@ -612,12 +625,7 @@ class SlipScaleTable:
         rho = self.group_scale
         rho_t = self.group_scale_dT_1_per_N
         rho_p = self.group_scale_dpe_1_per_Pa
-        reference = self.law_at(
-            self.reference_tension_N,
-            None
-            if self.external_pressure_Pa is None
-            else self.reference_external_pressure_Pa,
-        )
+        reference = self.reference_law()
         groups = []
         for g, (name, law) in enumerate(
             zip(self.group_names, self.group_laws, strict=True)
