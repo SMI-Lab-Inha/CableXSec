@@ -1325,7 +1325,8 @@ Terms and abbreviations
       Warnings issued when a run succeeds but rests on an assumption or leaves its validated
       range: :term:`ExtrapolationWarning`, :term:`MissingClampingStateWarning`,
       ``UnmodelledPolymerSofteningWarning``, ``UnevaluatedFatigueCurveWarning``,
-      ``UnvalidatedModelWarning`` and ``TransverseMapWarning``.
+      ``UnvalidatedModelWarning`` and ``TransverseMapWarning``; and the ``FutureWarning``
+      ``DirectionTiedFrictionWarning`` of a default that changes in the next release.
 
    wear
       Loss of material from a contact by sliding. :func:`~cablexsec.compute_fretting` computes the

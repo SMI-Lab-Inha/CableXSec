@@ -40,6 +40,42 @@ All notable changes to CableXSec are recorded in this file. The format follows
   level in one step where the measured force decays over 0.6–2.3 mm, so the work is 1–5 % low;
   the static peak rises 10.6 % from 0.01 to 0.2 Hz, which the law cannot represent, while the
   dynamic level does not move with frequency (no rate term supported at 0.13–2.5 mm/s).
+- `friction_model="auto"` in `compute_fatigue` (public and `cablexsec.analysis.fatigue`) and
+  `wire_stress_field`: the direction-tied cap for a planar curvature path and the distributed
+  helix model for any other. A path is planar when its out-of-plane ratio
+  (`curvature_path_out_of_plane_ratio`, below) is at most `PLANAR_PATH_TOLERANCE = 1e-3`. A
+  layer that the distributed model does not cover (`ξ ≥ 1`, a stick modulus that changes over
+  the record, a rate-dependent friction law) keeps the direction-tied cap. The provenance
+  records the ratio, the model of every layer and the reason for a fallback. The default stays
+  `"direction_tied"` in this release, bit for bit (see Deprecated).
+- `DirectionTiedFrictionWarning` (a `FutureWarning`): `compute_fatigue` warns once per call when
+  `friction_model` is left at its default and the curvature path is not planar. The
+  direction-tied cap turns with the bending direction. Under a steadily rotating curvature at
+  twice the slip onset its largest per-wire friction-stress range on the 66 kV inner armour was
+  0.94 of the distributed model's with the template interface (`ξ = 0.81`) and 0.86 with a
+  near-rigid one (`ξ = 0.99`): bulk damage 0.79 and 0.55 of it at an S–N slope of 4 where the
+  friction range governs. Its friction work per revolution was 0.38–0.69 of the planar cycle,
+  against 1.8–2.6 in the distributed model. On planar and flat paths (minor over major axis up
+  to about 0.3) its ranges are at or above the distributed ones. The result is unchanged; an
+  explicit `friction_model` keeps the chosen law without the warning. Cost of the distributed
+  model on one thread: 1.0–1.5 times the direction-tied time on the shipped fatigue examples,
+  13–16 times on the 66 kV template (substeps of 0.1 `κ_on`); with `"auto"` the largest damage
+  of the shipped examples changes by at most 0.02 %, on an hour of the 66 kV template at 10 Hz
+  it is 0.92 of the direction-tied value. Tests: tests/test_biaxial_friction_default.py.
+- A bound option of the distributed friction model, `distributed_bound` in `compute_fatigue`
+  (public and `cablexsec.analysis.fatigue`) and `wire_stress_field`, `bound` in
+  `distributed_friction_history` and `distributed_wire_friction_stress`: `"signed"` (default,
+  `b = ρ g + λ n` with the capstan term on the signed bending force of the wire, unchanged bit
+  for bit) or `"uniform"` (`b = ρ g`, no capstan term, the same stress unit and onset). In
+  planar full slip the uniform bound gives the linear Coulomb field `σ0 λ x` and the signed one
+  `σ0 (C exp(λx) − 1)`, both spanning `σ0 λπ`, and the cycle work of the two forms differs by
+  less than 0.04 % on the 66 kV template armour (tested). A capstan term on the total wire force
+  (bending plus tension share) is not offered: the clamping `P1+P2` that scales `g` already
+  holds the radial load of the tension share, which it would count twice.
+- `cablexsec.analysis.fatigue.curvature_path_out_of_plane_ratio`: the largest distance of a
+  curvature sample from the principal line through the origin over the largest curvature (zero
+  for a planar path in any plane, `b/a` for an ellipse, one for a circle), and
+  `PLANAR_PATH_TOLERANCE = 1e-3`, the planarity of `friction_model="auto"`.
 - An anchored armour wire can be held by an elastic anchor instead of a rigid one, in every
   route that anchors a wire: the termination correction (`TerminationSpec(k_anchor_N_m=K)`,
   clamp and along-wire solvers, with or without a curvature field), the along-wire chain
@@ -132,6 +168,23 @@ All notable changes to CableXSec are recorded in this file. The format follows
   field breaks the Coulomb flow rule. The friction regime parameter of Zhu and Tan, not printed,
   follows from their Table 2. No solver change.
 
+### Deprecated
+
+- Planned change: the default `friction_model` of `compute_fatigue` (public and
+  `cablexsec.analysis.fatigue`) changes from `"direction_tied"` to `"auto"` in the next release.
+  On a planar curvature path the two are the same, bit for bit; on a non-planar path the
+  default will solve the distributed helix model: higher friction-stress ranges than the
+  direction-tied cap under near-circular rotation, equal or lower ones on flat paths (see Added).
+  Until then the default is unchanged and warns (`DirectionTiedFrictionWarning`) on non-planar
+  paths; pass `friction_model` explicitly to keep the current behaviour.
+
+### Changed
+
+- The distributed friction model of the fatigue path accepts a constant stick modulus other than
+  the layer's (one block of a thermal history, which recomputes `ξ` from its moduli) as the Yun
+  coefficient `ξ = k/(E cos²α)` of that state. Before, any stick modulus other than the layer's
+  was refused; a stick modulus that changes over the record still is.
+
 ### Fixed
 
 - Provenance of the default armour coefficient `mu_on_hdpe = 0.20` (and `mu_on_steel = 0.20` of
@@ -142,6 +195,29 @@ All notable changes to CableXSec are recorded in this file. The format follows
   and the 20 MPa is an internal pressure; the contact pressure is 2–4 MPa (Dai, Sævik and Ye
   2018, p. 428), where the measured dynamic coefficient of armour wire on in-service tape is
   0.32, 0.20 and 0.18 at 1, 4 and 8 MPa.
+- The documentation said that the direction-tied and distributed friction laws give the same
+  stress ranges under biaxial bending ("within 10 %", "fatigue is not affected"). That holds for
+  the template interface from about four times the slip onset; on a near-rigid interface the
+  direction-tied ranges on a circular orbit are 0.85–0.97 of the distributed ones from 1.5 to 8
+  times the onset. The local analysis guide (Section 9, with the measured table), the concepts
+  page and the notes of `wire_slip_history` and `thermal_coupling` now give the measurements.
+- The pitch mean of the direction-tied friction stress is documented: its bounds integrate the
+  capstan growth from the neutral axis (zero friction stress there), so in planar full slip the
+  stress `σ0 (exp(λx) − 1)` has the pitch mean `σ0 (sinh(x₀)/x₀ − 1)`, `x₀ = λπ/2`, about `λπ/12`
+  of the peak tensile friction stress (1.1 % on the 66 kV inner armour, 0.054 MPa), while the
+  periodic field of a uniformly bent pitch, as in the distributed model, has zero mean (tested).
+  The offset is kept: a zero-mean condition couples the wires, which the independent
+  spring–sliders of the law do not, and a uniform shift would move wire stresses out of their
+  own bounds. Removing it would leave the moment unchanged and change the largest per-wire
+  stress range by less than `1e-4` (planar, one-sided and rotating cycles); it raises the mean
+  stress of every wire by the offset.
+- `anchored_heat_profile` documents that its anchoring ratio is solved with a constant friction
+  bound while the sectional heat it multiplies carries the signed capstan bound. On a uniformly
+  bent section the two bounds give cycle works within 0.25 % (66 kV template armour, 1.2 to 32
+  times the slip onset); near an anchor, where the mean wire force reaches about `0.85 √a` bounds
+  per radian, a capstan term would move the local bound by up to `λ 0.85 √a`, which the
+  constant-bound solver does not resolve. A capstan bound breaks the translation invariance of
+  its exact chain projection, so the solver is unchanged.
 - The exported bending law no longer claims to follow `compute_mkappa` exactly. With the signed
   capstan bound the slip interval of a wire is asymmetric (the falling bound is the rising one
   times `exp(−λψ)`), which no Masing element carries; the Iwan law misses the section law's loops

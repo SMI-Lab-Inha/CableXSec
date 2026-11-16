@@ -48,6 +48,7 @@ Fatigue
 .. autofunction:: cablexsec.compute_fatigue
 .. autofunction:: cablexsec.compute_long_term_fatigue
 .. autofunction:: cablexsec.compute_conductor_fatigue
+.. autofunction:: cablexsec.analysis.fatigue.curvature_path_out_of_plane_ratio
 
 Thermal
 -------

@@ -112,18 +112,27 @@ history of the two curvature components. Three friction laws are available:
   bending direction.
 - `"progressive"`: each wire is split into parallel spring–sliders, so it
   leaves stick gradually.
-- `"distributed"`, used by the fatigue functions: the friction force is solved
-  along one pitch, which removes the dependence on a bending direction.
+- `"distributed"`: the friction force is solved along one pitch, which
+  removes the dependence on a bending direction.
 
-Section 9 of the local analysis guide helps choose between them.
+The fatigue functions also take `"auto"`: the direction-tied law for a planar
+curvature path, the distributed law for any other. Their default is
+`"direction_tied"` in this release and changes to `"auto"` in the next one;
+until then the default warns (`DirectionTiedFrictionWarning`, a
+`FutureWarning`) when the path is not planar, the only case in which the two
+differ. Section 9 of the local analysis guide helps choose
+between them.
 
-The laws give the same stress ranges but not the same friction work when the
-bending direction rotates. The direction-tied cap turns with the bending
-direction, so on a circular orbit a wire slips mostly near the neutral axis,
-where its cap is small. Its work per revolution is then 0.16 of the
-distributed law's at twice the slip onset and 0.57 at large amplitude, while
-the wire stress ranges agree within 10 %. The frictional heat of
-`compute_thermal_fatigue` is therefore always the dissipation of the
+The laws differ when the bending direction rotates. The direction-tied cap
+turns with the bending direction, so on a circular orbit a wire slips mostly
+near the neutral axis, where its cap is small. Its work per revolution is then
+0.16 of the distributed law's at twice the slip onset and 0.57 at large
+amplitude, and its largest wire stress range is 0.94 of the distributed one
+at twice the slip onset on the 66 kV template interface and 0.86 on a
+near-rigid interface (bulk damage about 0.55 to 0.8 times at an S–N slope of
+4). On planar paths its stress ranges are at or above the distributed ones.
+For a non-planar record use `friction_model="auto"` or `"distributed"`; the
+frictional heat of `compute_thermal_fatigue` is always the dissipation of the
 distributed law.
 
 ## Two bounds bracket the bending stiffness

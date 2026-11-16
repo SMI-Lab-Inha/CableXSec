@@ -21,14 +21,17 @@ One-way coupling (ETM Pi2 = q_f / W << 1). Friction does not heat the cable;
 the frictional work is reported as a diagnostic only. The work is the
 dissipation of the distributed helix friction model
 (:func:`~cablexsec.mechanics.distributed_friction.distributed_friction_history`),
-whatever friction law the fatigue stresses use. The direction-tied cap of the
-default fatigue path re-orients with the bending direction, and under rotating
-curvature it under-counts the dissipation: on a circular orbit its work is
-0.16 of the distributed model's at twice the slip onset, 0.39 at eight times,
-and tends to 0.57 at large amplitude
-(:func:`~cablexsec.mechanics.papailiou.wire_slip_history`). Its wire stress
-ranges agree with the distributed model within 10 %, and in planar bending the
-two models dissipate the same work within 3 % from twice the slip onset.
+whatever friction law the fatigue stresses use. The direction-tied cap
+re-orients with the bending direction, and under rotating curvature it
+under-counts the dissipation: on a circular orbit its work is 0.16 of the
+distributed model's at twice the slip onset, 0.39 at eight times, and tends
+to 0.57 at large amplitude
+(:func:`~cablexsec.mechanics.papailiou.wire_slip_history`). On such orbits its
+wire stress ranges are also low (0.86 to 0.94 of the distributed ones at twice
+the slip onset), which is why the fatigue path warns when its default
+direction-tied law meets a non-planar path and offers ``friction_model="auto"``;
+in planar bending the two models dissipate the same work within 3 % from twice
+the slip onset.
 
 What a temperature does to the mechanics (per block):
 

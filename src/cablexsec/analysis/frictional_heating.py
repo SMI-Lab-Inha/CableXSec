@@ -280,6 +280,24 @@ def anchored_heat_profile(
     the segment midpoints of the specimen mesh (``segments_per_pitch``
     segments per pitch over ``length_m``). The last cycle starts at sample
     ``last_cycle_start``.
+
+    Bound. The anchored solver has a constant Coulomb bound along the wire
+    (no capstan term), while the sectional heat ``W_j`` that the ratio
+    multiplies (:func:`friction_heat`) carries the signed capstan bound. Both
+    the specimen and its sectional reference are solved with the constant
+    bound, so the ratio is consistent in itself; the capstan term is not in
+    it. On a uniformly bent section the signed bound changes the cycle work
+    by less than 0.25 % against the constant bound (66 kV template armour,
+    planar cycles from 1.2 to 32 times the slip onset; less than 0.04 % in
+    the distributed model,
+    :func:`~cablexsec.mechanics.distributed_friction.distributed_friction_history`
+    with ``bound="uniform"``). Near an anchor the mean wire force reaches
+    about ``0.85 sqrt(a)`` times the bound per radian
+    (:mod:`cablexsec.mechanics.clamp_layer`), where a capstan term would move
+    the local bound by up to ``lam 0.85 sqrt(a)`` (0.2 at ``a = 30``,
+    ``lam = 0.045``); that part of the ratio is a constant-bound estimate. A
+    capstan bound breaks the translation invariance on which the exact chain
+    projection of the solver rests, so it is not offered here.
     """
     for name, value in (
         ("pitch_m", pitch_m),

@@ -76,10 +76,13 @@ from cablexsec.analysis.conductor_fatigue import (
 from cablexsec.analysis.electrical_life import LifeResult, compute_electrical_life
 from cablexsec.analysis.fatigue import (
     CopperContactModel,
+    DistributedBound,
     FatigueLayer,
     FatigueResult,
     FrictionModel,
     RainflowCounter,
+    _warn_default_direction_tied,
+    curvature_path_out_of_plane_ratio,
     rainflow_cycles,
 )
 from cablexsec.analysis.fatigue import (
@@ -1957,9 +1960,10 @@ def compute_fatigue(
     section_states: Sequence[SectionState] | None = None,
     n_fibres: int = 32,
     rainflow_counter: RainflowCounter = "auto",
-    friction_model: FrictionModel = "direction_tied",
+    friction_model: FrictionModel | None = None,
     distributed_nodes_per_pitch: int | Mapping[str, int] | None = None,
     distributed_max_increment: float = DEFAULT_MAX_INCREMENT,
+    distributed_bound: DistributedBound = "signed",
     copper_contact_model: CopperContactModel = "slip_cycle",
     partial_slip_cycles: PartialSlipCycles = "skip",
     termination: TerminationSpec | Mapping[str, TerminationSpec] | None = None,
@@ -2055,9 +2059,10 @@ def compute_fatigue(
         compiled counter when numba is active and the reference counter
         otherwise; both give the same damage. See
         :func:`cablexsec.analysis.fatigue.compute_fatigue`.
-    friction_model : {"direction_tied", "distributed", "progressive"}, optional
-        Armour friction-stress model. The default ``"direction_tied"`` keeps the
-        pointwise Papailiou cap at the held bending direction. ``"progressive"``
+    friction_model : {"direction_tied", "auto", "distributed", "progressive"}, optional
+        Armour friction-stress model. ``"direction_tied"`` (the default,
+        ``None``) keeps the pointwise Papailiou cap at the held bending
+        direction. ``"progressive"``
         splits each wire of that law into parallel sub-elements whose caps
         average to the same cap (gap G8; settings ``progressive``, default the
         friction-continuity density). ``"distributed"``
@@ -2065,13 +2070,29 @@ def compute_fatigue(
         layer with the capstan bound ``mu |sin a|`` and the Yun interface
         stiffness ``xi/(1 - xi)``; the model and its parameters are recorded in
         ``provenance``. It requires a constant stick modulus over
-        ``section_states``.
+        ``section_states`` and a thermal history (one ``ThermalState`` per
+        call). ``"auto"`` (opt-in) takes the direction-tied model for a
+        planar curvature path and the distributed model for any other, where
+        it applies: the direction-tied cap turns with the bending direction
+        and under rotating curvature gives friction-stress ranges below those
+        of the distributed model. The model of every layer is recorded in
+        ``provenance``. The default changes to ``"auto"`` in the next
+        release: left at its default on a non-planar path (the only case in
+        which the two differ), the direction-tied model warns once per call
+        (:class:`~cablexsec.provenance.DirectionTiedFrictionWarning`, a
+        ``FutureWarning``, with the measured bias); the result of this
+        release is unchanged. See
+        :func:`cablexsec.analysis.fatigue.compute_fatigue`.
     distributed_nodes_per_pitch : int, dict[str, int] or None, optional
         Helix nodes per pitch for the distributed model (all layers or per
         layer; default four per wire).
     distributed_max_increment : float, optional
         Largest curvature increment per substep of the distributed model, in
         units of the slip-onset curvature (default 0.1).
+    distributed_bound : {"signed", "uniform"}, optional
+        Friction bound of the distributed model: ``"signed"`` (default, the
+        capstan term on the signed bending force of the wire) or
+        ``"uniform"`` (no capstan term).
     progressive : ProgressiveFriction, optional
         Settings of the progressive law; only with
         ``friction_model="progressive"``.
@@ -2166,6 +2187,13 @@ def compute_fatigue(
         )
     require_finite(kx, "kappa_x")
     require_finite(ky, "kappa_y")
+    if friction_model is None:
+        # The default law, with a warning on a non-planar path (once per call).
+        friction_model = "direction_tied"
+        # stacklevel 3: this function, its material-scope wrapper, the caller.
+        _warn_default_direction_tied(
+            curvature_path_out_of_plane_ratio(kx, ky), stacklevel=3
+        )
     if thermal is not None:
         if contact_model is None:
             contact_model = "solved"
@@ -2313,6 +2341,7 @@ def compute_fatigue(
             friction_model=friction_model,
             distributed_nodes_per_pitch=distributed_nodes_per_pitch,
             distributed_max_increment=distributed_max_increment,
+            distributed_bound=distributed_bound,
             copper_contact_model=copper_contact_model,
             partial_slip_cycles=partial_slip_cycles,
             termination=termination,
@@ -2358,7 +2387,14 @@ def compute_fatigue(
         inputs = thermal_fatigue_inputs(
             cable, layers, kx.size, tension, thermal, time_s=thermal_time_s
         )
-        if inputs.stick_modulus_Pa is not None and friction_model == "distributed":
+        if (
+            inputs.stick_modulus_Pa is not None
+            and friction_model == "distributed"
+            and any(
+                not np.allclose(v, v[0], rtol=1e-12, atol=0.0)
+                for v in inputs.stick_modulus_Pa.values()
+            )
+        ):
             raise CableSchemaError(
                 "the distributed friction model needs a constant stick modulus; "
                 "the thermal history changes it between blocks (use one "
@@ -2393,6 +2429,7 @@ def compute_fatigue(
         friction_model=friction_model,
         distributed_nodes_per_pitch=distributed_nodes_per_pitch,
         distributed_max_increment=distributed_max_increment,
+        distributed_bound=distributed_bound,
         copper_contact_model=copper_contact_model,
         partial_slip_cycles=partial_slip_cycles,
         termination=termination,
@@ -2558,6 +2595,7 @@ def _fatigue_from_section_states(
     friction_model: FrictionModel = "direction_tied",
     distributed_nodes_per_pitch: int | Mapping[str, int] | None = None,
     distributed_max_increment: float = DEFAULT_MAX_INCREMENT,
+    distributed_bound: DistributedBound = "signed",
     copper_contact_model: CopperContactModel = "slip_cycle",
     partial_slip_cycles: PartialSlipCycles = "skip",
     termination: TerminationSpec | Mapping[str, TerminationSpec] | None = None,
@@ -2630,6 +2668,7 @@ def _fatigue_from_section_states(
         friction_model=friction_model,
         distributed_nodes_per_pitch=distributed_nodes_per_pitch,
         distributed_max_increment=distributed_max_increment,
+        distributed_bound=distributed_bound,
         copper_contact_model=copper_contact_model,
         partial_slip_cycles=partial_slip_cycles,
         termination=termination,
