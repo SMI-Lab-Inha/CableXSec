@@ -811,10 +811,14 @@ def wire_slip_history(
     its own stick timer, and the slip rate is ``(r / |sin a|) dp / dt`` with
     ``dp`` the increment of the plastic drive (module notes of
     :mod:`cablexsec.mechanics.friction_law`). The direction threshold uses
-    the smallest factor of the law. ``time_s`` gives the sample times when the
-    law needs them. ``work.viscous_J_per_m`` is the rate-dependent
-    dissipation of a rate-dependent law. ``None`` or a neutral law keeps the
-    rate-independent update, bit for bit.
+    the smallest factor of the law (with the smallest pressure factor, so
+    that it stays below the onset of every wire). ``time_s`` gives the sample
+    times when the law needs them. ``work.viscous_J_per_m`` is the rate-dependent
+    dissipation of a rate-dependent law. A pressure factor of the law
+    multiplies the coefficient of every wire at its local pressure ``P g``
+    (``P`` the sample's ``contact_pressure_Pa``, ``g`` the contact shape):
+    ``x = f(P g) mu |sin a| psi`` in the bounds above. ``None`` or a neutral
+    law keeps the rate-independent update, bit for bit.
     """
     kx, ky = np.asarray(kappa_x, dtype=float), np.asarray(kappa_y, dtype=float)
     if (
@@ -1007,7 +1011,8 @@ def wire_slip_history(
 
 
 def _law_threshold_layer(layer: HelicalLayerSpec, law: FrictionLaw) -> HelicalLayerSpec:
-    """Layer with the smallest coefficient of the law (direction threshold)."""
+    """Layer with the smallest coefficient of the law (direction threshold;
+    the smallest pressure factor included)."""
     factor = law.minimum_factor
     if factor == 1.0:
         return layer
@@ -1015,10 +1020,15 @@ def _law_threshold_layer(layer: HelicalLayerSpec, law: FrictionLaw) -> HelicalLa
 
 
 def _bound_parts(
-    layer: HelicalLayerSpec, angle: float, load: float
+    layer: HelicalLayerSpec,
+    angle: float,
+    load: float,
+    law: FrictionLaw | None = None,
 ) -> tuple[FloatArray, FloatArray]:
-    """``(sigma0 g, mu |sin a| psi)`` of every wire: the bounds of factor ``m``
-    are ``sigma0 g expm1(m x)`` and ``-sigma0 g expm1(-m x)``."""
+    """``(sigma0 g, f mu |sin a| psi)`` of every wire: the bounds of factor ``m``
+    are ``sigma0 g expm1(m x)`` and ``-sigma0 g expm1(-m x)``. ``f`` is the
+    law's pressure factor at the wire's local pressure ``load g`` (one without
+    a pressure factor)."""
     sin_a = abs(math.sin(layer.lay_angle_rad))
     if load <= 0.0 or sin_a < 1.0e-12:
         zero = np.zeros(layer.n_wires, dtype=np.float64)
@@ -1040,6 +1050,8 @@ def _bound_parts(
     psi = np.arcsin(np.clip(np.abs(cphi), 0.0, 1.0))
     scale = np.asarray(sigma0 * g, dtype=np.float64)
     x = np.asarray(layer.mu * sin_a * psi, dtype=np.float64)
+    if law is not None and law.pressure_dependent:
+        x = np.asarray(x * law.pressure_factor_at(load * g), dtype=np.float64)
     if (
         scale.shape != (layer.n_wires,)
         or not np.isfinite(scale).all()
@@ -1112,7 +1124,7 @@ def _law_wire_slip_history(
     def parts(slot: str, angle: float, load: float) -> tuple[FloatArray, FloatArray]:
         key, value = cache[slot]
         if key != (angle, load):
-            value = _bound_parts(layer, angle, load)
+            value = _bound_parts(layer, angle, load, law)
             cache[slot] = ((angle, load), value)
         return value
 

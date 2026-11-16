@@ -31,6 +31,7 @@ published cable of Ménard and Cartraud (2023), bundled as
 | `gjosteen2027_lc14_ranges.csv` | Gjøsteen et al., Marine Structures 111 (2027) 104189, Figs 27–35 (load case 14) | SV11-GJ row |
 | `dong2025_figs9_14_25.csv` | Dong et al., Marine Structures 102 (2025) 103761, Figs 9, 14 and 25: axial stress of an armour wire fixed at the end fitting (FE and theory) | AW-DONG25 (doc/benchmarks.md); `tests/test_anchored_wire_fe.py` |
 | `zhu_tan2014_figs4_8.csv` | Zhu and Tan, OMAE2014-23928, Figs 4–8: normalised axial stress of an anchored armour wire (FE and analytical model) | AW-ZT14 (doc/benchmarks.md); `tests/test_anchored_wire_fe.py` |
+| `dai2018_fig4a_test1.csv`, `dai2018_fig4c_test3.csv` | Dai, Sævik and Ye, Marine Structures 59 (2018) 423–443, Fig. 4(a) and 4(c): measured friction loops of an armour wire between two anti-wear tapes (Test 1 at 8, 4 and 1 MPa; Test 3 at 0.01–0.2 Hz), digitised from the raster embedded in the PDF at its native resolution by `validation/scripts/digitise_dai2018_fig4.py` (the headers record the calibration, the reading resolution and the SHA-256 of the PDF and of the figure) | DAI18 rows; `tests/test_dai2018_friction.py` |
 | `revision2_digitisation_bounds.json` | Half-widths of the digitisation of the Ménard ranges | sensitivity of the bending comparison to digitisation |
 
 ## Calculations on the published cable

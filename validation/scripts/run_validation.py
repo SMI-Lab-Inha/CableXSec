@@ -516,6 +516,166 @@ def _saevik_rows() -> list[Row]:
     ]
 
 
+def _dai2018_rows() -> list[Row]:
+    """Static/dynamic friction law against the measured wire-on-tape loops of
+    Dai, Sævik and Ye (2018), Fig. 4; scripts/check_dai2018_friction.py.
+
+    Gated on criteria fixed independently of the model errors: the
+    digitisation against the printed static coefficients and re-sticking at
+    every reversal. The model errors are reported without a target.
+    """
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    import check_dai2018_friction as dai  # noqa: PLC0415
+
+    r = dai.compare()
+    maxima = r["digitised_maximum"]
+    n = r["strokes"]
+    lo, hi = r["excess_range"]
+    test1 = [c for c in r["cases"] if c["test"] == 1]
+    test3 = [c for c in r["cases"] if c["test"] == 3]
+
+    def errors(case: dict[str, object]) -> str:
+        pe, le = case["peak_error_pct"], case["level_error_pct"]
+        return (
+            f"{case['label']}: peak {pe[0]:+.1f}/{pe[1]:+.1f}%, level "  # type: ignore[index]
+            f"{le[0]:+.1f}/{le[1]:+.1f}%, work {case['work_error_pct']:+.1f}%"  # type: ignore[index]
+        )
+
+    measured = [m for c in r["cases"] for m in c["measured"]]
+    decay = [m.decay_mm for m in measured]
+    travel = [
+        m.peak_travel_mm / s.peak_travel_mm
+        for c in r["cases"]
+        for m, s in zip(c["measured"], c["model"], strict=True)
+    ]
+    levels = ", ".join(f"{v:+.1f}" for v in r["test3_level_change_pct"])
+    top = next(c for c in test3 if c["label"] == "0.2 Hz")
+    work3 = [c["work_error_pct"] for c in test3]
+    return [
+        Row(
+            "2",
+            "DAI18-DIG",
+            "Dai et al. (2018) Fig. 4a, Test 1 (armour wire on anti-wear tape, "
+            "8/4/1 MPa), digitised: loop maximum vs printed mu_s 0.22/0.24/0.38 "
+            "(p. 428)",
+            f"within {dai.PRINTED_PRECISION} (printed precision) + reading resolution",
+            f"{maxima['8 MPa']:.4f}/{maxima['4 MPa']:.4f}/{maxima['1 MPa']:.4f} "
+            f"(largest deviation {r['digitisation_error']:.4f} vs "
+            f"{r['digitisation_tolerance']:.4f})",
+            "PASS"
+            if r["digitisation_error"] <= r["digitisation_tolerance"]
+            else "FAIL",
+        ),
+        Row(
+            "2",
+            "DAI18-RS",
+            "Dai et al. (2018) Fig. 4a/4c, 7 loops: re-stick peak above the dynamic "
+            "level at every reversal; spring-slider (FrictionLaw static_factor = "
+            "mu_s/mu_d) with stick_time_s = 0 vs the default inf, third cycle",
+            f"excess > {dai.PEAK_RESOLUTIONS:g} reading resolutions on all {n} "
+            f"measured strokes; stick_time_s = 0 on all {n}; inf on none",
+            f"measured {r['measured_peaks']}/{n} (excess {lo:.3f}-{hi:.3f}); "
+            f"stick_time_s = 0 {r['model_peaks']}/{n}; inf {r['never_heals_peaks']}/{n}",
+            "PASS"
+            if r["measured_peaks"] == n
+            and r["model_peaks"] == n
+            and r["never_heals_peaks"] == 0
+            else "FAIL",
+        ),
+        Row(
+            "2",
+            "DAI18-T1",
+            "Dai et al. (2018) Test 1 loops vs spring-slider with the printed "
+            "mu_s/mu_d, stick_time_s = 0 and each loop's stick slope (last 0.5 mm "
+            "before each reversal excluded): peak and dynamic level (+x/-x stroke), "
+            "stroke work; decay and peak position, Tests 1 and 3",
+            "stated, not gated",
+            "; ".join(errors(c) for c in test1)
+            + f"; decay to 10% of peak-level {min(decay):.1f}-{max(decay):.1f} mm "
+            "(model: one step); peak "
+            f"{min(travel):.1f}-{max(travel):.1f}x the slider's elastic travel "
+            "from the reversal",
+            "INFO",
+        ),
+        Row(
+            "2",
+            "DAI18-T3",
+            "Dai et al. (2018) Test 3 (4 MPa, groove track, 0.01-0.2 Hz) vs the "
+            "rate-independent spring-slider with the 0.01 Hz peak and level",
+            "stated, not gated",
+            f"dynamic level vs 0.01 Hz {levels}% at 0.05/0.1/0.2 Hz (model 0); "
+            f"static peak {r['test3_peak_rise_pct']:+.1f}% at 0.2 Hz (model 0: no "
+            "rate term on mu_s); 0.2 Hz peak error "
+            f"{top['peak_error_pct'][0]:+.1f}/{top['peak_error_pct'][1]:+.1f}%; "
+            f"work {min(work3):+.1f} to {max(work3):+.1f}%",
+            "INFO",
+        ),
+    ]
+
+
+def _friction_pressure_identities() -> tuple[float, float, float]:
+    """Pressure factor of the friction law: closed-form slider under pressure
+    steps, compiled against NumPy direction-tied kernel under a pressure
+    history, and the energy balance of the latter (relative values)."""
+    from cablexsec.mechanics.fast_slip import wire_friction_stress  # noqa: PLC0415
+    from cablexsec.mechanics.friction_law import (  # noqa: PLC0415
+        FrictionLaw,
+        slider_history,
+    )
+    from cablexsec.mechanics.mkappa import HelicalLayerSpec  # noqa: PLC0415
+    from cablexsec.mechanics.papailiou import (  # noqa: PLC0415
+        full_slip_curvature,
+        wire_slip_history,
+    )
+
+    table = ((1.0e6, 1.6), (4.0e6, 1.0), (8.0e6, 0.9))
+    k, c, step = 2.0e6, 5.0e-6, 1.0e-6
+    drive = step * np.arange(1, 601)
+    pressure = np.where(np.arange(600) < 200, 8.0e6, 1.0e6)
+    pressure[400:] = 4.0e6
+    law = FrictionLaw(pressure_factor=table)
+    s = slider_history(
+        drive, c * pressure, k, friction_law=law, contact_pressure_Pa=pressure
+    )
+    expected = np.full(600, 36.0)
+    expected[:18] = k * drive[:18]
+    expected[200:400] = 8.0
+    expected[400:] = np.minimum(8.0 + k * (drive[400:] - drive[399]), 20.0)
+    slider = float(np.abs(s.force_N - expected).max() / 36.0)
+    phi = 2 * np.pi * np.arange(12) / 12
+    spec = HelicalLayerSpec(
+        n_wires=12,
+        r_helix_m=0.05,
+        lay_angle_rad=0.4,
+        E_wire_Pa=2.0e11,
+        A_wire_m2=2.0e-5,
+        xi=0.3,
+        mu=0.2,
+        F_n_axi_N=0.0,
+        shape_g=1.0 + 0.3 * np.cos(phi),
+        contact_pressure_Pa=2.0e6,
+    )
+    t = np.linspace(0.0, 12.0, 1200)
+    big = 3.0 * full_slip_curvature(spec)
+    kx = big * np.sin(2 * np.pi * 0.25 * t)
+    ky = 0.4 * big * np.sin(2 * np.pi * 0.13 * t)
+    p_hist = 2.0e6 * (1 + 0.4 * np.sin(np.linspace(0, 9, t.size)))
+    law_p = FrictionLaw(static_factor=1.3, dynamic_factor=1.0, pressure_factor=table)
+    ref = wire_slip_history(
+        spec, kx, ky, contact_pressure_Pa=p_hist, friction_law=law_p
+    )
+    fast = wire_friction_stress(
+        spec, kx, ky, contact_pressure_Pa=p_hist, friction_law=law_p
+    )
+    kernel = float(np.abs(fast - ref.stress_Pa).max() / np.abs(ref.stress_Pa).max())
+    balance = float(
+        np.abs(ref.work.balance_residual_J_per_m).max()
+        / ref.work.dissipation_J_per_m[-1]
+    )
+    return slider, kernel, balance
+
+
 _MENARD_BENCH = cx.FourPoint(2.5, 1.25)  # [MenardCartraud2023] Sec. 3, Lg = 4 L1
 _MENARD_LVDT = (0.9375, 1.25, 1.5625)  # positions not reported; uniform zone
 
@@ -1171,6 +1331,22 @@ def _rows() -> list[Row]:
         )
     )
 
+    # Pressure factor of the friction law (mu(P) per contact interface).
+    fp_slider, fp_kernel, fp_balance = _friction_pressure_identities()
+    rows.append(
+        Row(
+            "1",
+            "FL-P",
+            "Pressure-dependent friction coefficient (FrictionLaw.pressure_factor): "
+            "spring-slider under pressure steps vs closed form; compiled vs NumPy "
+            "direction-tied kernel under a pressure history (static/dynamic law, "
+            "local pressures across the table); work balance",
+            "< 1e-9 relative; < 1e-9 relative; < 1e-9 relative",
+            f"{fp_slider:.1e}; {fp_kernel:.1e}; {fp_balance:.1e}",
+            "PASS" if max(fp_slider, fp_kernel, fp_balance) < 1e-9 else "FAIL",
+        )
+    )
+
     # GATE B (distinguishing physics): slip starts at the NEUTRAL AXIS, per the
     # Raoof (1989b,1992) strain-gauge observation and Papailiou — not the extreme
     # fibre (which the retired Coulomb loop predicts). The first-to-slip wire's
@@ -1610,6 +1786,7 @@ def _rows() -> list[Row]:
     rows.extend(_hu_rows())
     rows.extend(_witz_rows())
     rows.extend(_saevik_rows())
+    rows.extend(_dai2018_rows())
 
     theta_bm5 = _bm5_conductor_temperature()  # paper tabulated network, λ1' only
     rows.append(

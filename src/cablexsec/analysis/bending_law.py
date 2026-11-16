@@ -855,7 +855,13 @@ def export_bending_law(
         ``core_friction``); planar bending only. A non-neutral
         ``friction_law`` (static/dynamic or rate dependent) is refused: the
         exported parallel elastic-plastic law with Masing's rules is rate
-        independent and cannot represent it.
+        independent and cannot represent it. A law with only a pressure
+        factor is accepted without ``slip_scale``: at the fixed contact state
+        of each exported tension it is a fixed coefficient per wire, and the
+        law is exported as for any coefficient. With ``slip_scale`` it is
+        refused, because ``f(P)`` breaks the homogeneity
+        ``M(kappa; rho) = rho M(kappa/rho; 1)`` on which the scaling rests
+        (the coefficient moves inside the capstan exponent with ``P``).
 
     Notes
     -----
@@ -889,7 +895,8 @@ def export_bending_law(
             raise CableInputError(f"{name} is set by the export, not an option")
     friction_law = mkappa_options.get("friction_law")
     if friction_law is not None and (
-        not isinstance(friction_law, FrictionLaw) or not friction_law.is_neutral
+        not isinstance(friction_law, FrictionLaw)
+        or not friction_law.coefficient_neutral
     ):
         # A static/dynamic or rate-dependent coefficient has no Masing/Iwan
         # (rate-independent, parallel elastic-plastic) representation.
@@ -897,6 +904,16 @@ def export_bending_law(
             "a non-neutral friction law cannot be exported as a Masing/Iwan "
             "bending law (it is state or rate dependent); export the "
             "rate-independent law"
+        )
+    if slip_scale and friction_law is not None and friction_law.pressure_dependent:
+        # The scaling rule M(kappa; rho) = rho M(kappa/rho; 1) needs bounds
+        # proportional to P1+P2 at a fixed coefficient; f(P) moves the
+        # coefficient inside the capstan exponent with the pressure.
+        raise CableInputError(
+            "a pressure-dependent friction coefficient is not exactly "
+            "homogeneous in the contact pressure, so the slip scaling variable "
+            "cannot represent it; export without slip_scale (one law per "
+            "tension at its fixed contact state)"
         )
     if "time_s" in mkappa_options:
         raise CableInputError(

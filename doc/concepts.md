@@ -244,6 +244,55 @@ the wire length per radian of helix, which turns the extreme-fibre strain
 a representative wire velocity, not a local one. The distributed model takes
 the static/dynamic option only.
 
+**Contact-pressure dependence.** `pressure_factor` is a table of
+`(P, f)` pairs, a further factor `f(P)` on the coefficient, piecewise linear in
+the local friction-setting pressure `P` and clamped to the end factors
+outside the table; the effective coefficient is `m f(P) mu`. `P` is the
+pressure with which the kernel evaluates the bound at that sample:
+`(P1 + P2) g` of the wire or helix node, the sum of the two face pressures of
+the armour layer times the contact shape, so it follows a tension or pressure
+history. A rig that presses one wire between two faces at the same pressure
+`p`, as in the tests below, has `P = 2 p`. Where `P1` and `P2` differ, one
+factor at their sum stands for both faces (exact for equal faces or a linear
+factor). Zero contact gives a zero bound whatever the factor. The factor is
+rate independent: it needs no time base, the distributed model takes it, and
+the exported bending law accepts a law that has only a pressure factor at the
+fixed contact state of each exported tension. With the slip scaling variable
+it is refused: the scaling rests on `M(kappa; rho) = rho M(kappa/rho; 1)`,
+which holds when every bound is proportional to `P1 + P2` at a fixed
+coefficient, and `f(P)` moves the coefficient inside the capstan exponent
+with the pressure.
+
+**Measured armour friction.** Friction loops of a tensile armour wire
+between two anti-wear tapes cut from a flexible pipe (Dai, Sævik and Ye,
+Marine Structures 59 (2018) 423–443, Sec. 4 and Fig. 4, pp. 428–430)
+re-stick at every reversal: each stroke starts with a breakaway peak above
+the dynamic level, at 0.01 Hz as at 0.2 Hz. Their law is `stick_time_s = 0`,
+not the default `inf`. The printed coefficients of the in-service surfaces
+are `mu_s` 0.38, 0.24, 0.22 and `mu_d` 0.32, 0.20, 0.18 at 1, 4 and 8 MPa
+contact pressure (p. 428): a static to dynamic ratio of 1.19–1.22, and a
+coefficient that falls with pressure by a factor 1.8 on `mu_d` from 1 to
+8 MPa. Over 0.01–0.2 Hz at 2 mm amplitude (peak sliding speeds 0.13–2.5
+mm/s) the dynamic level shows no rate effect (`c = 0`, no viscous term),
+while the static peak rises by about 10 % (8 % in the paper, p. 430), which
+the law cannot represent: its rate factor acts on the dynamic factor only.
+The measured force also falls from the peak to the dynamic level over a
+travel of 0.6–2.3 mm, where the law drops in one step. The comparison is
+the DAI18 rows of the benchmark register (one spring-slider, not a cable
+section). With `mu = 0.20` (the library value) these data read as follows;
+the rig's face pressures of 1, 4 and 8 MPa are `P = 2, 8, 16 MPa`:
+
+```python
+law = cx.FrictionLaw(
+    static_factor=1.2,  # mu_s / mu_d, 1.19-1.22
+    stick_time_s=0.0,  # re-stick at every reversal
+    pressure_factor=((2e6, 1.6), (8e6, 1.0), (16e6, 0.9)),  # mu_d / 0.20
+)
+```
+
+One specimen per condition was tested, on one pipe's tape; the factors are
+a parameter choice for a similar interface, not a property of every tape.
+
 **Energy.** The work of a slipping wire splits into the rate-independent
 friction work `B(m_d) |dp|` and the rate-dependent (viscous) part
 `[B(m_d R) - B(m_d)] |dp|`; `BendingWork.viscous_J_per_m` reports the second,
@@ -259,11 +308,13 @@ refused, and `time_s` without one is refused too. The stress-free start lies
 one sampling interval before the first sample. The progressive (Iwan) model,
 the laid-core friction, the termination clamp increment and the bending-test
 simulator keep the rate-independent coefficient and refuse a non-neutral law.
-The exported bending law refuses one as well: its parallel elastic-plastic
-elements with Masing's rules are rate independent and cannot represent it.
-Neutral parameters (`mu_s = mu_d = mu`, `c = 0`, `v_eta = inf`) leave every
-result unchanged, bit for bit. No rate-dependent or static/dynamic friction
-data of armour interfaces is in the validation set.
+The exported bending law refuses a static/dynamic or rate-dependent law as
+well: its parallel elastic-plastic elements with Masing's rules are rate
+independent and cannot represent it (a pressure factor alone is accepted, as
+above). Neutral parameters (`mu_s = mu_d = mu`, `c = 0`, `v_eta = inf`, no
+pressure factor) leave every result unchanged, bit for bit. The validation
+set holds the spring-slider comparison above; no rate law and no
+static/dynamic comparison on a cable section.
 
 ## Fatigue is counted at fixed material points
 

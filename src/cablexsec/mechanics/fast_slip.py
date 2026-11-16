@@ -15,8 +15,9 @@ reference routine. Regression tests compare the two.
 A non-neutral :class:`~cablexsec.mechanics.friction_law.FrictionLaw` runs a
 second kernel with the per-wire static/dynamic state, stick timer and
 rate-dependent return of the reference
-(:func:`~cablexsec.mechanics.papailiou.wire_slip_history`); ``None`` or a
-neutral law keeps the rate-independent kernel, bit for bit.
+(:func:`~cablexsec.mechanics.papailiou.wire_slip_history`), and the pressure
+factor of the law at every wire's local pressure; ``None`` or a neutral law
+keeps the rate-independent kernel, bit for bit.
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ from cablexsec._numba import HAVE_NUMBA, njit
 from cablexsec.exceptions import CableInputError
 from cablexsec.mechanics.friction_law import (
     FrictionLaw,
+    _pressure_factor,
     _return_stress,
     _slip_magnitude,
     active_friction_law,
@@ -170,8 +172,10 @@ def _cap_parts(
     g: FloatArray,
     scale: FloatArray,
     x: FloatArray,
+    table: FloatArray,
 ) -> None:
-    # Bounds of factor m: scale expm1(m x) (rising), -scale expm1(-m x).
+    # Bounds of factor m: scale expm1(m x) (rising), -scale expm1(-m x);
+    # x carries the pressure factor f(P g) of the wire (table rows [P, f]).
     sin_a = abs(math.sin(lay_angle))
     if pressure <= 0.0 or sin_a < 1.0e-12:
         for w in range(phi.size):
@@ -186,6 +190,8 @@ def _cap_parts(
             c = 1.0
         scale[w] = sigma0 * g[w]
         x[w] = mu * sin_a * math.asin(c)
+        if table.shape[1] > 0:
+            x[w] = x[w] * _pressure_factor(pressure * g[w], table)
 
 
 @njit(cache=True)
@@ -209,6 +215,7 @@ def _stress_kernel_law(
     rc: float,
     v0: float,
     inv_veta: float,
+    table: FloatArray,
 ) -> FloatArray:
     n_w = phi.size
     n_t = kx.size
@@ -248,13 +255,35 @@ def _stress_kernel_law(
             blend = magnitude / threshold
         if not (held == held_angle and p == held_pressure):
             _cap_parts(
-                phi, held, p, r_helix, n_w, area, lay_angle, mu, g, scale, x_held
+                phi,
+                held,
+                p,
+                r_helix,
+                n_w,
+                area,
+                lay_angle,
+                mu,
+                g,
+                scale,
+                x_held,
+                table,
             )
             held_angle = held
             held_pressure = p
         if blend > 0.0 and not (current == cur_angle and p == cur_pressure):
             _cap_parts(
-                phi, current, p, r_helix, n_w, area, lay_angle, mu, g, cur_scale, x_cur
+                phi,
+                current,
+                p,
+                r_helix,
+                n_w,
+                area,
+                lay_angle,
+                mu,
+                g,
+                cur_scale,
+                x_cur,
+                table,
             )
             cur_angle = current
             cur_pressure = p
@@ -354,6 +383,7 @@ def wire_friction_stress(
             law.rate_coefficient,
             law.rate_reference_m_per_s,
             law.inverse_viscous_velocity,
+            law.pressure_table,
         )
         if not np.isfinite(stress).all():
             raise CableInputError(

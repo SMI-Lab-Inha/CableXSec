@@ -100,6 +100,7 @@ model) is the full construction.
 | Gradual stick-to-slip transition (gap G8): progressive law, zero-spread, dissipation and rotation limits | A | PASS |
 | Gap G8 against Witz (300 bar), Hu et al. (2022) and Ménard range (b) | M | Hu transition share reproduced by the three-point test arrangement (35.6% against 33.8%); BM1-loop with the progressive law PASS (+8.2 %); Witz width and ratio and Hu loop area (+37%) FAIL |
 | Sævik (2011) 8-inch riser, measured FBG inner-armour stress ranges, 14 load cases (SV11-PLANE); Gjøsteen et al. (2027) absolute LC 14 ranges (SV11-GJ) | M | FAIL: termination-corrected median ratio 1.62 (3 of 14 in band), absolute 1.80; sectional median 1.00 (11 of 14), absolute 1.24; small angles under-predicted about 2× |
+| Static/dynamic friction law against measured wire-on-anti-wear-tape loops, Dai, Sævik and Ye (2018), Fig. 4, one spring-slider (DAI18-DIG, DAI18-RS, DAI18-T1, DAI18-T3) | M | Digitisation and re-sticking at every reversal (`stick_time_s = 0`) PASS; reported: Test 1 peak within 1.8 % and +x level within 3.3 % with the printed coefficients, the measured −x level 4–14 % lower (model +4.7 to +12.3 %); work 1–5 % low (no gradual breakaway decay); static peak +10.6 % at 0.2 Hz not representable; dynamic level rate independent |
 | Test-arrangement simulator (gap T1): elastic closed forms, uniform-moment zone against `compute_mkappa`, energy, equilibrium | A, I | PASS |
 | Along-wire redistribution (gap T2): periodic and clamp-layer limits, termination round-off, energy, refinement | A, I | PASS |
 | Gap T2 against Sævik (2011), Gjøsteen et al. (2027), Hu, Ménard and Witz | M | Not explained (former capstan bound throughout): Sævik near-bellmouth median ratio 3.36 (2.12 in the clamp convention) against 1.65 for the clamp correction and 1.03 sectional; Hu area +65%, share 11%; Ménard work −3 to +3 points by range; end conditions immaterial |
@@ -139,6 +140,7 @@ All rows are verification, not validation. Source: the scorecard
 | M-rec-3core | I | As M-rec, offset-core geometry | < 2% | 0.000% | PASS |
 | MK-Tcyc | I | `compute_mkappa` with a contact-tension history cycling inside the bending cycles vs the moment of the fatigue-path friction stress on the same history; work-balance residual over the friction work | < 1e-12 rel.; < 1e-12 rel. | 3.4e-16; 1.1e-15 | PASS |
 | MX-scale | I | Slip-scaled bending law: `compute_mkappa` at 70 kN vs the 20 kN law with the bound scaled (66 kV, cores); group elements at 60 kN vs the 10 kN elements with yield curvatures scaled (Ménard); tension cycle inside the bending cycles, scaled law vs the contact-tension history over the fixed-tension Iwan residual | < 1e-12 rel.; < 1e-9 rel.; ratio ≤ 1.25 | 4.1e-16; 8.3e-14; 1.02 | PASS |
+| FL-P | A, I | Pressure-dependent friction coefficient (`FrictionLaw.pressure_factor`): spring-slider under pressure steps vs closed form; compiled vs NumPy direction-tied kernel under a pressure history (static/dynamic law, local pressures below, inside and above the table); work balance | < 1e-9 rel. (three checks) | round-off | PASS |
 | slip-onset | A | First wire to slip lies at the neutral axis (with the signed bound on the compression side, ψ ≈ 3λ/2) | abs(cos) < 0.2 | 0.156 (0.000 with the former bound) | PASS |
 | xsec-K | A | Tangent bounds EI_max (κ→0) and EI_min (κ→∞) | < 0.01% | 0; 7.4e-12% | PASS |
 | QP-KKT | A | Concentric contact complementarity | < 1e-8 N | 1.9e-13 N | PASS |
@@ -967,9 +969,13 @@ pressure acts on the seal-layer bore, which is the barrier a
 armour radius and angle (same angle, opposite hand), lay hands, tape and
 sheath thicknesses, steel modulus 207 GPa. One polymer modulus (455.8 MPa) is
 identified so that EI_min equals the tabulated 72.8 kN m², a section property
-independent of the compared stresses. μ = 0.20 is declared from Sævik (1992),
-as reported by Dai, Sævik and Ye (2017, Sec. 4.3) for steel on anti-wear tape
-at 20 MPa; it is not fitted.
+independent of the compared stresses. μ = 0.20 is declared from Dai, Sævik
+and Ye (Marine Structures 55 (2017) 137–161, Sec. 4.3.1, p. 156), who quote it
+from Sævik (1992) as an estimate between anti-wear tape and inner armour and
+between two steel armour layers "at 20 MPa internal pressure"; the contact
+pressure at that internal pressure is 2–4 MPa, and the measured dynamic
+coefficient of armour wire on in-service tape is 0.32, 0.20 and 0.18 at 1, 4
+and 8 MPa (Dai, Sævik and Ye 2018, Sec. 4.1, p. 428). It is not fitted.
 
 **Prediction chain.** Section state at the wall tension T + p π r_b²
 (closed ends) with the bore pressure; static stress = inner-armour wire
@@ -1058,6 +1064,139 @@ static stress and whether the plotted value is axial or one side; station
 coordinates (figures only); the curvature distribution along the pipe; the
 end-fitting position relative to the bellmouth (taken from the rig lengths);
 Sævik and Igland (2002) and Andersen et al. (2001) are not held.
+
+## Measured wire-on-tape friction loops (DAI18-DIG, DAI18-RS, DAI18-T1, DAI18-T3)
+
+Source: Dai, Sævik and Ye, "An anisotropic friction model in non-bonded
+flexible risers", Marine Structures 59 (2018) 423–443, doi
+10.1016/j.marstruc.2018.02.012, with the corrigendum in Marine Structures 63
+(2019) 404, doi 10.1016/j.marstruc.2018.11.001. Small-scale rig (Sec. 2.2,
+pp. 424–425, Fig. 1): one tensile armour wire between two anti-wear tapes cut from
+a flexible pipe, normal load by weights, displacement-controlled cyclic motion
+of 2 mm amplitude at 0.01–0.2 Hz (Sec. 2.3, p. 425). The y axis of Fig. 4 is
+the friction force over twice the contact force, the two interfaces of the
+wire (p. 428). Test No. 1 (Sec. 4.1, p. 428): in-service tape outer surface,
+8, 4 and 1 MPa, 0.01 Hz; printed coefficients μ_s 0.22, 0.24, 0.38 and μ_d
+0.18, 0.20, 0.32, selected as "the maximum (in the stick domain) and minimum
+values in Fig. 4a". Test No. 3 (Sec. 4.3, p. 430): groove track of the tape
+inner surface, 4 MPa, 0.01, 0.05, 0.1 and 0.2 Hz; no coefficients printed.
+Test No. 2 (clean tape on a tailor-made steel bar) is not used: it is not a
+wire on in-service tape, and its contact area and normal force are not
+printed.
+
+**Scope.** One interface on one spring-slider (`slider_history`), not a cable
+section. The comparison tests the form of the static/dynamic `FrictionLaw`
+(re-sticking, breakaway peak, dynamic level, rate independence); it does not
+test the armour bound of a section, its capstan term or its contact pressure.
+
+**Digitisation.** `validation/scripts/digitise_dai2018_fig4.py` reads the
+raster embedded in PDF page 7 at its native resolution (JPEG, 1887 × 2063 px,
+300 ppi; extracted without resampling). Axes are calibrated by least squares
+on the tick-mark centroids (largest residual 0.0024 mm and 0.0010 in panel
+(a), 0.0063 mm and 0.0005 in panel (c)); curve pixels are classified by hue
+with the legend handles masked; the branches take the median of each pixel
+column, the elastic segments the median x of each pixel row in the middle half
+between the branch levels. Reading resolution (half-width; not experimental
+uncertainty): ±0.008 mm and ±0.0021 in (a), ±0.012 mm and ±0.0012 in (c).
+Overlapping curves of panel (c) hide one another (the 0.05 Hz loop most);
+hidden parts are missing, not interpolated. The data are
+`validation/paper_data/dai2018_fig4a_test1.csv` and `dai2018_fig4c_test3.csv`.
+The rises of the friction force in the last part of each stroke, which the
+paper attributes to the wire's out-of-straightness (p. 428) and to surface
+irregularities (p. 430), are kept in the data and excluded from every
+measure: the last 0.5 mm before each reversal.
+
+**Model.** `slider_history` with the normalised bound `b = μ_d`,
+`FrictionLaw(static_factor = μ_s/μ_d, stick_time_s = 0)`, no rate terms, the
+stick stiffness of each loop's elastic segments (mean of its two reversals) and
+a sinusoidal drive between the loop's measured reversal displacements; third
+cycle from a stress-free start. Test 1 takes the printed μ_s and μ_d. Test 3
+takes the digitised peak and dynamic level of the 0.01 Hz loop (0.2319 and
+0.1797, mean of both strokes) and holds them at 0.05–0.2 Hz. Measures, the
+same for model and measurement: the peak (largest |y| within 0.6 mm of travel
+after a reversal), the dynamic level (smallest 0.1 mm running mean after the
+peak, the paper's "minimum"), the decay length (travel from the peak to within
+10 % of the peak-to-level drop) and the stroke work (∫ y dx from the start of
+the digitised elastic segment to the excluded zone). Script
+`validation/scripts/check_dai2018_friction.py`; tests
+`tests/test_dai2018_friction.py`. Gated rows use criteria fixed by the printed
+precision and by the presence of a peak, not by the size of the model errors;
+the model errors are stated, not gated (INFO).
+
+| ID | Class | Quantity | Target | Result | Status |
+| --- | --- | --- | --- | --- | --- |
+| DAI18-DIG | M | Digitised loop maximum, Test 1, vs printed μ_s 0.22/0.24/0.38 | within 0.005 (printed precision) + 0.0021 (reading) | 0.2237/0.2405/0.3786 (largest deviation 0.0037) | PASS |
+| DAI18-RS | M | Peak above the dynamic level at every reversal, 7 loops; slider with `stick_time_s = 0` vs the default `inf` | > 5 reading resolutions on all 14 measured strokes; `0` on all 14; `inf` on none | measured 14/14 (excess 0.039–0.094); `0` 14/14; `inf` 0/14 | PASS |
+| DAI18-T1 | M | Test 1 vs slider with the printed coefficients: peak, level (+x/−x stroke), work | stated, not gated | see the table below | INFO |
+| DAI18-T3 | M | Test 3 vs the rate-independent slider with the 0.01 Hz parameters | stated, not gated | level −3.5/−2.4/+0.3 % at 0.05/0.1/0.2 Hz (model 0); peak +10.6 % at 0.2 Hz (model 0) | INFO |
+
+| Loop | Model μ_s / μ_d | k (F/2N per mm) | Peak, measured +x/−x | Peak error | Level, measured +x/−x | Level error | Work error |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Test 1, 8 MPa | 0.22 / 0.18 | 3.28 | 0.2237 / 0.2213 | −1.8 / −0.8 % | 0.1797 / 0.1718 | +0.1 / +4.7 % | −2.6 % |
+| Test 1, 4 MPa | 0.24 / 0.20 | 5.50 | 0.2405 / 0.2381 | −0.4 / +0.6 % | 0.2020 / 0.1877 | −1.0 / +6.6 % | −1.9 % |
+| Test 1, 1 MPa | 0.38 / 0.32 | 15.70 | 0.3756 / 0.3786 | +1.0 / +0.2 % | 0.3308 / 0.2848 | −3.3 / +12.3 % | −2.1 % |
+| Test 3, 0.01 Hz | 0.2319 / 0.1797 | 3.08 | 0.2290 / 0.2348 | +1.2 / −1.3 % | 0.1807 / 0.1787 | −0.6 / +0.6 % | −5.2 % |
+| Test 3, 0.05 Hz | as 0.01 Hz | 3.51 | 0.2323 / 0.2427 | −0.2 / −4.5 % | 0.1743 / 0.1725 | +3.1 / +4.2 % | −0.9 % |
+| Test 3, 0.1 Hz | as 0.01 Hz | 3.46 | 0.2402 / 0.2529 | −3.5 / −8.3 % | 0.1767 / 0.1742 | +1.7 / +3.2 % | −3.6 % |
+| Test 3, 0.2 Hz | as 0.01 Hz | 3.50 | 0.2515 / 0.2615 | −7.9 / −11.4 % | 0.1819 / 0.1785 | −1.2 / +0.7 % | −5.4 % |
+
+Errors are model over measurement minus one; the work is that of both strokes
+over the compared window.
+
+**Findings.**
+
+- *Re-sticking.* Every reversal of all seven loops shows a breakaway peak
+  0.04–0.09 above the dynamic level, at 0.01 Hz (a 50 s cycle) as at 0.2 Hz
+  (5 s). The law reproduces it with `stick_time_s = 0` (the static factor
+  returns after one stick step); the default `inf` removes every peak after
+  the first breakaway. For armour wire on anti-wear tape at these frequencies
+  `stick_time_s = 0` is the evidence-based setting. The measured static to
+  dynamic ratio is 1.19–1.22 (printed coefficients).
+- *Dynamic level.* The +x stroke reaches the printed μ_d at 8 and 4 MPa
+  (0.180 and 0.202); at 1 MPa its minimum is 0.331 against 0.32. The −x stroke
+  runs 4–14 % lower (0.172, 0.188, 0.285), an asymmetry the paper does not
+  discuss; one μ_d per loop cannot follow it, so the level errors of the −x
+  stroke are +4.7 to +12.3 %.
+- *Breakaway (model-form limit).* The measured peak lies 1.4–2.5 times as far
+  from the reversal as the slider's, `(μ_s + μ_d) / k` after the reversal: the
+  elastic rise rounds off before the peak. After the peak the measured force
+  falls to within 10 % of the drop over 0.6–1.2 mm of travel on the +x strokes
+  and 1.2–2.3 mm on the −x strokes, where the force keeps falling over most of
+  the stroke; the slider drops in one step. The law has no transition
+  distance. Dai et al. derived a transition distance of 1.96 times the elastic
+  displacement from the clean tape and steel bar of Test 2 (p. 430); the
+  in-service surfaces of Tests 1 and 3 decay over a longer distance, which is
+  not separable here from the variation of the force along the stroke. The
+  missing decay leaves the model's work 1.9–2.6 % (Test 1) and 0.9–5.4 %
+  (Test 3) below the measured work over the compared window.
+- *Frequency (model-form limit).* The static peak rises by 10.6 % from 0.01 to
+  0.2 Hz (mean of both strokes; +9.8 % on +x, +11.4 % on −x). The paper states
+  8 % and attributes it to the misalignment of the irregular wire and tape
+  surfaces, amplified at the higher frequency (p. 430). The law's rate factor
+  multiplies the
+  dynamic factor only and cannot raise the static peak: the rate-independent
+  model under-predicts the 0.2 Hz peak by 8–11 %. The dynamic level does not
+  move with frequency (−3.5, −2.4 and +0.3 % at 0.05, 0.1 and 0.2 Hz, not
+  monotonic) over peak sliding speeds `2 π f A` of 0.13–2.5 mm/s: no rate term
+  on the dynamic coefficient (`rate_coefficient = 0`, no viscous term) is
+  supported in this range.
+- *Contact pressure.* The printed coefficients fall with pressure: μ_d 0.32,
+  0.20, 0.18 and μ_s 0.38, 0.24, 0.22 at 1, 4 and 8 MPa, a factor 1.8 on μ_d
+  from 1 to 8 MPa, larger than the static to dynamic ratio. The
+  `pressure_factor` of `FrictionLaw` represents it (concepts, "The friction
+  coefficient can depend on slip state and rate"). A factor table built from
+  these three points reproduces their levels by construction; that is a
+  parameter fit, not a validation.
+- *Stick stiffness.* The slopes of the elastic segments (3.1–3.5 per mm in
+  Test 3; 3.3, 5.5 and 15.7 per mm at 8, 4 and 1 MPa in Test 1, in F/(2N) per
+  mm) are of the rig and both tapes in series and are inputs of the model. The
+  1 MPa slope rests on a near-vertical segment a few pixel columns wide. The
+  tape shear modulus of Test 2 (G = 352 MPa, p. 430 as corrected by the
+  corrigendum) is not used: the contact area and normal force of the
+  specimens are not printed.
+
+**Missing.** Wire width and contact length, normal force, tape material,
+temperature, the plotted cycle, repeat tests (one specimen per condition).
 
 ## Test arrangement (gap T1)
 
