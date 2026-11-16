@@ -255,7 +255,8 @@ def _warn_default_direction_tied(out_of_plane: float, stacklevel: int) -> None:
         "in the next release; pass friction_model explicitly to keep the current "
         "behaviour. This curvature path is not planar (out-of-plane ratio "
         f"{out_of_plane:.3g} > {PLANAR_PATH_TOLERANCE:g}), so 'auto' would "
-        "solve the distributed helix model here. The direction-tied cap turns "
+        "solve the distributed helix model on every layer it covers. The "
+        "direction-tied cap turns "
         f"with the bending direction: {DIRECTION_TIED_ROTATION_BIAS}.",
         DirectionTiedFrictionWarning,
         stacklevel=stacklevel + 1,
