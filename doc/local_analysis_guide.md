@@ -749,9 +749,17 @@ flattening, interaction between layers, a bonded length inside a fitting as
 a distributed bond (put the anchor at its inner end, or lump the bond into
 `k_anchor_N_m`), bending-induced pressure
 redistribution and the change of wire and stick moduli over section states.
-It has not been compared with a helix finite-element model; the only
-measured comparison is the Sævik (2011) check above, which it does not
-meet; the near-anchor
+In its own regime (uniform curvature from a rigid anchor, monotonic loading)
+the clamp solver reproduces the anchored-wire stress of a published
+beam-on-shell finite-element model (Dong et al. 2025: 156.4 against 156.9 MPa
+at a neutral-axis anchor, peak within 2 %); it does not reproduce the larger
+rise of Zhu and Tan (2014), whose finite-element wire does not slip far from
+the anchor ([benchmarks.md](benchmarks.md), "Anchored wire at uniform
+curvature against published FE", reported). The anchor effect grows with
+`κ/κ_c`: it vanishes below full slip and is about 1.2 (anchor) and 1.7
+(peak) times the free-field peak at a neutral-axis anchor at `κ/κ_c ≈ 5`.
+The only measured comparison is the Sævik (2011) check above, which it does
+not meet; the near-anchor
 damage depends strongly on the anchorage position and on `μ P`
 (`A − 1 ∝ √(κ/κ_c)`). Treat corrected damage as a model estimate of the
 termination effect, not a validated life.
