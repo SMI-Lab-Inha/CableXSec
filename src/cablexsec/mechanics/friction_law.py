@@ -101,9 +101,15 @@ __all__ = [
 
 FloatArray = NDArray[np.float64]
 
-#: Largest exponent argument of the bounds (e^700 is finite in binary64).
-_EXP_LIMIT = 700.0
-_MAX_NEWTON = 200
+#: Largest exponent argument of the bounds: e^600 times any stress, slope or
+#: rate scale of the kernels stays finite in binary64 (a capped bound is far
+#: above every trial stress, so the bracket of the return is unchanged).
+_EXP_LIMIT = 600.0
+_MAX_NEWTON = 400
+#: Converged residual of the return, relative to the trial stress.
+_RESIDUAL = 2.0e-15
+#: Converged bracket, relative to its upper end.
+_BRACKET = 4.0e-16
 
 
 @dataclass(frozen=True)
@@ -338,7 +344,16 @@ def _slip_magnitude(
     """Slip ``dp >= 0`` of ``a - k dp = B(md R(speed dp))`` (zero if none).
 
     ``a`` is the trial stress magnitude, ``speed`` converts the slip
-    increment into the slip rate. Safeguarded Newton on ``[0, (a - B)/k]``.
+    increment into the slip rate. The residual ``g(dp) = a - k dp - B`` falls
+    strictly from ``g(0) > 0`` to ``g(hi) <= 0`` at the rate-free root
+    ``hi = (a - B(md)) / k``, so the root is bracketed. Newton steps are taken
+    only inside the bracket and only while the bracket at least halves every
+    second iteration; otherwise the step bisects. The bracket therefore
+    shrinks geometrically however steep the bound is in ``dp`` (a strong
+    viscous term or a short step), and the iteration ends when the residual
+    is at round-off of ``a`` or the bracket at round-off of its upper end
+    (the slip itself, not the rate-free slip). NaN is
+    returned if neither is reached (callers refuse it).
     """
     hi = (a - _bound(md, side, c0, x0, c1, x1, clin)) / k
     if not hi > 0.0:
@@ -346,28 +361,55 @@ def _slip_magnitude(
     if rc == 0.0 and inv_veta == 0.0:
         return hi
     lo = 0.0
-    span = hi
     x = hi
+    previous = 4.0 * hi
     for _ in range(_MAX_NEWTON):
         v = speed * x
         m = md * (1.0 + rc * math.log1p(v / v0) + v * inv_veta)
         g = a - k * x - _bound(m, side, c0, x0, c1, x1, clin)
-        if g == 0.0:
-            return x
         if g > 0.0:
+            if g <= _RESIDUAL * a:
+                return x
             lo = x
-        else:
+        elif g == 0.0 or -g <= _RESIDUAL * a:
+            return x
+        else:  # negative, or not finite: the bound exceeds the trial stress
             hi = x
+        width = hi - lo
+        if width <= _BRACKET * hi:
+            return lo
         slope = -k - _bound_slope(m, side, c0, x0, c1, x1, clin) * md * speed * (
             rc / (v0 + v) + inv_veta
         )
         xn = x - g / slope
-        if not (lo < xn < hi):
+        if not (lo < xn < hi) or width > 0.5 * previous:
             xn = 0.5 * (lo + hi)
-        if abs(xn - x) <= 4.0e-16 * span or hi - lo <= 4.0e-16 * span:
-            return xn
+        previous = width
         x = xn
-    return x
+    return math.nan
+
+
+@njit(cache=True)
+def _return_stress(
+    a: float,
+    md: float,
+    side: float,
+    c0: float,
+    x0: float,
+    c1: float,
+    x1: float,
+    clin: float,
+    speed: float,
+    rc: float,
+    v0: float,
+    inv_veta: float,
+    dp: float,
+) -> float:
+    """Stress magnitude at the end of a slip step: the bound of the slip rate,
+    never above the trial stress ``a``."""
+    v = speed * dp
+    m = md * (1.0 + rc * math.log1p(v / v0) + v * inv_veta)
+    return min(_bound(m, side, c0, x0, c1, x1, clin), a)
 
 
 def _slip_magnitude_array(
@@ -384,7 +426,11 @@ def _slip_magnitude_array(
     v0: float,
     inv_veta: float,
 ) -> FloatArray:
-    """NumPy form of :func:`_slip_magnitude` over a population (reference)."""
+    """NumPy form of :func:`_slip_magnitude` over a population (reference).
+
+    The same bracketed, bisection-safeguarded Newton iteration, element by
+    element; an element that does not converge is NaN.
+    """
 
     def bound(m: FloatArray) -> FloatArray:
         up = c0 * np.expm1(np.minimum(m * x0, _EXP_LIMIT)) + c1 * np.expm1(
@@ -403,31 +449,36 @@ def _slip_magnitude_array(
     hi = np.maximum((a - bound(np.full(a.shape, md))) / k, 0.0)
     if (rc == 0.0 and inv_veta == 0.0) or not np.any(hi > 0.0):
         return np.asarray(hi)
-    lo = np.zeros_like(hi)
-    span = hi.copy()
-    x = hi.copy()
-    active = hi > 0.0
-    for _ in range(_MAX_NEWTON):
-        v = speed * x
-        m = md * (1.0 + rc * np.log1p(v / v0) + v * inv_veta)
-        g = a - k * x - bound(m)
-        lo = np.where(active & (g > 0.0), x, lo)
-        hi = np.where(active & (g < 0.0), x, hi)
-        d = -k - slope(m) * md * speed * (rc / (v0 + v) + inv_veta)
-        with np.errstate(divide="ignore", invalid="ignore"):
-            xn = np.where(g == 0.0, x, x - g / d)
-        bad = ~((lo < xn) & (xn < hi)) & (g != 0.0)
-        xn = np.where(bad, 0.5 * (lo + hi), xn)
-        done = (
-            (g == 0.0)
-            | (np.abs(xn - x) <= 4.0e-16 * span)
-            | (hi - lo <= 4.0e-16 * span)
-        )
-        x = np.where(active, xn, x)
-        active = active & ~done
-        if not np.any(active):
-            break
-    return np.asarray(x)
+    with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+        lo = np.zeros_like(hi)
+        x = hi.copy()
+        out = np.where(hi > 0.0, np.nan, 0.0)
+        previous = 4.0 * hi
+        active = hi > 0.0
+        for _ in range(_MAX_NEWTON):
+            v = speed * x
+            m = md * (1.0 + rc * np.log1p(v / v0) + v * inv_veta)
+            g = a - k * x - bound(m)
+            small = np.abs(g) <= _RESIDUAL * a
+            done = active & small
+            out = np.where(done, x, out)
+            active = active & ~small
+            rising = active & (g > 0.0)
+            lo = np.where(rising, x, lo)
+            hi = np.where(active & ~(g > 0.0), x, hi)
+            width = hi - lo
+            closed = active & (width <= _BRACKET * hi)
+            out = np.where(closed, lo, out)
+            active = active & ~closed
+            if not np.any(active):
+                break
+            d = -k - slope(m) * md * speed * (rc / (v0 + v) + inv_veta)
+            xn = x - g / d
+            bisect = ~((lo < xn) & (xn < hi)) | (width > 0.5 * previous)
+            xn = np.where(bisect, 0.5 * (lo + hi), xn)
+            previous = np.where(active, width, previous)
+            x = np.where(active, xn, x)
+    return np.asarray(out)
 
 
 # --------------------------------------------------------------------------- #
@@ -491,11 +542,26 @@ def _slider_kernel(
                 inv_veta,
             )
             fn = trial
-            if mag > 0.0:
+            if not mag >= 0.0:
+                fn = math.nan  # unresolved return: refused by the caller
+            elif mag > 0.0:
                 # On the end-of-step bound of the slip rate; the slip closes
                 # the step.
-                v = mag / dt[i]
-                fn = side * md * (1.0 + rc * math.log1p(v / v0) + v * inv_veta) * b
+                fn = side * _return_stress(
+                    abs(trial),
+                    md,
+                    side,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    b,
+                    1.0 / dt[i],
+                    rc,
+                    v0,
+                    inv_veta,
+                    mag,
+                )
                 mag = (abs(trial) - abs(fn)) / k
             dp = side * mag
             wf += md * b * mag
@@ -582,6 +648,10 @@ def slider_history(
         law.rate_reference_m_per_s,
         law.inverse_viscous_velocity,
     )
+    if not np.isfinite(force).all():
+        raise CableInputError(
+            "the friction-law return did not converge (slip rate out of range)"
+        )
     work = np.cumsum(force * np.diff(drive, prepend=0.0))
     stored = force**2 / (2.0 * k)
     return SliderHistory(

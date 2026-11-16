@@ -42,7 +42,9 @@ All notable changes to CableXSec are recorded in this file. The format follows
   `stick_time_s`, either order (`mu_s > mu_d` gives a breakaway peak, `mu_s < mu_d` velocity
   strengthening), times `R(v) = 1 + c ln(1 + v/v0) + v/v_eta` at slip rate `v`. The last term
   is a regularised Coulomb law `t = b sign(v) + eta v` with `eta = b/v_eta`, solved as a
-  backward-Euler (Perzyna) return that is exact for each step; `BendingWork.viscous_J_per_m`
+  backward-Euler (Perzyna) return that is exact for each step (a bracketed Newton iteration
+  with bisection that converges however steep the rate term is, and a return that does not
+  converge is refused); `BendingWork.viscous_J_per_m`
   reports its dissipation and the work balance closes with it to round-off. The direction-tied
   kernel takes every option (NumPy reference and compiled kernel), the distributed kernel the
   static/dynamic option; the progressive model, the laid-core friction and the termination

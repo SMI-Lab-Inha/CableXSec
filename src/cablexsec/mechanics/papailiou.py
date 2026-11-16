@@ -1083,7 +1083,10 @@ def _law_wire_slip_history(
     directions = np.column_stack((np.cos(layer.phi_wires), np.sin(layer.phi_wires)))
     drive_map = layer.r_helix_m * directions
     weight = layer.A_wire_m2 * math.cos(layer.lay_angle_rad)
-    slip_length = layer.r_helix_m / abs(math.sin(layer.lay_angle_rad))
+    # Slip rate per plastic strain rate. A zero lay angle has no capstan
+    # friction (zero bounds, :func:`_bound_parts`): its rate does not enter.
+    sin_a = abs(math.sin(layer.lay_angle_rad))
+    slip_length = layer.r_helix_m / sin_a if sin_a >= 1.0e-12 else 0.0
     stress = np.empty((n_w, count))
     caps = np.empty((n_w, count)) if keep_cap else None
     moment = np.empty((count, 2))
@@ -1176,6 +1179,11 @@ def _law_wire_slip_history(
                             v0,
                             inv_veta,
                         )
+                    if not np.isfinite(magnitude_slip).all():
+                        raise CableInputError(
+                            "the friction-law return did not converge (slip rate "
+                            "out of range)"
+                        )
                 # Factor at the end of the step: the available one in stick,
                 # the dynamic one (times the rate factor) after leaving it.
                 end_factor = np.where(leaves, md, available)
@@ -1189,8 +1197,11 @@ def _law_wire_slip_history(
                 end_upper, end_lower = _law_bounds(end_factor, c0, x_held, c1, x_cur)
                 # A slipping wire sits on its end-of-step bound (exactly, as
                 # the rate-independent clip); the slip closes the step.
+                # Never above the trial stress (the bound at a converged root).
                 force = np.where(
-                    slips, np.where(side > 0.0, end_upper, -end_lower), trial
+                    slips,
+                    side * np.minimum(np.where(side > 0.0, end_upper, end_lower), size),
+                    trial,
                 )
                 slip = np.where(slips, (trial - force) / k, 0.0)
                 element.f = force

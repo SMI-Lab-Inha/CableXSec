@@ -785,3 +785,174 @@ def test_bending_law_export_refuses_a_law():
     neutral = export_bending_law(cable, friction_law=FrictionLaw(), **args)
     plain = export_bending_law(cable, **args)
     np.testing.assert_array_equal(neutral.moment_Nm, plain.moment_Nm)
+
+
+# --------------------------------------------------------------------------- #
+# Robustness of the return (steep rate terms, zero lay angle)                 #
+# --------------------------------------------------------------------------- #
+def _return_check(a, k, md, side, c0, x0, speed, rc, v0, inv_veta):
+    """Slip of the scalar and NumPy returns and the bound at that slip."""
+    dp = flm._slip_magnitude(
+        a, k, md, side, c0, x0, 0.0, 0.0, 0.0, speed, rc, v0, inv_veta
+    )
+    v = speed * dp
+    bound = flm._bound(
+        md * (1.0 + rc * math.log1p(v / v0) + v * inv_veta),
+        side,
+        c0,
+        x0,
+        0.0,
+        0.0,
+        0.0,
+    )
+    vec = flm._slip_magnitude_array(
+        np.array([a]),
+        k,
+        md,
+        np.array([side]),
+        np.array([c0]),
+        np.array([x0]),
+        np.zeros(1),
+        np.zeros(1),
+        speed,
+        rc,
+        v0,
+        inv_veta,
+    )[0]
+    return dp, bound, vec
+
+
+@analytical
+def test_return_converges_with_a_steep_viscous_term():
+    """A strong viscous term makes the bound rise steeply with the slip; the
+    return still meets its equation, and the stress stays below the trial."""
+    a, k = 1.0e8, 6.0e10
+    dp, stress, vec = _return_check(a, k, 1.0, 1.0, 1.0e6, 0.1, 100.0, 0.0, 1e-3, 1e5)
+    assert math.isfinite(dp) and 0.0 < dp < (a - 1.0e6 * math.expm1(0.1)) / k
+    assert stress <= a * (1 + 1e-14)
+    assert abs(a - k * dp - stress) <= 1e-14 * a
+    assert vec == pytest.approx(dp, rel=1e-12)
+    # The kernels' end-of-step stress: the bound, never above the trial.
+    end = flm._return_stress(
+        a, 1.0, 1.0, 1.0e6, 0.1, 0.0, 0.0, 0.0, 100.0, 0.0, 1e-3, 1e5, dp
+    )
+    assert end == pytest.approx(stress, rel=1e-15) and end <= a
+
+
+@analytical
+@pytest.mark.parametrize("side", [1.0, -1.0])
+def test_return_sweep_of_extreme_rate_terms(side):
+    k, md, v0 = 6.0e10, 0.9, 1.0e-4
+    cases = []
+    for inv_veta in (0.0, 1.0, 1.0e3, 1.0e6, 1.0e9):
+        for rc in (0.0, 0.2):
+            if inv_veta == 0.0 and rc == 0.0:
+                continue
+            for speed in (1.0, 1.0e2, 1.0e4, 1.0e6):
+                for c0 in (1.0e5, 1.0e7):
+                    for x0 in (0.01, 0.1, 0.3):
+                        for ratio in (1.5, 1.0e3):
+                            b0 = flm._bound(md, side, c0, x0, 0.0, 0.0, 0.0)
+                            cases.append((ratio * b0, c0, x0, speed, rc, inv_veta))
+    for a, c0, x0, speed, rc, inv_veta in cases:
+        dp, stress, vec = _return_check(a, k, md, side, c0, x0, speed, rc, v0, inv_veta)
+        b0 = flm._bound(md, side, c0, x0, 0.0, 0.0, 0.0)
+        assert math.isfinite(dp) and 0.0 <= dp <= (a - b0) / k
+        assert b0 <= stress <= a * (1 + 1e-14)
+        assert abs(a - k * dp - stress) <= 1e-14 * a
+        assert vec == pytest.approx(dp, rel=1e-12, abs=1e-300)
+
+
+def test_kernels_with_a_steep_viscous_term_and_short_steps():
+    spec = _spec()
+    law = FrictionLaw(
+        static_factor=1.2,
+        rate_coefficient=0.5,
+        rate_reference_m_per_s=1.0e-9,
+        viscous_velocity_m_per_s=1.0e-9,
+    )
+    n = 400
+    t = 1.0e-6 * np.arange(n)
+    big = 3.0 * full_slip_curvature(spec)
+    kx = big * np.sin(np.linspace(0.0, 4 * np.pi, n))
+    ky = 0.3 * big * np.sin(np.linspace(0.0, 3 * np.pi, n))
+    ref = wire_slip_history(spec, kx, ky, friction_law=law, time_s=t)
+    fast = wire_friction_stress(spec, kx, ky, friction_law=law, time_s=t)
+    # A spring-slider from rest cannot exceed the elastic stress of its path.
+    path = np.cumsum(np.hypot(np.diff(kx, prepend=0.0), np.diff(ky, prepend=0.0)))
+    envelope = spec.k_f * spec.r_helix_m * path
+    assert np.all(np.abs(ref.stress_Pa) <= envelope * (1 + 1e-12))
+    scale = np.abs(ref.stress_Pa).max()
+    np.testing.assert_allclose(fast, ref.stress_Pa, rtol=0, atol=1e-12 * scale)
+    assert ref.work.viscous_J_per_m is not None and ref.work.viscous_J_per_m[-1] > 0
+    # The steep rate term almost locks the wires: scale by the input work.
+    total = np.abs(ref.work.endpoint_work_J_per_m).max()
+    assert np.abs(ref.work.balance_residual_J_per_m).max() <= 1e-12 * total
+    s = slider_history(1e-3 * np.sin(1e3 * t), 1.0, 1e9, friction_law=law, time_s=t)
+    assert np.all(
+        np.abs(s.force_N)
+        <= 1e9
+        * np.cumsum(np.abs(np.diff(1e-3 * np.sin(1e3 * t), prepend=0.0)))
+        * (1 + 1e-12)
+    )
+    assert abs(s.balance_J).max() <= 1e-12 * s.input_work_J.max()
+
+
+def test_unresolved_returns_are_refused(monkeypatch):
+    spec = _spec()
+    t, kx, ky = _history(spec, n=200)
+    monkeypatch.setattr(flm, "_MAX_NEWTON", 1)
+    a = np.array([1.0e8])
+    out = flm._slip_magnitude_array(
+        a,
+        6e10,
+        1.0,
+        np.ones(1),
+        np.array([1e6]),
+        np.array([0.1]),
+        np.zeros(1),
+        np.zeros(1),
+        100.0,
+        0.0,
+        1e-3,
+        1e5,
+    )
+    assert np.isnan(out).all()
+    with pytest.raises(CableInputError, match="did not converge"):
+        wire_slip_history(spec, kx, ky, friction_law=RATE, time_s=t)
+    monkeypatch.undo()
+
+    import cablexsec.mechanics.fast_slip as fsm
+
+    def unresolved(*args):
+        return np.full((spec.n_wires, kx.size), np.nan)
+
+    monkeypatch.setattr(fsm, "_stress_kernel_law", unresolved)
+    with pytest.raises(CableInputError, match="did not converge"):
+        wire_friction_stress(spec, kx, ky, friction_law=RATE, time_s=t)
+
+    def unresolved_slider(drive, *args):
+        nan = np.full(drive.size, np.nan)
+        return nan, nan, nan, nan, nan
+
+    monkeypatch.setattr(flm, "_slider_kernel", unresolved_slider)
+    with pytest.raises(CableInputError, match="did not converge"):
+        slider_history(np.ones(3), 1.0, 1.0)
+    with pytest.raises(CableInputError, match="positive stick stiffness"):
+        wire_friction_stress(
+            dataclasses.replace(spec, xi=0.0), kx, ky, friction_law=BREAKAWAY
+        )
+
+
+@pytest.mark.parametrize("law", LAWS)
+def test_zero_lay_angle_has_no_capstan_friction(law):
+    """A zero lay angle has zero bounds; a friction law keeps it that way."""
+    spec = dataclasses.replace(_spec(), lay_angle_rad=0.0)
+    t, kx, ky = _history(_spec(), n=300)
+    plain = wire_slip_history(spec, kx, ky)
+    np.testing.assert_array_equal(plain.stress_Pa, 0.0)
+    ref = wire_slip_history(spec, kx, ky, friction_law=law, time_s=_time(law, t))
+    np.testing.assert_array_equal(ref.stress_Pa, 0.0)
+    np.testing.assert_array_equal(ref.work.friction_J_per_m, 0.0)
+    fast = wire_friction_stress(spec, kx, ky, friction_law=law, time_s=_time(law, t))
+    np.testing.assert_array_equal(fast, 0.0)

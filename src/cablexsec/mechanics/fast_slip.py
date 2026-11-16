@@ -28,9 +28,10 @@ import numpy as np
 from numpy.typing import NDArray
 
 from cablexsec._numba import HAVE_NUMBA, njit
+from cablexsec.exceptions import CableInputError
 from cablexsec.mechanics.friction_law import (
     FrictionLaw,
-    _bound,
+    _return_stress,
     _slip_magnitude,
     active_friction_law,
     friction_law_time_steps,
@@ -214,7 +215,10 @@ def _stress_kernel_law(
     stress = np.empty((n_w, n_t))
     dm0 = r_helix * np.cos(phi)
     dm1 = r_helix * np.sin(phi)
-    slip_length = r_helix / abs(math.sin(lay_angle))
+    # Slip rate per plastic strain rate; a zero lay angle has no capstan
+    # friction (zero bounds), so its slip rate does not enter.
+    sin_a = abs(math.sin(lay_angle))
+    slip_length = r_helix / sin_a if sin_a >= 1.0e-12 else 0.0
     force = np.zeros(n_w)
     old_drive = np.zeros(n_w)
     healed = np.ones(n_w, dtype=np.bool_)
@@ -271,11 +275,13 @@ def _stress_kernel_law(
                 dp = _slip_magnitude(
                     size, k, md, side, c0, xh, c1, xc, 0.0, speed, rc, v0, inv_veta
                 )
-                if dp > 0.0:
+                if not dp >= 0.0:
+                    force[w] = math.nan  # unresolved return: refused below
+                elif dp > 0.0:
                     # On the end-of-step bound of the slip rate.
-                    v = speed * dp
-                    m_end = md * (1.0 + rc * math.log1p(v / v0) + v * inv_veta)
-                    force[w] = side * _bound(m_end, side, c0, xh, c1, xc, 0.0)
+                    force[w] = side * _return_stress(
+                        size, md, side, c0, xh, c1, xc, 0.0, speed, rc, v0, inv_veta, dp
+                    )
                 else:
                     force[w] = trial
                 healed[w] = False
@@ -324,7 +330,9 @@ def wire_friction_stress(
     law = active_friction_law(friction_law)
     if law is not None:
         steps = friction_law_time_steps(law, time_s, kx.size)
-        return _stress_kernel_law(
+        if not float(spec.k_f) > 0.0:
+            raise CableInputError("a friction law needs a positive stick stiffness")
+        stress = _stress_kernel_law(
             kx,
             ky,
             pressure,
@@ -347,6 +355,11 @@ def wire_friction_stress(
             law.rate_reference_m_per_s,
             law.inverse_viscous_velocity,
         )
+        if not np.isfinite(stress).all():
+            raise CableInputError(
+                "the friction-law return did not converge (slip rate out of range)"
+            )
+        return stress
     friction_law_time_steps(None, time_s, kx.size)
     return _stress_kernel(
         kx,
