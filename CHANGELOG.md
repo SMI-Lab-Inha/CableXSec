@@ -92,6 +92,15 @@ All notable changes to CableXSec are recorded in this file. The format follows
   Project files written before `BendingLawExport.slip_scale` existed still load: the project
   codec accepts a missing field that has a default. `export_bending_law` refuses
   `contact_pressure_Pa` and `contact_tension_history_N` as options.
+- Reported comparison of the anchored-wire (clamp) solver with two published finite-element
+  studies of one armour wire fixed at an end fitting under uniform curvature
+  (`validation/scripts/check_anchored_wire_fe.py`, `tests/test_anchored_wire_fe.py`, digitised
+  curves in `validation/paper_data/`; doc/benchmarks.md, AW-DONG25 and AW-ZT14; not gated). Dong
+  et al. (2025) are reproduced at their verification case (156.4 against 156.9 MPa at a
+  neutral-axis anchor, peak within 1.6 %); Zhu and Tan (2014) are not (1.70 against about 2.2
+  times the free-field peak): their FE far field does not slip, and their analytical friction
+  field breaks the Coulomb flow rule. The friction regime parameter of Zhu and Tan, not printed,
+  follows from their Table 2. No solver change.
 
 ### Fixed
 

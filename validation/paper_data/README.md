@@ -29,6 +29,8 @@ published cable of Ménard and Cartraud (2023), bundled as
 | `witz1996_fig5_0bar.csv`, `witz1996_fig6_300bar.csv` | Witz, Marine Structures 9 (1996) 885–904, Figs 5 and 6 | WITZ-EI, WITZ-ID rows; `tests/test_witz1996_benchmark.py` |
 | `saevik2011_figs17_23.csv` | Sævik, Computers and Structures 89 (2011) 2273–2291, Figs 17–23 (FBG armour stresses) | SV11-PLANE row; `tests/test_saevik2011_benchmark.py` |
 | `gjosteen2027_lc14_ranges.csv` | Gjøsteen et al., Marine Structures 111 (2027) 104189, Figs 27–35 (load case 14) | SV11-GJ row |
+| `dong2025_figs9_14_25.csv` | Dong et al., Marine Structures 102 (2025) 103761, Figs 9, 14 and 25: axial stress of an armour wire fixed at the end fitting (FE and theory) | AW-DONG25 (doc/benchmarks.md); `tests/test_anchored_wire_fe.py` |
+| `zhu_tan2014_figs4_8.csv` | Zhu and Tan, OMAE2014-23928, Figs 4–8: normalised axial stress of an anchored armour wire (FE and analytical model) | AW-ZT14 (doc/benchmarks.md); `tests/test_anchored_wire_fe.py` |
 | `revision2_digitisation_bounds.json` | Half-widths of the digitisation of the Ménard ranges | sensitivity of the bending comparison to digitisation |
 
 ## Calculations on the published cable

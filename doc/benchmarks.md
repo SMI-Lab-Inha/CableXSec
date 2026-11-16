@@ -104,6 +104,7 @@ model) is the full construction.
 | Along-wire redistribution (gap T2): periodic and clamp-layer limits, termination round-off, energy, refinement | A, I | PASS |
 | Gap T2 against Sævik (2011), Gjøsteen et al. (2027), Hu, Ménard and Witz | M | Not explained (former capstan bound throughout): Sævik near-bellmouth median ratio 3.36 (2.12 in the clamp convention) against 1.65 for the clamp correction and 1.03 sectional; Hu area +65%, share 11%; Ménard work −3 to +3 points by range; end conditions immaterial |
 | Two-way anchored termination: Sævik rig beam solved with the anchored along-wire chains of both armours | M | FAIL as registered (former capstan bound): median ratio 1.18 (9 of 14 in band), absolute 1.46; anchored over-prediction falls from 3.09 one-way (same stick setting) and 1.65 (clamp correction); curvature redistributes along the bellmouth instead of falling (TC-3 fails); hang-off rule stays sectional |
+| Anchored wire at uniform curvature against published FE: Dong et al. (2025), Zhu and Tan (2014) (AW-DONG25, AW-ZT14) | MM | Reported: Dong et al. verification case reproduced (anchor 156.4 against 156.9 MPa, peak +1.6 %); Zhu and Tan not reproduced (1.70 against 2.2 normalised at the neutral-axis anchor): their FE far field is in stick and their analytical field breaks the Coulomb flow rule |
 | Hysteretic bending law for global analysis (gap MX): Iwan law from the exported backbone against `compute_mkappa` | I | MX-1 PASS (≤ 0.05 % of the moment range, work ≤ 0.02 %), MX-3 PASS, MX-scale PASS (slip scaling variable); MX-2 FAIL (tension interpolation 3.9 % at 100 kN spacing; 0.27 % at 20 kN); MX-5 (global program) open |
 | Cable over a sheave (gap SH): Feyrer (2015) Examples 3.2 and 3.4, groove factors, consistency with the section analyses | A, I | SH-1, SH-2, SH-3 PASS; no measured cable-over-sheave data held |
 | Gap T1, benchmarks in their published arrangements | M | Hu three-point: transition share in its band (32.8–39.4% against 33.8%), loop area FAIL (+37% Papailiou cap, +64% Karlsen-Husøy; +4.9%/+28% at uniform curvature compared a different quantity); Ménard four-point unchanged; Witz arrangement not documented, basis unchanged |
@@ -1407,6 +1408,168 @@ matters where the curvature at the anchor is high: on a Ménard layer with
 uniform curvature from the anchor (TA-V3, 20 `κ_c`) the corrected range falls
 by 1% at `k_a = 10` and by 13% at `k_a = 1`; for a potted fitting
 (`K ≈ 1e8` N/m, `k_a ≈ 20` there) it is below 1%.
+
+## Anchored wire at uniform curvature against published FE (AW-DONG25, AW-ZT14)
+
+The anchored solver in its own regime: one armour wire fixed at an end
+fitting, the pipe bent from straight to a uniform curvature (monotonic,
+proportional), rigid anchor. Two published finite-element studies of exactly
+this problem disagree: Zhu and Tan (2014, OMAE2014-23928, Figs 4–8) find about
+2.2 times the free-field axial stress at a neutral-axis anchor, Dong et al.
+(2025, Marine Structures 102, 103761, Figs 14 and 25) almost no rise of the
+peak. Script `validation/scripts/check_anchored_wire_fe.py` (`--spring` adds
+the interface sensitivity below; about two minutes), tests
+`tests/test_anchored_wire_fe.py`, digitised curves
+`validation/paper_data/dong2025_figs9_14_25.csv` and
+`zhu_tan2014_figs4_8.csv` (procedure, calibration, reading uncertainty and
+source SHA-256 in the file headers). **Reported, not gated**: the comparison
+was run before an agreement criterion existed, and Dong et al.'s two FE
+results for the same wire differ by 8 MPa (below), so no criterion
+independent of the result was available. Nothing is fitted.
+
+**Solver.** `clamp_layer.anchored_wire_response`: rigid stick, Coulomb bound
+per unit length, axial slip only, `u = 0` at both wire ends, curvature raised
+from zero in steps of 0.01 `κ_c`, 720 segments per pitch (halving both moves
+the values below by less than 0.1 MPa or 0.002 normalised; the anchor value
+does not depend on the wire length or on where the far end lies). The
+normalised problem has one parameter, `a = κ/κ_c`: the stick stress gradient
+at the neutral axis over the friction gradient (line load over wire area).
+For `a ≥ π/2` the far field is the full-slip triangle of peak `σ_u π/2`.
+
+**The normalised anchored stress depends on μ.** The far field divided by its
+peak is independent of the friction coefficient once the wire is in full
+slip; the anchored boundary layer is not. The anchor must cancel the far-field
+slip at its azimuth, whose ratio to the slip capacity grows with
+`a ∝ 1/(μ P)`. Neutral-axis wire, anchor / peak stress over the free-field
+peak: `a` = 1.5: 0.13 / 1.00; 2: 0.31 / 1.16; 3: 0.65 / 1.36; 4.92:
+1.19 / 1.70; 10: 2.11 / 2.38; 20: 3.07 / 3.21; 50: 4.69 / 4.77 (test
+`test_normalised_anchor_stress_depends_on_a`). Zhu and Tan's Eq. 13 carries the
+same dependence through `u_stk/u_max`. A normalised comparison therefore
+needs `a` from each source.
+
+**Inputs and assumptions.**
+
+- Dong et al. (2025), Table 1: 6 × 3 mm wire, helix radius 0.10 m, helical
+  angle 55° measured from the hoop direction (their Fig. 2; Eqs. 3, 12, 46),
+  i.e. lay angle 35° from the axis; E = 210 GPa; pipe strain 0.10 % (uniform
+  wire stress `E ε sin²α0` = 140.9 MPa, compatible with both anchors, so no
+  slip); curvature 0.005 1/m (stick amplitude 70.46 MPa); μi = μo = 0.10,
+  po = 2.55 MPa. Line load from their Eq. 38,
+  `f = μi Ta κ03 + (μi + μo) po w` = 3894.5 N/m, `σ_u` = 37.72 MPa per radian
+  of helix angle, `a` = 1.868: just past full slip, free-field amplitude
+  59.25 MPa. Assumed: (D1) the FE carries the Eq. 38 line load (both faces);
+  the FE's free-field slopes support it (235, 244 and 235 MPa per pitch,
+  straight-line fits to Figs 14, 9 and 25, against 237 with Eq. 38 and 144
+  with the inner face only);
+  (D2) a constant bound at the mean tension (the tension term is 21 % of `f`
+  and bending changes the tension by ±42 %, so the true bound varies by about
+  ±9 % along the wire); (D3) one pitch with both wire ends fixed to the core,
+  as in the source's FE (its Sec. 3.1); (D4) rigid stick (the FE's tangential
+  penalty stiffness is not printed) and axial slip only (the FE's lateral end
+  layer stays within 8 % of a pitch).
+- Zhu and Tan (2014), Table 1: lay angle 38°, mean radius 0.254 m,
+  4 × 12 mm wire, E = 210 GPa (printed as MPa), bending radius 180 m (stick
+  amplitude 184.0 MPa), contact pressure 2.55 MPa; μ not printed. `a` from
+  their Table 2: with a full-slip triangle far field, `U = u_stk/u_max` of
+  Eqs. 13 and 16 equals `8a/π²`; the three non-trivial rows give
+  U = 3.988, 3.986 and 3.986 (one value within the rounding of the table), so
+  `a` = 4.919 and the free-field amplitude is `4A/(πU)` = 58.8 MPa; their
+  Fig. 14 (stress without the end fitting) reads 58 ± 2.5 MPa (`a` 4.8–5.2).
+  Assumed: (Z1) the hoop angle is measured from the compressive extreme fibre
+  (their Eq. 1 and Fig. 4); (Z2) the far end of the four-pitch FE wire is not
+  stated (immaterial to the anchor value); (Z3) the plotted stress is
+  normalised by the free-field peak (not stated; the FE curves read 0.97–1.06
+  far from the anchor).
+
+**AW-DONG25: reproduced at the documented verification case.** Axial stress
+[MPa]; FE and theory digitised (±1 MPa on the FE lines).
+
+| Wire, figure | Quantity | FE | CableXSec | Source theory | Status |
+| --- | --- | --- | --- | --- | --- |
+| θ0 = π/2, Fig. 14 | stress at the anchor | 156.9 | 156.4 | 147.8 | reported |
+| same | peak (position X1/P) | 204.5 (0.22) | 207.8 (0.217) | 204.4 (0.25) | reported |
+| same | X1/P = 0.745 | 86.6 | 82.8 | 88.6 | reported |
+| θ0 = π, Fig. 9 | stress at the anchor | 194.5 | 200.0 (free field) | 200.0 | reported |
+| Fig. 25, θ0 = 0, 45, 90, 135, 180° | stress at the anchor | 89.3, 121.2, 164.8, 199.1, 195.0 | 81.8, 117.6, 156.4, 191.9, 200.0 | — | reported |
+| same | anchor stress minus free field (45, 90, 135°) | 11.1, 25.9, 29.6 | 6.3, 15.5, 21.4 | — | reported |
+| same | free-field extremes | 195.2, 89–91 | 200.0, 81.8 | — | reported |
+
+At the case the source documents (its Sec. 3: one pitch, both ends fixed,
+Figs 9 and 14) CableXSec reproduces the FE stress at the neutral-axis anchor
+within 0.5 MPa, where the source's own theory (unshifted friction signs) is
+9 MPa low, and the position of the shifted peak (0.217 against 0.22 of a
+pitch; +3.3 MPa, 1.6 %). The anchor raises the stress at the anchor by
+0.26 of the free-field amplitude and the peak by 4 %; at the intrados and the
+extrados it changes nothing (CableXSec: the free field to 8e-14, test
+`test_extreme_fibre_anchor_leaves_the_free_field`; the source states the
+same). The FE's free field is 5–9 MPa inside the rigid-stick triangle at its
+extremes (rounded by the tangential penalty), the scale of differences that
+are not anchor effects. Fig. 25 does not agree with Fig. 14 for the same
+nominal wire (θ0 = 90°: 164.8 against 156.9 MPa at the anchor, 198.4
+against 204.5 at the peak; all its curves end at 540°, a model length the
+source does not state); against Fig. 25 the CableXSec anchor rise is 0.57–0.72
+of the FE's, a gap of the size of the source's own Fig. 14/Fig. 25
+difference.
+
+**AW-ZT14: not reproduced; the published FE is not in the regime of its model.**
+Normalised stress; FE digitised (±0.07), source analytical model rebuilt from
+its Eq. 9 with the Table 2 shifts (its plotted curves read 0.31 / 1.39,
+2.27 and 1.84), CableXSec at `a` = 4.919.
+
+| θi | FE anchor / peak | CableXSec anchor / peak | Source model anchor / peak |
+| --- | --- | --- | --- |
+| 0°, 180° | no anchor effect | no anchor effect (exact) | no anchor effect |
+| 45° | 0.97 / 1.59 (165°) | 0.05 / 1.33 (161°) | 0.30 / 1.40 (145°) |
+| 90° | 2.22 / 2.22 | 1.19 / 1.70 (137°) | 2.16 / 2.16 |
+| 135° | 2.19 / 2.19 | 1.76 / 1.76 | 1.80 / 1.80 |
+
+- *The FE far field is not in slip.* Far from the anchor the FE curve of the
+  θi = 0 wire is a cosine (RMS distance 0.028, inside the reading
+  uncertainty), not the full-slip triangle (0.154) that a rigid-stick Coulomb
+  wire must carry at `a ≥ π/2` and that the source's analytical model
+  assumes. The FE wire behaves as an elastically coupled wire, normalised by
+  its own stick amplitude.
+- *The source's analytical field breaks Coulomb's law.* With the Table 2
+  shifts, the friction of Eq. 9 acts in the direction of the wire's slip
+  relative to the core over 90–164° on the θi = 90° wire (74° from the
+  anchor) and over 144–180° on the 45° wire (test
+  `test_zt_shifted_field_breaks_the_coulomb_flow_rule`). Its agreement with the
+  FE is therefore not evidence for a Coulomb boundary layer. The Coulomb
+  solution at the same `a`, incremental (1.19 / 1.70) or as one projection
+  that obeys the flow rule in total form (1.05 / 1.63), stays well below 2.2.
+- *An elastic interface gives the order of the FE values* (sensitivity, not a
+  fit: the source does not print its tangential stiffness). With the along-wire
+  chain's elastic interface (`"spring"`, normalised shear stiffness `k̂`) at the
+  same `a`, the far field stays a cosine for `k̂ ≤ 0.25`, and the normalised
+  anchor stress is 1.86–2.62 on the 90° wire, 1.94–2.40 on the 135° wire and
+  the 45° peak 1.38–1.83 (`k̂` = 0.25 to 0.05); the FE's 2.22, 2.19 and 1.59
+  lie inside these bands. For `k̂ ≥ 1` the far field slips and the values
+  return towards the rigid ones (90° wire: anchor 1.06–1.36, peak 1.55–1.56).
+
+**Why the two papers conflict.** Both anchor the wire in the same way: its end
+is fixed to the core, zero relative axial displacement (Dong et al. also fix
+the lateral displacement and rotation, which act within 8 % of a pitch). The
+difference is the slip state. Dong et al.'s wire is just past full slip
+(`a` = 1.87): the far-field slip that the anchor must cancel is small, and the
+anchor adds 0.26 of the amplitude at a neutral-axis anchor and 13 % at the
+peak (normalised). At the `a` implied by Zhu and Tan's own Table 2 the same
+Coulomb wire gives 1.19 and 1.70 in CableXSec, a real and larger effect that
+grows roughly as `√a` (clamp law `A = 1 + 0.54 √a` at large `a`). Their 2.2
+is neither: their FE far field is stuck, so its anchor value is an elastic
+shear-lag concentration normalised by a stick amplitude, and the analytical
+model that matches it violates the flow rule. CableXSec agrees with the Dong
+et al. FE; with Zhu and Tan it agrees in pattern (no effect at the extreme
+fibres, the largest rise for anchors from the neutral axis towards the
+tensile side), not in magnitude.
+
+**For the termination route.** Where its assumptions hold (uniform curvature
+from a rigid anchor, proportional monotonic loading) the anchored solver
+reproduces an independent FE that prints the inputs to define it. This does
+not validate the correction near a bellmouth, where the SV11 over-prediction
+is a curvature-gradient effect (TA, above); it removes the anchored solver
+itself from the suspects. Not tested: cyclic loading (both studies are
+monotonic), an interface stiffness from a source that prints it, transverse
+slip.
 
 ## Torque balance and twist under tension (gap 3.5: TQ, TQ-KL, TQ-UJ)
 
