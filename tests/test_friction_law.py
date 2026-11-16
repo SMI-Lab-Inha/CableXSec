@@ -956,3 +956,91 @@ def test_zero_lay_angle_has_no_capstan_friction(law):
     np.testing.assert_array_equal(ref.work.friction_J_per_m, 0.0)
     fast = wire_friction_stress(spec, kx, ky, friction_law=law, time_s=_time(law, t))
     np.testing.assert_array_equal(fast, 0.0)
+
+
+@pytest.mark.parametrize("sign", [1.0, -1.0])
+def test_saturating_falling_bound_under_a_steep_viscous_term(sign):
+    """At a large rate factor the falling bound saturates at a finite stress
+    while the rising exponential of the same factor overflows: only the side
+    of the slip is evaluated, in both kernels."""
+    spec = dataclasses.replace(_spec(shape=False), contact_pressure_Pa=2.0e4)
+    law = FrictionLaw(viscous_velocity_m_per_s=1.0e-9)
+    kx = np.array([0.0, sign * 0.01])
+    zero = np.zeros(2)
+    t = np.array([0.0, 1.0])
+    ref = wire_slip_history(spec, kx, zero, friction_law=law, time_s=t, keep_cap=True)
+    fast = wire_friction_stress(spec, kx, zero, friction_law=law, time_s=t)
+    scale = np.abs(ref.stress_Pa).max()
+    np.testing.assert_allclose(fast, ref.stress_Pa, rtol=0, atol=1e-12 * scale)
+    # Wires driven well into compression sit on the saturated falling bound
+    # sigma0 g (the rate factor is huge); no stress exceeds its trial stress.
+    saturated, _x = _bound_parts_of(spec)
+    trial = spec.k_f * spec.r_helix_m * np.abs(np.cos(spec.phi_wires) * kx[1])
+    compressed = (ref.stress_Pa[:, -1] < 0.0) & (trial > 2.0 * saturated)
+    assert compressed.any()
+    np.testing.assert_allclose(
+        -ref.stress_Pa[compressed, -1], saturated[compressed], rtol=1e-12
+    )
+    assert np.all(np.abs(ref.stress_Pa[:, -1]) <= trial * (1 + 1e-12) + 1e-9)
+    assert ref.cap_Pa is not None and np.isfinite(ref.cap_Pa).all()
+    np.testing.assert_allclose(
+        np.abs(ref.stress_Pa[compressed, -1]), ref.cap_Pa[compressed, -1], rtol=1e-12
+    )
+
+
+def _bound_parts_of(spec):
+    from cablexsec.mechanics.papailiou import _bound_parts
+
+    return _bound_parts(spec, 0.0, spec.contact_pressure_Pa)
+
+
+def test_compute_fatigue_thermal_inputs_with_a_law():
+    """time_s serves the thermal history and the law; a frozen ThermalState
+    takes no times, so the law's times are not passed to it."""
+    from cablexsec.analysis.thermal_coupling import ThermalHistory
+
+    cable = cx.load_cable(cx.iea_task49_66kv_yaml_path(), geometry_override=None)
+    n = 80
+    t = np.arange(n, dtype=float)
+    kx = 0.004 * np.sin(2 * np.pi * t / 10)
+    ky = 0.002 * np.sin(2 * np.pi * t / 13 + 0.4)
+    tension = 50e3 + 5e3 * np.sin(2 * np.pi * t / 10)
+    hot = ThermalHistory.uniform(cable, [0.0, 40.0, 80.0], 45.0)
+    state = hot.blocks()[0].state
+    frozen = cx.compute_fatigue(
+        cable, kx, ky, tension_N=tension, thermal=state, friction_law=RATE, time_s=t
+    )
+    history = cx.compute_fatigue(
+        cable, kx, ky, tension_N=tension, thermal=hot, friction_law=RATE, time_s=t
+    )
+    plain = cx.compute_fatigue(cable, kx, ky, tension_N=tension, thermal=state)
+    for name, damage in frozen.D_total_per_wire.items():
+        # Identical blocks: the history equals the frozen state.
+        np.testing.assert_allclose(
+            history.D_total_per_wire[name], damage, rtol=1e-12, atol=0
+        )
+    assert any(
+        not np.array_equal(frozen.D_total_per_wire[name], damage)
+        for name, damage in plain.D_total_per_wire.items()
+    )
+    # A static law needs no times: the history still takes them, a frozen
+    # state refuses them (as without a law).
+    cx.compute_fatigue(
+        cable, kx, ky, tension_N=tension, thermal=hot, friction_law=BREAKAWAY, time_s=t
+    )
+    with pytest.raises((CableInputError, CableSchemaError), match="time_s"):
+        cx.compute_fatigue(cable, kx, ky, tension_N=tension, thermal=state, time_s=t)
+    with pytest.raises((CableInputError, CableSchemaError), match="time_s"):
+        cx.compute_fatigue(
+            cable,
+            kx,
+            ky,
+            tension_N=tension,
+            thermal=state,
+            friction_law=BREAKAWAY,
+            time_s=t,
+        )
+    with pytest.raises(CableSchemaError, match="give the sample times"):
+        cx.compute_fatigue(
+            cable, kx, ky, tension_N=tension, thermal=state, friction_law=RATE
+        )

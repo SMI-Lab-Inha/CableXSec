@@ -2345,8 +2345,15 @@ def compute_fatigue(
     stick_history = None
     thermal_notes: tuple[str, ...] = ()
     if thermal is not None:
+        # time_s serves two consumers: the slow time axis of a ThermalHistory
+        # and the friction law. A frozen ThermalState has no time axis, so
+        # times given for the law are not passed to it (alone they are still
+        # refused by the thermal helper).
+        thermal_time_s = (
+            None if law_time and isinstance(thermal, ThermalState) else time_s
+        )
         inputs = thermal_fatigue_inputs(
-            cable, layers, kx.size, tension, thermal, time_s=time_s
+            cable, layers, kx.size, tension, thermal, time_s=thermal_time_s
         )
         if inputs.stick_modulus_Pa is not None and friction_model == "distributed":
             raise CableSchemaError(

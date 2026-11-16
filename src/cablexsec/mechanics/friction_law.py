@@ -412,6 +412,33 @@ def _return_stress(
     return min(_bound(m, side, c0, x0, c1, x1, clin), a)
 
 
+def _side_bound(
+    factor: FloatArray,
+    side: FloatArray,
+    c0: FloatArray,
+    x0: FloatArray,
+    c1: FloatArray,
+    x1: FloatArray,
+) -> FloatArray:
+    """Bound of every element on its own side at its factor (NumPy).
+
+    ``c0 E(m x0) + c1 E(m x1)`` with ``E = expm1`` on the rising side
+    (``side > 0``) and ``E(y) = -expm1(-y)`` on the falling side, as
+    :func:`_bound`. Only the element's own side is evaluated: at a large rate
+    factor the falling bound saturates while the rising exponential would
+    overflow. The rising exponent is capped at ``_EXP_LIMIT`` like the scalar
+    form.
+    """
+    rising = side > 0.0
+    up_m = np.where(rising, factor, 0.0)
+    down_m = np.where(rising, 0.0, factor)
+    up = c0 * np.expm1(np.minimum(up_m * x0, _EXP_LIMIT)) + c1 * np.expm1(
+        np.minimum(up_m * x1, _EXP_LIMIT)
+    )
+    down = -(c0 * np.expm1(-down_m * x0) + c1 * np.expm1(-down_m * x1))
+    return np.asarray(np.where(rising, up, down))
+
+
 def _slip_magnitude_array(
     a: FloatArray,
     k: float,
@@ -432,19 +459,21 @@ def _slip_magnitude_array(
     element; an element that does not converge is NaN.
     """
 
+    up_side = side > 0.0
+
     def bound(m: FloatArray) -> FloatArray:
-        up = c0 * np.expm1(np.minimum(m * x0, _EXP_LIMIT)) + c1 * np.expm1(
-            np.minimum(m * x1, _EXP_LIMIT)
-        )
-        down = -(c0 * np.expm1(-m * x0) + c1 * np.expm1(-m * x1))
-        return np.asarray(np.where(side > 0.0, up, down))
+        return _side_bound(m, side, c0, x0, c1, x1)
 
     def slope(m: FloatArray) -> FloatArray:
-        up = c0 * x0 * np.exp(np.minimum(m * x0, _EXP_LIMIT)) + c1 * x1 * np.exp(
-            np.minimum(m * x1, _EXP_LIMIT)
+        # Each element on its own side only (the other side's exponential
+        # can be far out of range at a large rate factor).
+        mu = np.where(up_side, m, 0.0)
+        md_ = np.where(up_side, 0.0, m)
+        up = c0 * x0 * np.exp(np.minimum(mu * x0, _EXP_LIMIT)) + c1 * x1 * np.exp(
+            np.minimum(mu * x1, _EXP_LIMIT)
         )
-        down = c0 * x0 * np.exp(-m * x0) + c1 * x1 * np.exp(-m * x1)
-        return np.asarray(np.where(side > 0.0, up, down))
+        down = c0 * x0 * np.exp(-md_ * x0) + c1 * x1 * np.exp(-md_ * x1)
+        return np.asarray(np.where(up_side, up, down))
 
     hi = np.maximum((a - bound(np.full(a.shape, md))) / k, 0.0)
     if (rc == 0.0 and inv_veta == 0.0) or not np.any(hi > 0.0):
@@ -463,8 +492,8 @@ def _slip_magnitude_array(
             done = active & small
             out = np.where(done, x, out)
             active = active & ~small
-            rising = active & (g > 0.0)
-            lo = np.where(rising, x, lo)
+            gains = active & (g > 0.0)
+            lo = np.where(gains, x, lo)
             hi = np.where(active & ~(g > 0.0), x, hi)
             width = hi - lo
             closed = active & (width <= _BRACKET * hi)

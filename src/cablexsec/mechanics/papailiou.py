@@ -96,6 +96,7 @@ from numpy.typing import NDArray
 from cablexsec.exceptions import CableInputError
 from cablexsec.mechanics.friction_law import (
     FrictionLaw,
+    _side_bound,
     _slip_magnitude_array,
     active_friction_law,
     friction_law_time_steps,
@@ -1194,21 +1195,29 @@ def _law_wire_slip_history(
                         md * law.rate_factor(slip_length * magnitude_slip / dt),
                         end_factor,
                     )
-                end_upper, end_lower = _law_bounds(end_factor, c0, x_held, c1, x_cur)
                 # A slipping wire sits on its end-of-step bound (exactly, as
                 # the rate-independent clip); the slip closes the step.
                 # Never above the trial stress (the bound at a converged root).
-                force = np.where(
-                    slips,
-                    side * np.minimum(np.where(side > 0.0, end_upper, end_lower), size),
-                    trial,
-                )
+                # Only the side of the slip is evaluated: at a large rate
+                # factor the falling bound saturates while the rising
+                # exponential of the same factor overflows.
+                end_bound = _side_bound(end_factor, side, c0, x_held, c1, x_cur)
+                force = np.where(slips, side * np.minimum(end_bound, size), trial)
                 slip = np.where(slips, (trial - force) / k, 0.0)
                 element.f = force
                 element.slip_total = element.slip_total + slip
                 stress[:, index] = force
                 if caps is not None:
-                    caps[:, index] = np.where(force < 0.0, end_lower, end_upper)
+                    # Wires without slip carry no rate factor: both of their
+                    # bounds are in range; a slipping wire's cap is its bound.
+                    still_upper, still_lower = _law_bounds(
+                        np.where(slips, md, end_factor), c0, x_held, c1, x_cur
+                    )
+                    caps[:, index] = np.where(
+                        slips,
+                        end_bound,
+                        np.where(force < 0.0, still_lower, still_upper),
+                    )
                 moment[index] = weight * (force @ drive_map)
                 slipping_count[index] = np.count_nonzero(force != trial)
                 stored[index] = weight * (force**2).sum() / (2 * current_stiffness)
