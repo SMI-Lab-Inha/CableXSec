@@ -70,6 +70,20 @@ curvature-gradient study). It is an explicit option:
   ``k_hat = xi / (1 - xi)`` with the full imposed strain, the distributed
   model's representation (Lutchansky shear lag at the anchor).
 
+Anchor compliance
+-----------------
+``k_anchor_N_m`` replaces the rigid anchor (``u = 0`` at the anchor) by an
+elastic one: the anchor holds the wire end with the force ``K u`` per wire
+(``K`` [N/m], axial force per unit axial displacement of the wire end), in
+parallel with the friction of the first half segment. ``None`` (default) or
+``inf`` is the rigid anchor on the unchanged code path; ``0`` a free wire end
+at the anchor. Normalised, ``k_a = K R / (E A sin a)`` with the chain's axial
+stiffness ``E A`` (``xi E A`` for ``stick="scaled"``): the anchor is as
+compliant as ``E A / K`` of free wire, to be compared with the boundary layer
+``l_x``. It enters the anchored chain of every solver (the clamp solver, the
+along-wire solver, and both under a curvature field); the far-field reference
+is unchanged. Estimates for potted end fittings are in the termination guide.
+
 ``solver="along_wire"`` uses :mod:`cablexsec.mechanics.along_wire`: every
 wire is solved along its own helix with its azimuth-dependent contact shape,
 the optional capstan bound (``capstan=True``, the package's signed bound) and the
@@ -238,6 +252,10 @@ class TerminationSpec:
         per sample of the history, in the bending plane of the clamp
         solution. Replaces ``curvature_profile``; the history at the section
         (projected on that plane) must equal the field at ``distance_m``.
+    k_anchor_N_m : float or None
+        Axial stiffness of the anchor per wire [N/m] (module notes, "Anchor
+        compliance"): ``None`` (default) or ``inf`` rigid, ``0`` a free wire
+        end, finite an elastic anchor. Needs ``anchor="clamped"``.
 
     Notes
     -----
@@ -266,8 +284,22 @@ class TerminationSpec:
     capstan: bool = False
     curvature_field: CurvatureField | None = None
     lateral_relief: LateralRelief | None = None
+    k_anchor_N_m: float | None = None
 
     def __post_init__(self) -> None:
+        if self.k_anchor_N_m is not None:
+            if isinstance(self.k_anchor_N_m, (bool, np.bool_)) or not isinstance(
+                self.k_anchor_N_m, (int, float, np.integer, np.floating)
+            ):
+                raise CableInputError("k_anchor_N_m must be a number or None")
+            k_anchor = float(self.k_anchor_N_m)
+            if math.isnan(k_anchor) or k_anchor < 0:
+                raise CableInputError(
+                    "k_anchor_N_m must be non-negative (None or inf: rigid anchor)"
+                )
+            if self.anchor != "clamped":
+                raise CableInputError("k_anchor_N_m needs anchor='clamped'")
+            object.__setattr__(self, "k_anchor_N_m", k_anchor)
         if self.lateral_relief is not None:
             if not isinstance(self.lateral_relief, LateralRelief):
                 raise CableInputError("lateral_relief must be a LateralRelief")
@@ -575,6 +607,12 @@ def termination_friction_increment(
             0.0,
             "no friction-setting pressure or friction: no clamp effect",
         )
+    anchor_hat: float | None = None
+    k_anchor = termination.k_anchor_N_m
+    if k_anchor is not None and math.isfinite(k_anchor):
+        anchor_hat = WireChainLayer.from_layer_spec(
+            spec, stick=termination.stick, capstan=False
+        ).anchor_stiffness_hat(k_anchor)
     if contact_pressure_Pa is None:
         rho_samples = np.ones(n_t)
     else:
@@ -674,6 +712,7 @@ def termination_friction_increment(
             part,
             kx,
             ky,
+            anchor_hat,
         )
         return result(
             stress,
@@ -682,7 +721,7 @@ def termination_friction_increment(
             layer_m,
             reach,
             f"anchored-wire clamp increment under the {field.kind} curvature "
-            f"field ({termination.solver} solver)",
+            f"field ({termination.solver} solver{_anchor_note(termination)})",
         )
 
     if termination.solver == "along_wire":
@@ -704,6 +743,7 @@ def termination_friction_increment(
             part,
             x_mid,
             h_x,
+            anchor_hat,
         )
         return result(
             stress,
@@ -712,7 +752,8 @@ def termination_friction_increment(
             layer_m,
             reach,
             f"along-wire clamp increment ({termination.stick} stick, capstan "
-            f"{'on' if termination.capstan else 'off'}; biaxial strain direct)",
+            f"{'on' if termination.capstan else 'off'}; biaxial strain direct"
+            f"{_anchor_note(termination)})",
         )
 
     for direction, load in zip(directions, loads, strict=True):
@@ -756,6 +797,7 @@ def termination_friction_increment(
                 rho=rho,
                 record=record,
                 index=np.array([j_s], dtype=np.int64),
+                anchor_stiffness=anchor_hat,
             )
             column = (sense * int(whole[k])) % spp
             stress[k] += sigma_u * gk * (n_rec[:, 0] - rows[:, column])
@@ -765,8 +807,17 @@ def termination_friction_increment(
         a_max,
         layer_m,
         reach,
-        f"anchored-wire clamp increment, {termination.biaxial} mode",
+        f"anchored-wire clamp increment, {termination.biaxial} mode"
+        f"{_anchor_note(termination)}",
     )
+
+
+def _anchor_note(termination: TerminationSpec) -> str:
+    """``"; anchor K N/m per wire"`` for an elastic anchor, else empty."""
+    k_anchor = termination.k_anchor_N_m
+    if k_anchor is None or math.isinf(k_anchor):
+        return ""
+    return f"; anchor {k_anchor:.3g} N/m per wire"
 
 
 def _field_increment(
@@ -788,6 +839,7 @@ def _field_increment(
     part: NDArray[np.int64],
     kx: FloatArray,
     ky: FloatArray,
+    anchor_hat: float | None = None,
 ) -> FloatArray:
     """Clamp increment under a non-proportional planar field [Pa] (gap P5).
 
@@ -824,6 +876,7 @@ def _field_increment(
             sense,
             whole,
             part,
+            anchor_hat,
         )
     for k in range(n_w):
         gk = float(g[k])
@@ -859,6 +912,7 @@ def _field_increment(
             rho=rho_samples,
             index=np.array([j_s], dtype=np.int64),
             substeps=counts,
+            anchor_stiffness=anchor_hat,
         )
         column = (sense * int(whole[k])) % spp
         stress[k] = sigma_u * gk * (n_rec[:, 0] - rows[:, column])
@@ -881,6 +935,7 @@ def _along_wire_field(
     sense: int,
     whole: NDArray[np.int64],
     part: NDArray[np.int64],
+    anchor_hat: float | None = None,
 ) -> FloatArray:
     """Along-wire clamp increment under a planar field [Pa] (gap P5)."""
     layer = WireChainLayer.from_layer_spec(
@@ -926,12 +981,12 @@ def _along_wire_field(
         fx: FloatArray,
         fy: FloatArray,
         rec: NDArray[np.int64],
+        anchored: bool = False,
     ) -> FloatArray:
         m = theta.size
         w = np.full(m + 1, h)
         w[0] = w[-1] = 0.5 * h
-        fixed = np.ones(m + 1, dtype=np.bool_)
-        fixed[1:-1] = False
+        fixed, spring = _anchor_nodes(m, anchored, anchor_hat)
         theta_node = np.r_[theta - 0.5 * sense * h, theta[-1] + 0.5 * sense * h]
         gnode = np.ascontiguousarray(layer.shape_at(theta_node))
         out_n = np.zeros((fx.shape[0], rec.size))
@@ -957,6 +1012,7 @@ def _along_wire_field(
             out_n,
             out_e,
             stats,
+            spring,
         )
         if status != 0:
             raise CableInputError(
@@ -990,6 +1046,7 @@ def _along_wire_field(
             anc_x,
             anc_y,
             np.array([j_s], dtype=np.int64),
+            anchored=True,
         )
         column = (sense * int(whole[k])) % spp
         stress[k] = layer.stress_unit_Pa * (n_anch[:, 0] - far[key][:, column])
@@ -1014,6 +1071,7 @@ def _along_wire_increment(
     part: NDArray[np.int64],
     x_mid: FloatArray | None = None,
     h_x: float | None = None,
+    anchor_hat: float | None = None,
 ) -> FloatArray:
     """Clamp increment of every wire with the along-wire solver [Pa].
 
@@ -1068,8 +1126,7 @@ def _along_wire_increment(
         m = theta.size
         w = np.full(m + 1, h)
         w[0] = w[-1] = 0.5 * h
-        fixed = np.ones(m + 1, dtype=np.bool_)
-        fixed[1:-1] = False
+        fixed, spring = _anchor_nodes(m, anchored, anchor_hat)
         theta_node = np.r_[theta - 0.5 * sense * h, theta[-1] + 0.5 * sense * h]
         gnode = np.ascontiguousarray(layer.shape_at(theta_node))
         if relief is not None:
@@ -1103,6 +1160,7 @@ def _along_wire_increment(
             out_n,
             out_e,
             stats,
+            spring,
         )
         if status != 0:
             raise CableInputError(
@@ -1139,3 +1197,21 @@ def _along_wire_increment(
         column = (sense * int(whole[k])) % spp
         stress[k] = layer.stress_unit_Pa * (n_anch[:, 0] - far[key][:, column])
     return stress
+
+
+def _anchor_nodes(
+    m: int, anchored: bool, anchor_hat: float | None
+) -> tuple[NDArray[np.bool_], FloatArray]:
+    """Fixed nodes and node springs of a chain of ``m`` segments.
+
+    Both end nodes are rigid anchors, except the anchor node (node 0) of the
+    anchored chain with an elastic anchor (normalised stiffness
+    ``anchor_hat``; ``0`` a free end).
+    """
+    fixed = np.ones(m + 1, dtype=np.bool_)
+    fixed[1:-1] = False
+    spring = np.zeros(m + 1)
+    if anchored and anchor_hat is not None:
+        fixed[0] = False
+        spring[0] = anchor_hat
+    return fixed, spring

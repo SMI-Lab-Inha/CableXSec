@@ -703,17 +703,51 @@ with the increment in `field.termination`.
   solver follows each wire's azimuth-dependent contact shape and takes the
   biaxial strain directly; with `stick="scaled"` and no capstan it equals the
   clamp solver to round-off.
+- **Anchor compliance.** The anchor is rigid by default (`u = 0` at the
+  anchor). `k_anchor_N_m=K` holds each wire end with the force `K u` instead
+  (`K` in N/m per wire: the axial force on the wire end per unit axial
+  displacement of the wire end at the anchor), in parallel with the friction
+  of the first half segment; `0` is a free wire end, `None` or `inf` the
+  rigid anchor on the unchanged code path. All solvers (clamp, along-wire,
+  either under a curvature field) take it; the far-field reference is
+  unchanged. Normalised, `k_a = K R/(EA sin α)` (`ξ EA` for `"scaled"`):
+  the anchor is as compliant as a length `EA/K` of free wire, so it matters
+  only when `EA/K` is comparable with the boundary layer `ℓ_x`.
+  A closed form checks it: a wire under a uniform imposed strain `A` with
+  a spring anchor slips over `L` next to the anchor, with
+  `k_a ρ L²/2 + ρ(1 + k_a/β)L + k_a ρ/β² + ρ/β = A` (`β = √k̂`, `β = ∞`
+  for rigid stick), anchor force `A − ρ/β − ρL` and dissipation
+  `ρ²(L²/(2β) + L³/6)` ([benchmarks.md](benchmarks.md), TA-V1).
+- **Estimating `K` for a potted end fitting.** This is an
+  order-of-magnitude estimate from shear lag, not a value from a source. A
+  wire of axial stiffness `EA` bonded over a length `L_e` in a potting of
+  shear modulus `G_p`, with an effective shear-layer thickness `t_p` over
+  the wire perimeter `p`, has the bond stiffness per unit length
+  `k_s = G_p p/t_p` and `u'' = λ² u` with `λ = √(k_s/EA)`; its loaded end has
+  `K_b = EA λ tanh(λ L_e)`, within 4 % of `√(EA k_s)` once `λ L_e > 2`. An
+  unbonded wire length `l_f` between the anchor plane and the start of the
+  bond adds `l_f/EA` in series: `1/K = 1/K_b + l_f/EA`. For a 5 × 12.5 mm
+  tendon (`EA = 1.3e7 N`, `p = 35 mm`), `G_p = 0.5`–`4 GPa` (unfilled to
+  filled epoxy, typical values) and `t_p = 0.5`–`5 mm` give `λ = 16`–`150
+  1/m` and `K_b ≈ 2e8`–`2e9 N/m` for `L_e ≥ 0.15 m`; 0.1 m of unbonded wire
+  lowers it to about `1e8 N/m`. A 5 mm round wire (`EA = 4e6 N`) gives
+  `K_b ≈ 8e7`–`7e8 N/m`. The anchor then behaves like `EA/K ≈ 0.007`–`0.16
+  m` of extra free wire. A mechanical wedge or a hooked wire end changes
+  these numbers; measure or model the fitting when the result matters.
 - **Measured check.** Near the bellmouth of the Sævik (2011) riser the
   corrected ranges are 1.65 times the FBG measurements (median, clamp
   solver), 2.1 with the along-wire solver in the `"scaled"` convention and
   3.4 with `"spring"` or `"rigid"`; the sectional ranges are 1.03
   ([benchmarks.md](benchmarks.md), SV11 and T2). The anchored-wire Coulomb model is not
-  supported by these measurements.
+  supported by these measurements. An elastic anchor in the estimated range,
+  or a free wire end, does not change this (benchmarks.md, "Anchor compliance of the end
+  fitting", a reported sensitivity).
 
 What it does not represent: transverse slip (except the vector-Coulomb
 relief of `lateral_relief=` with the along-wire solver, Section 6.4), wire
-flattening, interaction between layers, the stiffness of a bonded length
-inside a fitting (put the anchor at its inner end), bending-induced pressure
+flattening, interaction between layers, a bonded length inside a fitting as
+a distributed bond (put the anchor at its inner end, or lump the bond into
+`k_anchor_N_m`), bending-induced pressure
 redistribution and the change of wire and stick moduli over section states.
 It has not been compared with a helix finite-element model; the only
 measured comparison is the Sævik (2011) check above, which it does not
@@ -958,7 +992,9 @@ print(test.loop_work_J_per_m(), test.along_wire.iterations.max())
 - **Model.** Each wire: axial force `n = e + du/dφ`, friction line load
   bounded by the package's contact pressure (and capstan term), imposed strain
   `e = κ(x, t) R cos²α cos θ(x)` from the local curvature, ends anchored
-  (`u = 0`) or free (`n = 0`). The station moment is the elastic (full-slip)
+  (`u = 0`), elastically anchored (`AlongWireSpec(k_anchor_N_m=(K_left,
+  K_right))`, the end node held by `K u` in parallel with its friction;
+  Section 5, Step 6) or free (`n = 0`). The station moment is the elastic (full-slip)
   part plus `Σ A R cos α σ cos θ` of the wires at the station; equilibrium
   `M(x) = F m(x)` at every station (zero on overhangs) is solved by Newton
   on the station curvatures and the load with the exact station Jacobian of
@@ -988,7 +1024,8 @@ The same solver is available for a section near a termination:
 `TerminationSpec(..., solver="along_wire", stick="spring", capstan=True)`
 (Section 5, Step 6), and on its own for a prescribed, non-proportional
 curvature field: `cx.along_wire_history(cx.WireChainLayer.from_layer_spec(spec),
-x_m, kappa_x, ends=("anchored", "anchored"))`.
+x_m, kappa_x, ends=("anchored", "anchored"))`, with
+`anchor_stiffness_N_m=(K_start, K_end)` for elastic anchors.
 
 ### 6.4 Local tendon bending, transverse slip and lateral relief (gap G1)
 

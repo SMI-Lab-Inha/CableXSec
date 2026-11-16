@@ -1327,6 +1327,87 @@ scorecard row now passes on its own basis, through the signed capstan bound.
   Transverse slip and lateral tendon bending (Sævik 1992; Dong et al. 2017,
   2025) were tested with gap G1 and change the ratios by 1–3 % only.
 
+## Anchor compliance of the end fitting (TA)
+
+Option `k_anchor_N_m` of `TerminationSpec` and `AlongWireSpec`,
+`anchor_stiffness_N_m` of `along_wire_history` and `WireChain.build`, and the
+normalised `anchor_stiffness` of the clamp-layer solver; tests
+`tests/test_anchor_compliance.py`; sensitivity script
+`validation/scripts/check_saevik2011_anchor.py`. The anchor of every route
+above is rigid (`u = 0`). A potted end fitting holds the wire end with a finite
+stiffness `K` per wire (axial force per unit axial displacement of the wire
+end), here a spring at the anchor node in parallel with the friction of the
+node's half segment. Normalised, `k_a = K R/(EA sin α)` (`ξ EA` in the
+`scaled` convention): the anchor is as compliant as `EA/K` of free wire. The
+rigid anchor stays the default and runs the unchanged code path; nothing is
+fitted. A shear-lag estimate of `K` for a potted fitting is derived in the
+[local analysis guide](local_analysis_guide.md) (Section 5, Step 6): about
+`1e8`–`2e9` N/m for a 5 × 12.5 mm tendon, `EA/K ≈ 0.007`–`0.16` m. It is an
+order-of-magnitude estimate, not a value from a source.
+
+**Verification.** Closed form: a wire under a uniform imposed strain `A`
+(from the virgin state, uniform bound `ρ`, interface stiffness `k̂ = β²`,
+`β = ∞` for rigid stick) slips over `L` next to the anchor, with
+`k_a ρ L²/2 + ρ(1 + k_a/β) L + k_a ρ/β² + ρ/β = A`; the anchor force is
+`A − ρ/β − ρL`, the dissipation `ρ²(L²/(2β) + L³/6)`, and without slip the
+anchor force is `k_a A/(k_a + β)`. `k_a → 0` is the free end, `k_a → ∞` the
+rigid anchor.
+
+| ID | Class | Quantity | Target | Result | Status |
+| --- | --- | --- | --- | --- | --- |
+| TA-V1 | A | Closed form above, `A = 3`, `k_a` = 10, 1, 0.1, 0: clamp solver (rigid stick, 256 segments per pitch) and chain (rigid stick and `β = 2`, 512 per pitch): anchor force, slip length, dissipation | force within 1e-4 `A`; slip length within 1.5 `h`; dissipation within 2e-3 (clamp) and 5e-4 (chain) | force 1e-5 `A` or better; slip length within 1.2 `h`; dissipation 5e-4 (clamp), 4e-5 (chain) | PASS |
+| TA-V2 | I | Clamp solver against the along-wire chain with the same spring anchor (cyclic curvature, `k_a` = 0, 0.3, 3) | < 1e-12 rel. | force 5e-15, dissipation 4e-16 | PASS |
+| TA-V3 | A, I | Limits: `None`/`inf` the unchanged code path (clamp, field, chain, termination, bending test); `0` the free end (chain bitwise; clamp against the chain's free end); termination increment (Ménard, `k_a` = 0 to 1e6) between the free and the rigid result, monotone, both solvers agreeing | bitwise; < 1e-12; monotone, < 1e-4 at `k_a = 1e6` | bitwise; 4e-15; range 28.2, 31.1, 55.3, 63.0, 63.73, 63.74 MPa against rigid 63.74 (deviation 3.7e-7 at 1e6, falling as `1/k_a`); solvers 3e-15 | PASS |
+| TA-V4 | I | Energy identity `W = ΔU + D + R` with elastic anchors (rigid and spring stick, with and without capstan, one and two springs) | round-off | 2e-13 of the work | PASS |
+| TA-V5 | I | Station Jacobian with two elastic anchors against the finite difference in stick | < 1e-7 | yes | PASS |
+| TA-V6 | I | Two-way bending test (two-pitch three-point specimen, anchored ends): `k_a` = 0 equals free ends; closed-cycle external work against wire friction work | bitwise; < 1% | bitwise; 0.89% (rigid 0.89%, free 0.91%); peak load 1551 (free) ≤ 1553–1555 ≤ 1555 N (rigid) | PASS |
+| TA-V7 | I | Projections with spring ends (first, last, both) against a generic quadratic programme | < 1e-5 | yes | PASS |
+
+**Sævik (2011) sensitivity (reported, not gated).** The rows SV11-PLANE and
+SV11-GJ (termination-corrected: clamp solver, `scaled`, anchor at the
+end-fitting face) and the along-wire variant of gap T2 (`spring`, capstan
+bound, all wires between the two end fittings, the beam curvature field at
+every angle sample) re-run with an elastic anchor `K` per tendon at both end
+fittings (`EA = 1.29e7 N`; `python validation/scripts/check_saevik2011_anchor.py
+OUTPUT_JSON`, about 20 min on one thread). `K` is not fitted; the registered
+rows keep the rigid anchor.
+
+| `K` per tendon [N/m] | `EA/K` [m] | SV11-PLANE median R (in band) | SV11-GJ | T2-SV-PLANE median R (in band) | T2-SV-GJ |
+| --- | --- | --- | --- | --- | --- |
+| rigid (registered) | 0 | 1.62 (3 of 14) | 1.80 | 3.11 (2 of 14) | 4.19 |
+| 2e9 | 0.0065 | 1.62 (3) | 1.80 | 3.11 (2) | 4.19 |
+| 5e8 | 0.026 | 1.62 (3) | 1.80 | 3.11 (2) | 4.19 |
+| 1e8 | 0.13 | 1.62 (3) | 1.80 | 3.11 (2) | 4.19 |
+| 1e7 | 1.3 | 1.62 (3) | 1.80 | 3.11 (2) | 4.19 |
+| 1e6 | 13 | 1.62 (3) | 1.80 | 3.11 (2) | 4.19 |
+| 0 (free wire end) | ∞ | 1.62 (3) | 1.80 | 3.11 (2) | 4.19 |
+
+The first four non-rigid rows span the potting estimate; the last three
+extend it to a free end. The largest change of any per-case ratio is 3e-15
+(round-off) for the termination correction and 4.5e-4 for the along-wire
+chain (at `K = 0`; 1.4e-4 at `1e8`). The along-wire values are a re-run with
+the signed capstan bound (the T2 table above, 3.36 and 4.62, used the former
+symmetric bound and has no script on record); per load case 0.44, 0.54,
+0.74, 0.99 (0.5–2°), 4.96 and 1.91 (4°, LC 4 and LC 5), 3.16–3.51 (7.5°, 8° and
+15° at 500 and 250 kN),
+3.06–3.19 (24–32°), 2.67 (15°, 750 kN), 5.67 (15°, 17 MPa, LC 19).
+
+Why nothing moves: the end-fitting face lies 2.305 m before the curved
+section, inside the straight bellmouth tube, where the beam curvature is about
+1% of the bellmouth peak (LC 14, 15°: 2e-4 against 0.025 1/m). The wire next to
+the anchor therefore stays in stick, apart from the first half segment, and the
+anchor condition does not reach the stations: the rigid anchor of the
+along-wire chain carries a range of 79 MPa (LC 14, ±8°, all 55 wires) against
+875 MPa at station 2.1. The slip zones that make the corrected ranges start in
+the bellmouth and are held there by a stuck stretch of wire, which acts as the
+anchor whatever the fitting does. At this rig the termination correction is a
+curvature-gradient effect, not an anchor effect; anchor compliance cannot
+explain the over-prediction, and the SV11 and T2 decisions stand. The option
+matters where the curvature at the anchor is high: on a Ménard layer with
+uniform curvature from the anchor (TA-V3, 20 `κ_c`) the corrected range falls
+by 1% at `k_a = 10` and by 13% at `k_a = 1`; for a potted fitting
+(`K ≈ 1e8` N/m, `k_a ≈ 20` there) it is below 1%.
+
 ## Torque balance and twist under tension (gap 3.5: TQ, TQ-KL, TQ-UJ)
 
 Script `validation/scripts/check_torque_balance.py`, tests `tests/test_torque_balance.py`, rows TQ,

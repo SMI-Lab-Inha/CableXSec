@@ -1185,7 +1185,9 @@ def compute_fatigue(
         The clamp solver is planar: by default the increment follows the
         principal component of the history (``biaxial="principal"``), with
         ``"components"`` adding the minor component; the sectional friction
-        keeps the full biaxial law. ``None`` (default) gives the sectional
+        keeps the full biaxial law. The anchor is rigid unless
+        ``k_anchor_N_m`` gives its stiffness per wire (an end-fitting
+        potting). ``None`` (default) gives the sectional
         result, as does a section beyond the solved reach, bit for bit.
     count_from_sample : int, optional
         Lead-in: the friction state runs through the whole history, and the

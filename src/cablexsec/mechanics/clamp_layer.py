@@ -54,6 +54,16 @@ Limits: rigid stick (the ``xi``-reduced stick stiffness enters through
 (no interaction between layers), planar proportional loading
 ``kappa(x, t) = kappa_ref(t) k_hat(x)``. The clamp is the anchoring plane of
 the armour; a bonded (epoxy) length inside a fitting is not frictional.
+
+Elastic anchor (``anchor_stiffness = k_a``): the first node is held by
+``n_0 = k_a u_0 + f_0`` instead of ``u_0 = 0``, with its half segment's
+friction ``|f_0| <= rho h / 2`` in parallel (the spring stores, the friction
+dissipates). The increment adds ``soft(n_0 - s; rho h / 2)^2 / (2 k_a h)`` to
+the projection (``s`` the previous anchor force), still solved exactly.
+``k_a = 0`` is a free first node, ``None`` the rigid anchor above. With a
+uniform imposed strain ``A`` and a uniform bound the slip zone next to the
+anchor has the length ``L`` of ``k_a L^2 / 2 + L = A`` (``rho = 1``), the
+anchor force is ``A - L`` and the dissipation ``L^3 / 6``.
 """
 
 from __future__ import annotations
@@ -69,6 +79,7 @@ from cablexsec.exceptions import CableInputError
 __all__ = [
     "CLAMP_LAW_COEFFICIENT",
     "HAVE_NUMBA",
+    "anchor_compliance",
     "anchored_wire_field_response",
     "anchored_wire_node_dissipation",
     "anchored_wire_response",
@@ -255,9 +266,323 @@ def chain_projection_reference(y: FloatArray, bound: float) -> FloatArray:
     return out
 
 
+#: Extrapolation slope of a wall (a free chain end: ``|n_end| <= cap``).
+_WALL = 1.0e30
+
+
+@njit(cache=True)
+def _g_at(
+    xs: FloatArray, gs: FloatArray, size: int, sl: float, sr: float, x: float
+) -> float:
+    """Right-continuous value of the piecewise-linear derivative at ``x``."""
+    k = _upper_bound(xs, size, x)
+    if k == 0:
+        return float(gs[0] + sl * (x - xs[0]))
+    if k == size:
+        return float(gs[size - 1] + sr * (x - xs[size - 1]))
+    x1 = xs[k - 1]
+    x2 = xs[k]
+    return float(gs[k - 1] + (gs[k] - gs[k - 1]) * (x - x1) / (x2 - x1))
+
+
+@njit(cache=True)
+def _end_root(
+    xs: FloatArray,
+    gs: FloatArray,
+    size: int,
+    sl: float,
+    sr: float,
+    weight: float,
+    centre: float,
+    cap: float,
+) -> float:
+    """Root of ``g(x) + weight soft(x - centre; cap)`` (elastic last node).
+
+    ``g`` (breakpoints ``xs``, values ``gs``, outer slopes ``sl``, ``sr``) is
+    non-decreasing and the soft term is convex, so the sum is linear between
+    the merged breakpoints and the root is found by one sweep.
+    """
+    a = centre - cap
+    b = centre + cap
+    have = False
+    p0 = 0.0
+    h0 = 0.0
+    j = 0
+    q = 0
+    while j < size or q < 2:
+        special = a if q == 0 else b
+        if q < 2 and (j >= size or special < xs[j]):
+            p = special
+            g = _g_at(xs, gs, size, sl, sr, p)
+            q += 1
+        else:
+            p = xs[j]
+            g = gs[j]
+            j += 1
+        if p > b:
+            g += weight * (p - b)
+        elif p < a:
+            g += weight * (p - a)
+        if g >= 0.0:
+            if not have:
+                return p - g / (sl + weight)
+            if p == p0:
+                return p
+            return p0 - h0 * (p - p0) / (g - h0)
+        have = True
+        p0 = p
+        h0 = g
+    return p0 - h0 / (sr + weight)
+
+
+@njit(cache=True)
+def _project_ends(
+    y: FloatArray,
+    cap: FloatArray,
+    left_free: bool,
+    right_free: bool,
+    out: FloatArray,
+    xstar: FloatArray,
+    xs: FloatArray,
+    gs: FloatArray,
+    xt: FloatArray,
+    gt: FloatArray,
+    wl: float,
+    cl: float,
+    wr: float,
+    cr: float,
+) -> None:
+    """Exact ``argmin 0.5 |n - y|^2`` over ``|n_i - n_{i-1}| <= cap_i``.
+
+    ``cap`` has one entry per node (``M + 1``); interior node ``i`` lies
+    between segments ``i - 1`` and ``i``. A free end adds the ghost force
+    zero beyond it (``|n_0| <= cap_0``, ``|n_{M-1}| <= cap_M``); an anchored
+    end adds nothing. Slope-trick dynamic programme of
+    :func:`cablexsec.mechanics.clamp_layer.chain_projection` with node-wise
+    bounds and walls for free ends.
+
+    An elastic end anchor (complementary weight ``wl`` or ``wr`` > 0, zero for
+    none, with ``left_free``/``right_free`` false) adds the convex term
+    ``w soft(n_end - c; cap_end)^2 / 2``, ``soft(r; c) = sign(r) max(|r| - c,
+    0)``: the end node's friction ``cap_end`` in parallel with a spring of
+    compliance ``w h`` whose previous force is ``cl`` at the first node and
+    ``-cr`` at the last (``cr`` is the centre for the last segment force,
+    which acts on the last node with the opposite sign). The first anchor
+    sets the starting derivative of the programme, the last one is solved in
+    the final root (:func:`_end_root`).
+    """
+    m = y.size
+    lo = y[0]
+    hi = y[0]
+    for i in range(1, m):
+        lo = min(lo, y[i])
+        hi = max(hi, y[i])
+    if left_free:
+        lo = min(lo, -cap[0])
+        hi = max(hi, cap[0])
+        if cap[0] > 0.0:
+            size = 2
+            xs[0] = -cap[0]
+            gs[0] = -cap[0] - y[0]
+            xs[1] = cap[0]
+            gs[1] = cap[0] - y[0]
+        else:
+            size = 1
+            xs[0] = 0.0
+            gs[0] = -y[0]
+        sl = _WALL
+        sr = _WALL
+    elif wl > 0.0:
+        lo = min(lo, cl - cap[0])
+        hi = max(hi, cl + cap[0])
+        if cap[0] > 0.0:
+            size = 2
+            xs[0] = cl - cap[0]
+            gs[0] = xs[0] - y[0]
+            xs[1] = cl + cap[0]
+            gs[1] = xs[1] - y[0]
+        else:
+            size = 1
+            xs[0] = cl
+            gs[0] = cl - y[0]
+        sl = 1.0 + wl
+        sr = 1.0 + wl
+    else:
+        size = 1
+        xs[0] = y[0]
+        gs[0] = 0.0
+        sl = 1.0
+        sr = 1.0
+    if right_free:
+        lo = min(lo, -cap[m])
+        hi = max(hi, cap[m])
+    elif wr > 0.0:
+        lo = min(lo, cr - cap[m])
+        hi = max(hi, cr + cap[m])
+    for i in range(m):
+        if i > 0:
+            bound = cap[i]
+            x0 = xstar[i - 1]
+            k0 = _lower_bound(xs, size, x0)
+            k1 = _upper_bound(xs, size, x0)
+            # one-sided derivatives at the minimiser: a wall (free end) makes
+            # the derivative jump there, so they need not vanish
+            if k1 > k0:
+                g_left = gs[k0]
+                g_right = gs[k1 - 1]
+            elif k0 == 0:
+                g_left = g_right = gs[0] + sl * (x0 - xs[0])
+            elif k0 == size:
+                g_left = g_right = gs[size - 1] + sr * (x0 - xs[size - 1])
+            else:
+                x1 = xs[k0 - 1]
+                x2 = xs[k0]
+                g_left = g_right = gs[k0 - 1] + (gs[k0] - gs[k0 - 1]) * (x0 - x1) / (
+                    x2 - x1
+                )
+            g_left = min(g_left, 0.0)
+            g_right = max(g_right, 0.0)
+            t = 0
+            for j in range(k0):
+                xt[t] = xs[j] - bound
+                gt[t] = gs[j]
+                t += 1
+            if g_left < 0.0:
+                xt[t] = x0 - bound
+                gt[t] = g_left
+                t += 1
+            xt[t] = x0 - bound
+            gt[t] = 0.0
+            t += 1
+            xt[t] = x0 + bound
+            gt[t] = 0.0
+            t += 1
+            if g_right > 0.0:
+                xt[t] = x0 + bound
+                gt[t] = g_right
+                t += 1
+            for j in range(k1, size):
+                xt[t] = xs[j] + bound
+                gt[t] = gs[j]
+                t += 1
+            yi = y[i]
+            for j in range(t):
+                gt[j] += xt[j] - yi
+            sl += 1.0
+            sr += 1.0
+            j0 = _lower_bound(xt, t, lo) - 1
+            j0 = max(j0, 0)
+            j1 = _upper_bound(xt, t, hi) + 1
+            j1 = min(j1, t)
+            size = j1 - j0
+            for j in range(size):
+                xs[j] = xt[j0 + j]
+                gs[j] = gt[j0 + j]
+        k = _lower_bound(gs, size, 0.0)
+        if k == 0:
+            xstar[i] = xs[0] - gs[0] / sl
+        elif k == size:
+            xstar[i] = xs[size - 1] - gs[size - 1] / sr
+        else:
+            x1 = xs[k - 1]
+            x2 = xs[k]
+            g1 = gs[k - 1]
+            g2 = gs[k]
+            xstar[i] = x1 - g1 * (x2 - x1) / (g2 - g1)
+    last = xstar[m - 1]
+    if right_free:
+        last = min(max(last, -cap[m]), cap[m])
+    elif wr > 0.0:
+        last = _end_root(xs, gs, size, sl, sr, wr, cr, cap[m])
+    out[m - 1] = last
+    for i in range(m - 2, -1, -1):
+        value = xstar[i]
+        value = max(value, out[i + 1] - cap[i + 1])
+        value = min(value, out[i + 1] + cap[i + 1])
+        out[i] = value
+
+
 # --------------------------------------------------------------------------- #
 # Incremental anchored-wire history                                           #
 # --------------------------------------------------------------------------- #
+def anchor_compliance(anchor_stiffness: float | None) -> float:
+    """Normalised anchor compliance ``1 / k_a`` of a first-node anchor.
+
+    ``None`` or ``inf`` is the rigid anchor (compliance zero, the anchored
+    solver unchanged), ``0`` a free first node (compliance ``inf``).
+    """
+    if anchor_stiffness is None:
+        return 0.0
+    value = float(anchor_stiffness)
+    if math.isnan(value) or value < 0.0:
+        raise CableInputError(
+            "anchor stiffness must be non-negative (None or inf: rigid anchor)"
+        )
+    if math.isinf(value):
+        return 0.0
+    return math.inf if value == 0.0 else 1.0 / value
+
+
+@njit(cache=True)
+def _spring_step(
+    y: FloatArray,
+    bound: float,
+    h: float,
+    compliance: float,
+    force: float,
+    cap: FloatArray,
+    new: FloatArray,
+    xstar: FloatArray,
+    xs: FloatArray,
+    gs: FloatArray,
+    xt: FloatArray,
+    gt: FloatArray,
+) -> tuple[float, float]:
+    """One projection with an elastic (or free) anchor at node 0.
+
+    The first node carries half a node's friction (``bound / 2``) in
+    parallel with the anchor spring of compliance ``compliance`` (``inf``: a
+    free end); the far node is rigid, so the node slips are summed from it.
+    ``cap`` (``m + 1``) and the work arrays (``4 m + 8``) are overwritten.
+    Returns the friction dissipation of the increment and the new anchor
+    force.
+    """
+    m = y.size
+    cap0 = 0.5 * bound
+    cap[0] = cap0
+    for j in range(1, m):
+        cap[j] = bound
+    cap[m] = 0.0
+    free = math.isinf(compliance)
+    weight = 0.0 if free else compliance / h
+    _project_ends(
+        y, cap, free, False, new, xstar, xs, gs, xt, gt, weight, force, 0.0, 0.0
+    )
+    # the free end carries no anchor force; else the friction takes its share
+    force = 0.0 if free else new[0] - min(max(new[0] - force, -cap0), cap0)
+    slip = 0.0
+    dissipation = 0.0
+    for j in range(m - 1, 0, -1):
+        slip -= h * (new[j] - y[j])
+        dissipation += bound * abs(slip)
+    slip -= h * (new[0] - y[0])
+    dissipation += cap0 * abs(slip)
+    return dissipation, force
+
+
+def _spring_workspace(m: int) -> tuple[FloatArray, ...]:
+    """``cap``, ``new``, ``xstar`` and the four breakpoint arrays."""
+    return (
+        np.empty(m + 1),
+        np.empty(m),
+        np.empty(m),
+        np.empty(4 * m + 8),
+        np.empty(4 * m + 8),
+        np.empty(4 * m + 8),
+        np.empty(4 * m + 8),
+    )
+
+
 @njit(cache=True)
 def _anchored_kernel(
     e_hat: FloatArray,
@@ -269,6 +594,7 @@ def _anchored_kernel(
     index: NDArray[np.int64],
     out_n: FloatArray,
     out_ref: FloatArray,
+    compliance: float,
 ) -> float:
     m = e_hat.size
     n = np.zeros(m)
@@ -276,23 +602,31 @@ def _anchored_kernel(
     y = np.empty(m)
     new = np.empty(m)
     xstar = np.empty(m)
-    xs = np.empty(2 * m + 4)
-    gs = np.empty(2 * m + 4)
-    xt = np.empty(2 * m + 4)
-    gt = np.empty(2 * m + 4)
+    xs = np.empty(4 * m + 8)
+    gs = np.empty(4 * m + 8)
+    xt = np.empty(4 * m + 8)
+    gt = np.empty(4 * m + 8)
+    cap = np.empty(m + 1)
     old = 0.0
     dissipation = 0.0
+    force = 0.0
     row = 0
     for i in range(load.size):
         step = load[i] - old
         bound = rho[i] * h
         for j in range(m):
             y[j] = n[j] + step * e_hat[j]
-        _project(y, bound, new, xstar, xs, gs, xt, gt)
-        slip = 0.0
-        for j in range(m - 1):
-            slip += h * (new[j] - y[j])
-            dissipation += bound * abs(slip)
+        if compliance > 0.0:
+            increment, force = _spring_step(
+                y, bound, h, compliance, force, cap, new, xstar, xs, gs, xt, gt
+            )
+            dissipation += increment
+        else:
+            _project(y, bound, new, xstar, xs, gs, xt, gt)
+            slip = 0.0
+            for j in range(m - 1):
+                slip += h * (new[j] - y[j])
+                dissipation += bound * abs(slip)
         for j in range(m):
             n[j] = new[j]
             limit = rho[i] * cap_hat[j]
@@ -316,6 +650,7 @@ def anchored_wire_response(
     cap_hat: FloatArray | None = None,
     record: NDArray[np.bool_] | None = None,
     index: NDArray[np.int64] | None = None,
+    anchor_stiffness: float | None = None,
 ) -> tuple[FloatArray, FloatArray, float]:
     """Incremental response of one wire anchored at both ends.
 
@@ -339,6 +674,13 @@ def anchored_wire_response(
         Steps to record (default all).
     index : numpy.ndarray of int, optional
         Segments to record (default all).
+    anchor_stiffness : float or None, optional
+        Normalised stiffness ``k_a = K_a R / (E A sin a)`` of an elastic
+        anchor at the first node (``K_a`` [N/m] per wire, ``E A`` the chain's
+        axial stiffness): ``n_0 = k_a u_0 + f_0`` with the first node's half
+        friction ``|f_0| <= rho h / 2`` in parallel. ``None`` or ``inf``
+        (default) is the rigid anchor of the module notes, on the unchanged
+        code path; ``0`` a free first node. The far node stays rigid.
 
     Returns
     -------
@@ -349,6 +691,7 @@ def anchored_wire_response(
         Friction dissipation over the path (normalised: ``g`` times slip
         ``w EA sin a / (g R)``, per wire).
     """
+    compliance = anchor_compliance(anchor_stiffness)
     e = np.ascontiguousarray(e_hat, dtype=np.float64)
     path = np.ascontiguousarray(load, dtype=np.float64)
     if e.ndim != 1 or e.size < 2 or not np.isfinite(e).all():
@@ -385,7 +728,9 @@ def anchored_wire_response(
     out_n = np.zeros((rows, idx.size))
     out_ref = np.zeros((rows, idx.size))
     kernel = _anchored_kernel if HAVE_NUMBA else _anchored_numpy
-    dissipation = kernel(e, cap, path, ratio, float(h), flags, idx, out_n, out_ref)
+    dissipation = kernel(
+        e, cap, path, ratio, float(h), flags, idx, out_n, out_ref, compliance
+    )
     return out_n, out_ref, float(dissipation)
 
 
@@ -399,19 +744,27 @@ def _anchored_numpy(
     index: NDArray[np.int64],
     out_n: FloatArray,
     out_ref: FloatArray,
+    compliance: float,
 ) -> float:
     """NumPy path of :func:`_anchored_kernel` (used without ``numba``)."""
     n = np.zeros(e_hat.size)
     ref = np.zeros(e_hat.size)
     old = 0.0
     dissipation = 0.0
+    force = 0.0
     row = 0
     for i in range(load.size):
         step = load[i] - old
         bound = rho[i] * h
         y = n + step * e_hat
-        n = chain_projection_reference(y, bound)
-        dissipation += bound * float(np.abs(np.cumsum(h * (n - y))[:-1]).sum())
+        if compliance > 0.0:
+            work = _spring_workspace(n.size)
+            increment, force = _spring_step(y, bound, h, compliance, force, *work)
+            n = work[1].copy()
+            dissipation += increment
+        else:
+            n = chain_projection_reference(y, bound)
+            dissipation += bound * float(np.abs(np.cumsum(h * (n - y))[:-1]).sum())
         limit = rho[i] * cap_hat
         ref = np.clip(ref + step * e_hat, -limit, limit)
         old = load[i]
@@ -436,6 +789,7 @@ def _field_kernel(
     index: NDArray[np.int64],
     out_n: FloatArray,
     out_ref: FloatArray,
+    compliance: float,
 ) -> float:
     n_s, m = drive.shape
     n = np.zeros(m)
@@ -444,11 +798,13 @@ def _field_kernel(
     new = np.empty(m)
     de = np.empty(m)
     xstar = np.empty(m)
-    xs = np.empty(2 * m + 4)
-    gs = np.empty(2 * m + 4)
-    xt = np.empty(2 * m + 4)
-    gt = np.empty(2 * m + 4)
+    xs = np.empty(4 * m + 8)
+    gs = np.empty(4 * m + 8)
+    xt = np.empty(4 * m + 8)
+    gt = np.empty(4 * m + 8)
+    cap = np.empty(m + 1)
     dissipation = 0.0
+    force = 0.0
     for i in range(n_s):
         k = counts[i]
         r0 = rho[i - 1] if i > 0 else rho[0]
@@ -460,11 +816,17 @@ def _field_kernel(
             bound = ((1.0 - w) * r0 + w * rho[i]) * h
             for j in range(m):
                 y[j] = n[j] + de[j]
-            _project(y, bound, new, xstar, xs, gs, xt, gt)
-            slip = 0.0
-            for j in range(m - 1):
-                slip += h * (new[j] - y[j])
-                dissipation += bound * abs(slip)
+            if compliance > 0.0:
+                increment, force = _spring_step(
+                    y, bound, h, compliance, force, cap, new, xstar, xs, gs, xt, gt
+                )
+                dissipation += increment
+            else:
+                _project(y, bound, new, xstar, xs, gs, xt, gt)
+                slip = 0.0
+                for j in range(m - 1):
+                    slip += h * (new[j] - y[j])
+                    dissipation += bound * abs(slip)
             for j in range(m):
                 n[j] = new[j]
                 limit = bound / h * cap_hat[j]
@@ -584,11 +946,13 @@ def _field_numpy(
     index: NDArray[np.int64],
     out_n: FloatArray,
     out_ref: FloatArray,
+    compliance: float,
 ) -> float:
     """NumPy path of :func:`_field_kernel` (used without ``numba``)."""
     n = np.zeros(c_hat.size)
     ref = np.zeros(c_hat.size)
     dissipation = 0.0
+    force = 0.0
     previous = np.zeros(c_hat.size)
     for i in range(drive.shape[0]):
         k = int(counts[i])
@@ -598,8 +962,14 @@ def _field_numpy(
             w = (q + 1.0) / k
             bound = ((1.0 - w) * r0 + w * rho[i]) * h
             y = n + de
-            n = chain_projection_reference(y, bound)
-            dissipation += bound * float(np.abs(np.cumsum(h * (n - y))[:-1]).sum())
+            if compliance > 0.0:
+                work = _spring_workspace(n.size)
+                increment, force = _spring_step(y, bound, h, compliance, force, *work)
+                n = work[1].copy()
+                dissipation += increment
+            else:
+                n = chain_projection_reference(y, bound)
+                dissipation += bound * float(np.abs(np.cumsum(h * (n - y))[:-1]).sum())
             limit = bound / h * cap_hat
             ref = np.clip(ref + de, -limit, limit)
         previous = drive[i]
@@ -618,6 +988,7 @@ def anchored_wire_field_response(
     cap_hat: FloatArray | None = None,
     index: NDArray[np.int64] | None = None,
     substeps: NDArray[np.int64] | None = None,
+    anchor_stiffness: float | None = None,
 ) -> tuple[FloatArray, FloatArray, float]:
     """Anchored wire under a non-proportional curvature field (gap P5).
 
@@ -632,9 +1003,12 @@ def anchored_wire_field_response(
     linearly. The path starts from the virgin state. Records are taken at
     every sample. ``substeps`` (per sample, at least the automatic count)
     fixes the subdivision, so that two runs can share one path.
+    ``anchor_stiffness`` is the elastic first-node anchor of
+    :func:`anchored_wire_response` (``None``: rigid).
 
     Returns ``(n, n_ref, dissipation)`` as :func:`anchored_wire_response`.
     """
+    compliance = anchor_compliance(anchor_stiffness)
     a = np.ascontiguousarray(drive, dtype=np.float64)
     c = np.ascontiguousarray(c_hat, dtype=np.float64)
     if a.ndim != 2 or a.shape[1] < 2 or not np.isfinite(a).all():
@@ -677,7 +1051,9 @@ def anchored_wire_field_response(
     out_n = np.zeros((a.shape[0], idx.size))
     out_ref = np.zeros((a.shape[0], idx.size))
     kernel = _field_kernel if HAVE_NUMBA else _field_numpy
-    dissipation = kernel(a, c, cap, counts, ratio, float(h), idx, out_n, out_ref)
+    dissipation = kernel(
+        a, c, cap, counts, ratio, float(h), idx, out_n, out_ref, compliance
+    )
     return out_n, out_ref, float(dissipation)
 
 

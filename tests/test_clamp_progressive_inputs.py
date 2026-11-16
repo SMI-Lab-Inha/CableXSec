@@ -42,8 +42,12 @@ def test_field_numpy_fallback_matches_the_kernel():
     rho = np.linspace(1.0, 0.9, drive.shape[0])
     index = np.array([0, m // 2, m - 1], dtype=np.int64)
     outs = [np.zeros((drive.shape[0], index.size)) for _ in range(4)]
-    d1 = cl._field_kernel(drive, c_hat, cap, counts, rho, h, index, outs[0], outs[1])
-    d2 = cl._field_numpy(drive, c_hat, cap, counts, rho, h, index, outs[2], outs[3])
+    d1 = cl._field_kernel(
+        drive, c_hat, cap, counts, rho, h, index, outs[0], outs[1], 0.0
+    )
+    d2 = cl._field_numpy(
+        drive, c_hat, cap, counts, rho, h, index, outs[2], outs[3], 0.0
+    )
     np.testing.assert_allclose(outs[0], outs[2], atol=1e-10)
     np.testing.assert_allclose(outs[1], outs[3], atol=1e-12)
     assert d1 == pytest.approx(d2, rel=1e-9)

@@ -499,7 +499,7 @@ object with four keys:
 | --- | --- |
 | `cable` | a YAML path, or `bundled:<file stem>` for a bundled cable such as `bundled:iea_task49_66kv` |
 | `runs` | `name`, `out_root`, `deck`, `probability`; optional `line_id`, `start_time_s`, `end_time_s` |
-| `sections` | `name`, `arc_length_m`; optional `termination`, `thermal`, `fretting`, `sn_curves`, `mean_stress`, `scf` |
+| `sections` | `name`, `arc_length_m`; optional `termination` (the fields of `TerminationSpec`, for example `distance_m` and `k_anchor_N_m`; a record without `k_anchor_N_m` has a rigid anchor), `thermal`, `fretting`, `sn_curves`, `mean_stress`, `scf` |
 | `options` | the fields of `SeaStateBatchOptions` |
 
 Relative paths are resolved against the folder of the JSON file, and unknown

@@ -10,6 +10,30 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Added
 
+- An anchored armour wire can be held by an elastic anchor instead of a rigid one, in every
+  route that anchors a wire: the termination correction (`TerminationSpec(k_anchor_N_m=K)`,
+  clamp and along-wire solvers, with or without a curvature field), the along-wire chain
+  (`along_wire_history(..., anchor_stiffness_N_m=(K_start, K_end))`, `WireChain.build`) and
+  the along-wire bending test that solves the beam with the wires (`AlongWireSpec(
+  k_anchor_N_m=...)`); `anchored_wire_response` and `anchored_wire_field_response` take the
+  normalised stiffness `anchor_stiffness = K R/(EA sin α)`. `K` [N/m] is the axial force on
+  the wire end per unit axial displacement of the wire end at the anchor, per wire (the
+  potting of an end fitting). The anchor node carries the spring in parallel with the
+  friction of its half segment; `0` is a free wire end and `None` (default) or `inf` the rigid
+  anchor on the unchanged code path, so existing results are unchanged bit for bit. The local
+  analysis guide (Section 5, Step 6) derives a shear-lag estimate for a potted fitting, about
+  `1e8` to `2e9` N/m per tendon (an order-of-magnitude estimate, not a sourced value). Checked
+  against the closed form of a wire with a spring anchor next to a slip zone (anchor force, slip
+  length and dissipation, rigid and elastic stick), the free-end and rigid limits, two
+  independent kernels to round-off, the energy identity, the station Jacobian and the
+  closed-cycle work of a bending test (doc/benchmarks.md, TA-V1 to TA-V6). The Sævik (2011)
+  termination rows are reported over the stiffness range as a sensitivity study
+  (`validation/scripts/check_saevik2011_anchor.py`), not fitted and not gated: from the rigid anchor to a free wire end the termination-corrected
+  SV11-PLANE median stays 1.62 and SV11-GJ 1.80 (changes at round-off), the along-wire variant
+  3.11 and 4.19 (changes below 5e-4). The end fitting sits 2.3 m before the bellmouth where the
+  curvature is about 1% of its peak, so the wire next to it stays in stick and the anchor
+  condition does not reach the stations; the over-prediction is a curvature-gradient effect.
+  Section records of the sea-state batch carry the new key; records without it load as rigid.
 - `compute_mkappa` can let the armour contact pressure follow the bending history:
   `contact_tension_history_N` sets the per-sample `P1+P2` from a tension history through the
   contact model (the histories `compute_fatigue` forms from `tension_N`), and

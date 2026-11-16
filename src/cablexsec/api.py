@@ -2016,7 +2016,8 @@ def compute_fatigue(
         bend-stiffener root (all armour layers, or per layer name): the
         friction stress becomes the sectional value plus the anchored-wire
         clamp increment along the curvature history. The lay hand of each
-        layer comes from the cable. See
+        layer comes from the cable. The anchor is rigid unless
+        ``TerminationSpec.k_anchor_N_m`` gives its stiffness per wire. See
         :func:`cablexsec.analysis.fatigue.compute_fatigue` and
         doc/local_analysis_guide.md.
     thermal : ThermalHistory or ThermalState, optional
