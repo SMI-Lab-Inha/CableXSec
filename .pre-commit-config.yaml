@@ -22,12 +22,13 @@ repos:
         args: [--maxkb=2000]
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.11
+    rev: v0.15.22
     hooks:
+      # The same trees as the CI lint job (python.yml); the package is under src/.
       - id: ruff-check
-        files: ^(cablexsec|tests|examples|validation|release)/.*\.py$
+        files: ^(src|tests|examples|validation|release|doc)/.*\.py$
       - id: ruff-format
-        files: ^(cablexsec|tests|examples|validation|release)/.*\.py$
+        files: ^(src|tests|examples|validation|release|doc)/.*\.py$
 
   - repo: local
     hooks:
