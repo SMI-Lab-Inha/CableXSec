@@ -233,8 +233,8 @@ def test_numpy_path_matches_kernel():
     index = np.array([0, 5, m - 1], dtype=np.int64)
     rows = int(record.sum())
     outs = [np.zeros((rows, 3)) for _ in range(4)]
-    d1 = cl._anchored_kernel(e, cap, path, rho, h, record, index, outs[0], outs[1])
-    d2 = cl._anchored_numpy(e, cap, path, rho, h, record, index, outs[2], outs[3])
+    d1 = cl._anchored_kernel(e, cap, path, rho, h, record, index, outs[0], outs[1], 0.0)
+    d2 = cl._anchored_numpy(e, cap, path, rho, h, record, index, outs[2], outs[3], 0.0)
     assert np.allclose(outs[0], outs[2], atol=1e-10)
     assert np.allclose(outs[1], outs[3], atol=1e-12)
     assert d1 == pytest.approx(d2, rel=1e-9)

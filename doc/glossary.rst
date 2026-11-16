@@ -31,7 +31,10 @@ Terms and abbreviations
       Armour wires held axially at an end fitting, a rig clamp or a clamped bend-stiffener
       root, so that friction builds up a mean wire force the sectional law cannot carry. The
       :term:`termination correction` and :func:`~cablexsec.simulate_rig_test` solve each
-      anchored wire with a Coulomb bound per unit length and axial slip only.
+      anchored wire with a Coulomb bound per unit length and axial slip only. The termination
+      correction and the :term:`along-wire model` can hold the wire end elastically instead
+      (``k_anchor_N_m``, the stiffness per wire of an end-fitting potting; ``0`` is a free
+      wire end); the rig-test anchor is rigid.
 
    annual damage
       The :term:`Miner sum` per year of service, weighted over the sea states of a

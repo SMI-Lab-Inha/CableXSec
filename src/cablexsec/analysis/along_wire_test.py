@@ -100,6 +100,12 @@ class AlongWireSpec:
         Uniform subdivision of every protocol interval.
     max_iterations : int
         Newton-type iterations per step before the step is halved.
+    k_anchor_N_m : (float or None, float or None)
+        Axial stiffness of the left and right anchors per wire [N/m]
+        (:meth:`~cablexsec.mechanics.along_wire.WireChain.build`): ``None``
+        (default) or ``inf`` rigid, ``0`` a free wire end, finite an elastic
+        anchor (end fitting potting) in parallel with the end node's
+        friction. A finite value needs an ``"anchored"`` end.
     """
 
     ends: tuple[str, str] = ("free", "free")
@@ -110,12 +116,34 @@ class AlongWireSpec:
     sense: int = 1
     substeps: int = 1
     max_iterations: int = 60
+    k_anchor_N_m: tuple[float | None, float | None] = (None, None)
 
     def __post_init__(self) -> None:
         ends = tuple(self.ends)
         if len(ends) != 2 or any(e not in END_CONDITIONS for e in ends):
             raise CableInputError(f"ends must be two of {END_CONDITIONS}")
         object.__setattr__(self, "ends", (str(ends[0]), str(ends[1])))
+        anchors = tuple(self.k_anchor_N_m)
+        if len(anchors) != 2:
+            raise CableInputError("k_anchor_N_m must give one value per end")
+        checked: list[float | None] = []
+        for kind, value in zip(ends, anchors, strict=True):
+            if value is None:
+                checked.append(None)
+                continue
+            if isinstance(value, (bool, np.bool_)) or not isinstance(
+                value, (int, float, np.integer, np.floating)
+            ):
+                raise CableInputError("k_anchor_N_m values must be numbers or None")
+            k_anchor = float(value)
+            if math.isnan(k_anchor) or k_anchor < 0:
+                raise CableInputError(
+                    "k_anchor_N_m must be non-negative (None or inf: rigid anchor)"
+                )
+            if kind != "anchored":
+                raise CableInputError("an anchor stiffness needs an anchored end")
+            checked.append(k_anchor)
+        object.__setattr__(self, "k_anchor_N_m", (checked[0], checked[1]))
         over = tuple(float(v) for v in self.overhang_m)
         if len(over) != 2 or any(not math.isfinite(v) or v < 0 for v in over):
             raise CableInputError("overhang_m must be two non-negative lengths")
@@ -362,7 +390,7 @@ class _LayerState:
         return np.asarray(np.sum(d, axis=0) * self.lay.energy_unit_J)
 
     def stored(self, state: _State) -> tuple[float, FloatArray]:
-        _u, z, n, _t = state
+        u, z, n, _t = state
         lay = self.lay
         h = self.chain.h
         seg = 0.5 * h * np.sum(n * n, axis=0)
@@ -371,6 +399,8 @@ class _LayerState:
             0.0,
             0.5 * self.chain.weights * lay.k_hat * np.sum(z * z, axis=0),
         )
+        if np.any(self.chain.spring > 0.0):
+            node = node + 0.5 * self.chain.spring * np.sum(u * u, axis=0)
         total = (float(np.sum(seg)) + float(np.sum(node))) * lay.energy_unit_J
         return total, np.asarray(node * lay.energy_unit_J)
 
@@ -462,6 +492,7 @@ def run_along_wire_test(
                 length + oh_r,
                 ends=spec.ends,
                 segments_per_pitch=spec.segments_per_pitch,
+                anchor_stiffness_N_m=spec.k_anchor_N_m,
             ),
             x_all,
         )

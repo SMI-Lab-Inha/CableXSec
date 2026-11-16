@@ -87,6 +87,7 @@ BELL_END_M = 1.72  # end of the curved profile [Saevik2011] Sec. 7.1
 KAPPA_B0, KAPPA_B1 = 0.067, 0.11  # [Saevik2011] Eq. 88
 GJ_HALF_ANGLE_DEG = 8.0  # [Gjosteen2027] LC 14, +-8 deg
 TENDONS = "round"  # "round" (rows on record) or "rectangular" (gap G1)
+K_ANCHOR_N_M: float | None = None  # end-fitting anchor stiffness per wire (rigid)
 _POLYMER = {"round": "polymer_saevik2011", "rectangular": "polymer_saevik2011_rect"}
 
 
@@ -97,6 +98,17 @@ def use_tendons(tendons: str) -> None:
         raise ValueError("tendons must be 'round' or 'rectangular'")
     TENDONS = tendons
     cable.cache_clear()
+    gate_values.cache_clear()
+
+
+def use_anchor(k_anchor_N_m: float | None) -> None:
+    """Set the anchor stiffness of the termination correction (None: rigid).
+
+    Sensitivity studies only (``check_saevik2011_anchor.py``); the registered
+    rows use the rigid anchor.
+    """
+    global K_ANCHOR_N_M
+    K_ANCHOR_N_M = k_anchor_N_m
     gate_values.cache_clear()
 
 
@@ -392,7 +404,11 @@ def station_ranges(
     ky = np.zeros_like(kx)
     term = None
     if profile is not None:
-        term = TerminationSpec(distance_m=x_s - X_ANCHOR_M, curvature_profile=profile)
+        term = TerminationSpec(
+            distance_m=x_s - X_ANCHOR_M,
+            curvature_profile=profile,
+            k_anchor_N_m=K_ANCHOR_N_M,
+        )
     field = wire_stress_field(layer, kx, ky, termination=term)
     last = slice(kx.size - 4 * 60 - 1, kx.size)
     ratio = (

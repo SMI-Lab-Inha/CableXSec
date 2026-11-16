@@ -29,7 +29,11 @@ the sense in which the wire turns along ``+x``)::
 relative to the core surface, ``p`` its sliding part, ``k_hat`` the
 normalised interface shear stiffness, ``lam`` the capstan coefficient and
 ``g`` the azimuthal contact shape. Ends: anchored (``u = 0``: end fitting,
-grip, clamped stiffener root; the reaction is free) or free (``n = 0``).
+grip, clamped stiffener root; the reaction is free), elastically anchored
+(the end node is held by ``K u`` in parallel with its friction, ``K`` the
+anchor stiffness per wire, normalised by
+:meth:`WireChainLayer.anchor_stiffness_hat`; the end-fitting potting) or free
+(``n = 0``).
 
 Stick stiffness (explicit, :data:`STICK_CONVENTIONS`)
 -----------------------------------------------------
@@ -71,7 +75,8 @@ end nodes are fixed; a chain with two free ends in full slip takes the node
 nearest to sticking as a stick row (the tractions must balance), as the
 periodic model does. Energy (normalised, per wire):
 ``W_be = sum h n de`` equals ``Delta U + D + R`` to round-off every
-increment, with ``U = sum h n^2 / 2 + sum w t^2 / (2 k_hat)``, ``D`` the
+increment, with ``U = sum h n^2 / 2 + sum w t^2 / (2 k_hat)`` (plus
+``k_a u^2 / 2`` at an elastic anchor), ``D`` the
 non-negative friction dissipation and ``R`` the backward-Euler remainder.
 One normalised energy unit is ``g_0^2 R / (E A sin a)`` joules per wire.
 
@@ -104,7 +109,7 @@ from numpy.typing import NDArray
 
 from cablexsec._numba import HAVE_NUMBA, njit
 from cablexsec.exceptions import CableInputError
-from cablexsec.mechanics.clamp_layer import _lower_bound, _upper_bound
+from cablexsec.mechanics.clamp_layer import _project_ends
 from cablexsec.mechanics.tendon_bending import LateralRelief
 
 if TYPE_CHECKING:
@@ -136,7 +141,6 @@ RIGID_K_HAT = 1.0e4
 _MAX_NEWTON = 400
 _MAX_FIXED_POINT = 400
 _MAX_HALVINGS = 10
-_BIG = 1.0e30
 
 
 # --------------------------------------------------------------------------- #
@@ -201,15 +205,24 @@ def _residual(
     w: FloatArray,
     fixed: NDArray[np.bool_],
     m: int,
+    spring: FloatArray,
+    ua: FloatArray,
 ) -> float:
-    """Largest nodal equilibrium residual ``|n_i - n_{i-1} - w_i t_i|``."""
+    """Largest nodal equilibrium residual ``|n_i - n_{i-1} - w_i t_i - s_i|``.
+
+    ``s_i = spring_i (ua_i + v_i)`` is the force of an elastic anchor at the
+    node (zero where ``spring`` is zero).
+    """
     worst = 0.0
     for i in range(m + 1):
         if fixed[i]:
             continue
         right, left = _node_force_pair(y, v, h, m, i)
         t = _clip(k * (z[i] + v[i]), b[i])
-        r = abs(right - left - w[i] * t)
+        r = right - left - w[i] * t
+        if spring[i] > 0.0:
+            r -= spring[i] * (ua[i] + v[i])
+        r = abs(r)
         if r > worst:
             worst = r
     return worst
@@ -226,6 +239,8 @@ def _objective(
     w: FloatArray,
     fixed: NDArray[np.bool_],
     m: int,
+    spring: FloatArray,
+    ua: FloatArray,
 ) -> float:
     f = 0.0
     for j in range(m):
@@ -239,6 +254,9 @@ def _objective(
             f += 0.5 * w[i] * k * r * r
         else:
             f += w[i] * (b[i] * abs(r) - b[i] * b[i] / (2.0 * k))
+        if spring[i] > 0.0:
+            u = ua[i] + v[i]
+            f += 0.5 * spring[i] * u * u
     return f
 
 
@@ -254,6 +272,8 @@ def _directional(
     w: FloatArray,
     fixed: NDArray[np.bool_],
     m: int,
+    spring: FloatArray,
+    ua: FloatArray,
 ) -> float:
     s = 0.0
     for i in range(m + 1):
@@ -261,7 +281,10 @@ def _directional(
             continue
         right, left = _node_force_pair(y, v, h, m, i)
         t = _clip(k * (z[i] + v[i]), b[i])
-        s += (left - right + w[i] * t) * dv[i]
+        g = left - right + w[i] * t
+        if spring[i] > 0.0:
+            g += spring[i] * (ua[i] + v[i])
+        s += g * dv[i]
     return s
 
 
@@ -307,6 +330,8 @@ def _rows(
     d: FloatArray,
     up: FloatArray,
     rhs: FloatArray,
+    spring: FloatArray,
+    ua: FloatArray,
 ) -> None:
     """Newton rows of the fixed-bound increment on the current active set."""
     for i in range(m + 1):
@@ -347,6 +372,9 @@ def _rows(
         else:
             d[i] = c / h
             rhs[i] = f - w[i] * (b[i] if r > 0.0 else -b[i])
+        if spring[i] > 0.0:
+            d[i] += spring[i]
+            rhs[i] -= spring[i] * ua[i]
 
 
 @njit(cache=True)
@@ -390,8 +418,14 @@ def _solve_fixed_bound(
     tol: float,
     v: FloatArray,
     work: FloatArray,
+    spring: FloatArray,
+    ua: FloatArray,
 ) -> int:
-    """Increment ``v`` for a fixed bound; Newton iterations or -1."""
+    """Increment ``v`` for a fixed bound; Newton iterations or -1.
+
+    ``any_fixed`` is true when the chain is held (an anchored node or an
+    elastic anchor, ``spring > 0``, with previous displacement ``ua``).
+    """
     vn = work[0]
     vt = work[1]
     dv = work[2]
@@ -412,7 +446,7 @@ def _solve_fixed_bound(
         for j in range(m):
             v[j + 1] = v[j] - h * y[j]
         return 0
-    res_old = _residual(y, z, v, b, k, h, w, fixed, m)
+    res_old = _residual(y, z, v, b, k, h, w, fixed, m, spring, ua)
     if res_old <= tol:
         return 0
     # Round-off floor of long chains in slip (ill-conditioned Laplacian
@@ -438,21 +472,23 @@ def _solve_fixed_bound(
             d,
             up,
             rhs,
+            spring,
+            ua,
         )
         if not _thomas(lo, d, up, rhs, vn, cp, dp, mn):
             if secant:
                 return -1
             secant = True
             continue
-        res = _residual(y, z, vn, b, k, h, w, fixed, m)
+        res = _residual(y, z, vn, b, k, h, w, fixed, m, spring, ua)
         if res <= tol or (
             res <= 1e6 * tol and _same_active_set(z, v, vn, b, k, fixed, m)
         ):
             for i in range(mn):
                 v[i] = vn[i]
             return it + 1
-        f0 = _objective(y, z, v, b, k, h, w, fixed, m)
-        f1 = _objective(y, z, vn, b, k, h, w, fixed, m)
+        f0 = _objective(y, z, v, b, k, h, w, fixed, m, spring, ua)
+        f1 = _objective(y, z, vn, b, k, h, w, fixed, m, spring, ua)
         if f1 <= f0 - 1e-14 * abs(f0) or (
             res < 0.5 * res_old and f1 <= f0 + 1e-12 * abs(f0)
         ):
@@ -464,7 +500,7 @@ def _solve_fixed_bound(
             continue
         for i in range(mn):
             dv[i] = vn[i] - v[i]
-        slope = _directional(y, z, v, dv, b, k, h, w, fixed, m)
+        slope = _directional(y, z, v, dv, b, k, h, w, fixed, m, spring, ua)
         accepted = False
         step = 0.5
         if slope < 0.0:
@@ -472,7 +508,7 @@ def _solve_fixed_bound(
                 for i in range(mn):
                     vt[i] = v[i] + step * dv[i]
                 if (
-                    _objective(y, z, vt, b, k, h, w, fixed, m)
+                    _objective(y, z, vt, b, k, h, w, fixed, m, spring, ua)
                     <= f0 + 1e-4 * step * slope
                 ):
                     accepted = True
@@ -487,7 +523,7 @@ def _solve_fixed_bound(
             continue
         for i in range(mn):
             v[i] = vt[i]
-        res_old = _residual(y, z, v, b, k, h, w, fixed, m)
+        res_old = _residual(y, z, v, b, k, h, w, fixed, m, spring, ua)
         secant = False
     return -1
 
@@ -520,124 +556,10 @@ def _project_var(
     xt: FloatArray,
     gt: FloatArray,
 ) -> None:
-    """Exact ``argmin 0.5 |n - y|^2`` over ``|n_i - n_{i-1}| <= cap_i``.
-
-    ``cap`` has one entry per node (``M + 1``); interior node ``i`` lies
-    between segments ``i - 1`` and ``i``. A free end adds the ghost force
-    zero beyond it (``|n_0| <= cap_0``, ``|n_{M-1}| <= cap_M``); an anchored
-    end adds nothing. Slope-trick dynamic programme of
-    :func:`cablexsec.mechanics.clamp_layer.chain_projection` with node-wise
-    bounds and walls for free ends.
-    """
-    m = y.size
-    lo = y[0]
-    hi = y[0]
-    for i in range(1, m):
-        lo = min(lo, y[i])
-        hi = max(hi, y[i])
-    if left_free:
-        lo = min(lo, -cap[0])
-        hi = max(hi, cap[0])
-        if cap[0] > 0.0:
-            size = 2
-            xs[0] = -cap[0]
-            gs[0] = -cap[0] - y[0]
-            xs[1] = cap[0]
-            gs[1] = cap[0] - y[0]
-        else:
-            size = 1
-            xs[0] = 0.0
-            gs[0] = -y[0]
-        sl = _BIG
-        sr = _BIG
-    else:
-        size = 1
-        xs[0] = y[0]
-        gs[0] = 0.0
-        sl = 1.0
-        sr = 1.0
-    if right_free:
-        lo = min(lo, -cap[m])
-        hi = max(hi, cap[m])
-    for i in range(m):
-        if i > 0:
-            bound = cap[i]
-            x0 = xstar[i - 1]
-            k0 = _lower_bound(xs, size, x0)
-            k1 = _upper_bound(xs, size, x0)
-            # one-sided derivatives at the minimiser: a wall (free end) makes
-            # the derivative jump there, so they need not vanish
-            if k1 > k0:
-                g_left = gs[k0]
-                g_right = gs[k1 - 1]
-            elif k0 == 0:
-                g_left = g_right = gs[0] + sl * (x0 - xs[0])
-            elif k0 == size:
-                g_left = g_right = gs[size - 1] + sr * (x0 - xs[size - 1])
-            else:
-                x1 = xs[k0 - 1]
-                x2 = xs[k0]
-                g_left = g_right = gs[k0 - 1] + (gs[k0] - gs[k0 - 1]) * (x0 - x1) / (
-                    x2 - x1
-                )
-            g_left = min(g_left, 0.0)
-            g_right = max(g_right, 0.0)
-            t = 0
-            for j in range(k0):
-                xt[t] = xs[j] - bound
-                gt[t] = gs[j]
-                t += 1
-            if g_left < 0.0:
-                xt[t] = x0 - bound
-                gt[t] = g_left
-                t += 1
-            xt[t] = x0 - bound
-            gt[t] = 0.0
-            t += 1
-            xt[t] = x0 + bound
-            gt[t] = 0.0
-            t += 1
-            if g_right > 0.0:
-                xt[t] = x0 + bound
-                gt[t] = g_right
-                t += 1
-            for j in range(k1, size):
-                xt[t] = xs[j] + bound
-                gt[t] = gs[j]
-                t += 1
-            yi = y[i]
-            for j in range(t):
-                gt[j] += xt[j] - yi
-            sl += 1.0
-            sr += 1.0
-            j0 = _lower_bound(xt, t, lo) - 1
-            j0 = max(j0, 0)
-            j1 = _upper_bound(xt, t, hi) + 1
-            j1 = min(j1, t)
-            size = j1 - j0
-            for j in range(size):
-                xs[j] = xt[j0 + j]
-                gs[j] = gt[j0 + j]
-        k = _lower_bound(gs, size, 0.0)
-        if k == 0:
-            xstar[i] = xs[0] - gs[0] / sl
-        elif k == size:
-            xstar[i] = xs[size - 1] - gs[size - 1] / sr
-        else:
-            x1 = xs[k - 1]
-            x2 = xs[k]
-            g1 = gs[k - 1]
-            g2 = gs[k]
-            xstar[i] = x1 - g1 * (x2 - x1) / (g2 - g1)
-    last = xstar[m - 1]
-    if right_free:
-        last = _clip(last, cap[m])
-    out[m - 1] = last
-    for i in range(m - 2, -1, -1):
-        value = xstar[i]
-        value = max(value, out[i + 1] - cap[i + 1])
-        value = min(value, out[i + 1] + cap[i + 1])
-        out[i] = value
+    """:func:`_project_ends` without elastic anchors."""
+    _project_ends(
+        y, cap, left_free, right_free, out, xstar, xs, gs, xt, gt, 0.0, 0.0, 0.0, 0.0
+    )
 
 
 @njit(cache=True)
@@ -665,16 +587,26 @@ def _increment(
     work: FloatArray,
     pwork: FloatArray,
     stats: NDArray[np.int64],
+    spring: FloatArray,
 ) -> bool:
     """One backward-Euler increment of one wire (old state is not modified).
 
     Elastic interface: ``v`` holds the initial guess of the slip increment
     and returns the solution. Rigid interface (``rigid``): exact projection
     of ``n_old + de`` (``v`` returns the slip increment from the forces).
-    ``energy`` returns ``[W_be, D, R]`` of the increment.
+    ``energy`` returns ``[W_be, D, R]`` of the increment. ``spring`` (per
+    node, normalised) holds elastic anchors at the end nodes (zero: none);
+    their force is ``spring u``.
     """
     m = e_new.size
     mn = m + 1
+    k0s = spring[0]
+    kms = spring[m]
+    springs = k0s > 0.0 or kms > 0.0
+    s0_old = k0s * u_old[0]
+    sm_old = kms * u_old[m]
+    wl = 1.0 / (k0s * h) if k0s > 0.0 else 0.0
+    wr = 1.0 / (kms * h) if kms > 0.0 else 0.0
     y = work[9]
     b = work[10]
     ncur = work[11]
@@ -708,21 +640,25 @@ def _increment(
         if rigid:
             for i in range(mn):
                 cap[i] = w[i] * b[i]
-            _project_var(
+            _project_ends(
                 y[:m],
                 cap,
-                not fixed[0],
-                not fixed[m],
+                not fixed[0] and k0s == 0.0,
+                not fixed[m] and kms == 0.0,
                 nn,
                 pwork[0],
                 pwork[1],
                 pwork[2],
                 pwork[3],
                 pwork[4],
+                wl,
+                s0_old,
+                wr,
+                -sm_old,
             )
         else:
             iters = _solve_fixed_bound(
-                y, z_old, b, k, h, w, fixed, any_fixed, m, tol, v, work
+                y, z_old, b, k, h, w, fixed, any_fixed, m, tol, v, work, spring, u_old
             )
             if iters < 0:
                 stats[2] += 1
@@ -761,11 +697,12 @@ def _increment(
         # Slip increment from the forces, zero at an anchored node or at the
         # node farthest from its bound; dissipation from the energy identity.
         ref = -1
-        for i in range(mn):
-            if fixed[i]:
-                ref = i
-                break
-        if ref < 0:
+        if not springs:
+            for i in range(mn):
+                if fixed[i]:
+                    ref = i
+                    break
+        if ref < 0 and not springs:
             best = -math.inf
             for i in range(mn):
                 right = ncur[i] if i < m else 0.0
@@ -779,12 +716,39 @@ def _increment(
             if i > 0:
                 acc += h * (ncur[i - 1] - y[i - 1])
             v[i] = acc
-        shift = v[ref]
+        s0_new = 0.0
+        sm_new = 0.0
+        if springs:
+            # anchor forces: the end node's friction takes what it can (the
+            # caps of the last projection), the spring the rest
+            if k0s > 0.0:
+                s0_new = ncur[0] - _clip(ncur[0] - s0_old, cap[0])
+            if kms > 0.0:
+                s_end = -ncur[m - 1]
+                sm_new = s_end - _clip(s_end - sm_old, cap[m])
+            if fixed[0]:
+                shift = v[0]
+            elif k0s > 0.0:
+                shift = v[0] - (s0_new - s0_old) / k0s
+            elif fixed[m]:
+                shift = v[m]
+            else:
+                shift = v[m] - (sm_new - sm_old) / kms
+        else:
+            shift = v[ref]
         stored0 = 0.0
         stored1 = 0.0
         for j in range(m):
             stored0 += 0.5 * h * n_old[j] * n_old[j]
             stored1 += 0.5 * h * ncur[j] * ncur[j]
+        if k0s > 0.0:
+            stored0 += 0.5 * s0_old * s0_old / k0s
+            stored1 += 0.5 * s0_new * s0_new / k0s
+            rem += 0.5 * (s0_new - s0_old) ** 2 / k0s
+        if kms > 0.0:
+            stored0 += 0.5 * sm_old * sm_old / kms
+            stored1 += 0.5 * sm_new * sm_new / kms
+            rem += 0.5 * (sm_new - sm_old) ** 2 / kms
         for i in range(mn):
             v[i] -= shift
             u_new[i] = u_old[i] + v[i]
@@ -792,6 +756,10 @@ def _increment(
             right = ncur[i] if i < m else 0.0
             left = ncur[i - 1] if i > 0 else 0.0
             t_new[i] = 0.0 if fixed[i] else (right - left) / w[i]
+        if k0s > 0.0:
+            t_new[0] = (ncur[0] - s0_new) / w[0]
+        if kms > 0.0:
+            t_new[m] = (-ncur[m - 1] - sm_new) / w[m]
         energy[0] = w_be
         energy[1] = w_be - (stored1 - stored0) - rem
         energy[2] = rem
@@ -809,6 +777,8 @@ def _increment(
         diss += w[i] * t * dpl
         dt = t - t_old[i]
         rem += 0.5 * w[i] * dt * dt / k
+        if spring[i] > 0.0:
+            rem += 0.5 * spring[i] * v[i] * v[i]
         z_new[i] = zn
         t_new[i] = t
     energy[0] = w_be
@@ -829,9 +799,11 @@ def _stick_mask(
     any_fixed: bool,
     rigid: bool,
     out: NDArray[np.bool_],
+    spring: FloatArray,
+    u_old: FloatArray,
 ) -> None:
     """Converged stick set (one node sticks when nothing else holds a free
-    chain in full slip)."""
+    chain in full slip). An elastic anchor's force is not friction."""
     m = n_new.size
     any_stick = False
     nearest = -1
@@ -843,7 +815,10 @@ def _stick_mask(
         if rigid:
             right = n_new[i] if i < m else 0.0
             left = n_new[i - 1] if i > 0 else 0.0
-            excess = abs(right - left) - w[i] * b[i] * (1.0 - 1e-9)
+            node = right - left
+            if spring[i] > 0.0:
+                node -= spring[i] * (u_old[i] + v[i])
+            excess = abs(node) - w[i] * b[i] * (1.0 - 1e-9)
         else:
             excess = abs(k * (z_old[i] + v[i])) - b[i] * (1.0 - 1e-12)
         if excess < 0.0:
@@ -867,6 +842,7 @@ def _tangent_rows(
     lo: FloatArray,
     d: FloatArray,
     up: FloatArray,
+    spring: FloatArray,
 ) -> None:
     for i in range(m + 1):
         lo[i] = 0.0
@@ -884,6 +860,8 @@ def _tangent_rows(
             if not fixed[i + 1]:
                 up[i] = -1.0 / h
         d[i] = c / h + (w[i] * k if stick[i] else 0.0)
+        if spring[i] > 0.0:
+            d[i] += spring[i]
 
 
 @njit(cache=True)
@@ -909,6 +887,7 @@ def _layer_step(
     t_new: FloatArray,
     energy: FloatArray,
     stats: NDArray[np.int64],
+    spring: FloatArray,
 ) -> int:
     """One increment of every wire of a layer; 0, or ``-(wire + 1)``."""
     n_w = e_new.shape[0]
@@ -940,6 +919,7 @@ def _layer_step(
             work,
             pwork,
             stats,
+            spring,
         )
         if not ok:
             return -(q + 1)
@@ -967,6 +947,8 @@ def _layer_jacobian(
     cos_st: FloatArray,
     scale: float,
     out: FloatArray,
+    spring: FloatArray,
+    u_old: FloatArray,
 ) -> bool:
     """Station Jacobian of the layer moment on the converged active set.
 
@@ -1005,8 +987,21 @@ def _layer_jacobian(
                     last[jj] = s
     for q in range(n_w):
         _bounds(n_new[q], gb[q], lam, m, b)
-        _stick_mask(z_old[q], v[q], n_new[q], b, k, w, fixed, any_fixed, rigid, stick)
-        _tangent_rows(stick, k, h, w, fixed, m, lo, d, up)
+        _stick_mask(
+            z_old[q],
+            v[q],
+            n_new[q],
+            b,
+            k,
+            w,
+            fixed,
+            any_fixed,
+            rigid,
+            stick,
+            spring,
+            u_old[q],
+        )
+        _tangent_rows(stick, k, h, w, fixed, m, lo, d, up, spring)
         bet = d[0]
         if bet == 0.0 or not math.isfinite(bet):
             return False
@@ -1083,7 +1078,7 @@ def chain_layer_jacobian(
         float(chain.h),
         chain.weights,
         chain.fixed,
-        chain.any_fixed,
+        chain.held,
         lay.rigid,
         chain.cos_seg,
         seg_i0,
@@ -1093,6 +1088,8 @@ def chain_layer_jacobian(
         np.ascontiguousarray(cos_st),
         lay.lever_Nm / lay.kappa_c_1_m,
         out,
+        chain.spring,
+        state_old[0],
     )
     if not ok:
         raise CableInputError("along-wire Jacobian is singular")
@@ -1120,13 +1117,15 @@ def _wire_history(
     out_n: FloatArray,
     out_e: FloatArray,
     stats: NDArray[np.int64],
+    spring: FloatArray,
 ) -> int:
     """History of one wire driven by segment curvatures (units of kappa_c).
 
     ``kx, ky`` have shape (samples, segments), or (samples, 1) for a load
     common to all segments (``cs, sn`` then carry the shape); the imposed
     strain is ``kx cs + ky sn``. ``out_n`` (samples, records); ``out_e``
-    (samples, 4) cumulative ``[W_be, D, U, R]``. Returns 0, or
+    (samples, 4) cumulative ``[W_be, D, U, R]``. ``spring`` holds the
+    elastic end anchors (per node, normalised; zero: none). Returns 0, or
     ``-(sample + 1)`` for the first sample that could not be advanced.
     """
     n_t = kx.shape[0]
@@ -1215,6 +1214,7 @@ def _wire_history(
                     work,
                     pwork,
                     stats,
+                    spring,
                 ):
                     ok = False
                     break
@@ -1252,6 +1252,8 @@ def _wire_history(
         for j in range(mn):
             if not fixed[j]:
                 stored += 0.5 * w[j] * k * z[j] * z[j]
+            if spring[j] > 0.0:
+                stored += 0.5 * spring[j] * u[j] * u[j]
         out_e[i, 0] = energy[0]
         out_e[i, 1] = energy[1]
         out_e[i, 2] = stored
@@ -1383,6 +1385,22 @@ class WireChainLayer:
         """Joules per normalised energy unit and wire, ``g_0^2 R / (EA sin a)``."""
         return (
             self.force_unit_N**2
+            * self.r_helix_m
+            / (self.ea_N * math.sin(self.lay_angle_rad))
+        )
+
+    def anchor_stiffness_hat(self, k_anchor_N_m: float) -> float:
+        """Normalised stiffness of an elastic wire anchor, ``K R / (E A sin a)``.
+
+        ``K`` [N/m] is the axial force per unit axial displacement of the wire
+        end at the anchor (one wire); ``E A`` is :attr:`ea_N`, the chain's
+        work-conjugate axial stiffness (``xi E A`` for ``"scaled"``). The
+        ratio is the wire length per radian of helix angle, ``R / sin a``,
+        over the length ``E A / K`` of free wire that is as compliant as the
+        anchor.
+        """
+        return (
+            float(k_anchor_N_m)
             * self.r_helix_m
             / (self.ea_N * math.sin(self.lay_angle_rad))
         )
@@ -1540,6 +1558,10 @@ class WireChain:
 
     ``x_seg_m`` are segment midpoints, ``x_node_m`` nodes (``M + 1``);
     ``cos_seg``/``sin_seg`` and ``g_node`` have one row per wire.
+    ``spring`` (``M + 1``) holds the normalised stiffness of elastic end
+    anchors (:meth:`WireChainLayer.anchor_stiffness_hat`; zero elsewhere) and
+    ``anchor_stiffness_N_m`` the stiffness per wire as given to
+    :meth:`build` (``None``: rigid or no anchor).
     """
 
     layer: WireChainLayer
@@ -1555,6 +1577,12 @@ class WireChain:
     cos_seg: FloatArray
     sin_seg: FloatArray
     g_node: FloatArray
+    spring: FloatArray = field(default_factory=lambda: np.zeros(0))
+    anchor_stiffness_N_m: tuple[float | None, float | None] = (None, None)
+
+    def __post_init__(self) -> None:
+        if self.spring.size == 0:
+            object.__setattr__(self, "spring", np.zeros(self.segments + 1))
 
     @classmethod
     def build(
@@ -1566,9 +1594,16 @@ class WireChain:
         ends: tuple[str, str] = ("anchored", "anchored"),
         segments_per_pitch: int = 64,
         wires: Sequence[int] | None = None,
+        anchor_stiffness_N_m: Sequence[float | None] = (None, None),
     ) -> WireChain:
         """Discretise ``[x_start, x_end]`` with at least ``segments_per_pitch``
-        segments per pitch (rounded to a whole number over the length)."""
+        segments per pitch (rounded to a whole number over the length).
+
+        ``anchor_stiffness_N_m`` gives the axial stiffness of each anchored
+        end per wire [N/m]: ``None`` or ``inf`` is the rigid anchor
+        (``u = 0``), a finite value an elastic anchor in parallel with the
+        end node's friction (force ``K u``), ``0`` a free end.
+        """
         if not (math.isfinite(x_start_m) and math.isfinite(x_end_m)) or not (
             x_end_m > x_start_m
         ):
@@ -1594,6 +1629,28 @@ class WireChain:
         fixed = np.zeros(m + 1, dtype=np.bool_)
         fixed[0] = ends_t[0] == "anchored"
         fixed[-1] = ends_t[1] == "anchored"
+        stiffness = tuple(anchor_stiffness_N_m)
+        if len(stiffness) != 2:
+            raise CableInputError("anchor_stiffness_N_m must give one value per end")
+        spring = np.zeros(m + 1)
+        given: list[float | None] = []
+        for end, (kind, k_a) in enumerate(zip(ends_t, stiffness, strict=True)):
+            if k_a is None:
+                given.append(None)
+                continue
+            value = float(k_a)
+            if math.isnan(value) or value < 0.0:
+                raise CableInputError(
+                    "anchor stiffness must be non-negative (None or inf: rigid)"
+                )
+            if kind != "anchored":
+                raise CableInputError("an anchor stiffness needs an anchored end")
+            given.append(value)
+            if math.isinf(value):
+                continue
+            node = 0 if end == 0 else m
+            fixed[node] = False
+            spring[node] = layer.anchor_stiffness_hat(value)
         q = (
             np.arange(layer.n_wires)
             if wires is None
@@ -1617,11 +1674,18 @@ class WireChain:
             cos_seg=np.ascontiguousarray(np.cos(th_seg)),
             sin_seg=np.ascontiguousarray(np.sin(th_seg)),
             g_node=np.ascontiguousarray(layer.shape_at(th_node)),
+            spring=spring,
+            anchor_stiffness_N_m=(given[0], given[1]),
         )
 
     @property
     def any_fixed(self) -> bool:
         return bool(self.fixed.any())
+
+    @property
+    def held(self) -> bool:
+        """An end is anchored, rigidly or elastically (no rigid-body slip)."""
+        return bool(self.fixed.any() or np.any(self.spring > 0.0))
 
     def record_weights(self, x_m: FloatArray) -> tuple[NDArray[np.int64], FloatArray]:
         """Linear interpolation of segment forces to positions (held at ends)."""
@@ -1668,7 +1732,7 @@ def chain_layer_step(
         float(chain.h),
         chain.weights,
         chain.fixed,
-        chain.any_fixed,
+        chain.held,
         lay.rigid,
         u0,
         z0,
@@ -1681,6 +1745,7 @@ def chain_layer_step(
         t1,
         energy,
         stats,
+        chain.spring,
     )
     if status != 0:
         raise CableInputError(
@@ -1733,6 +1798,7 @@ def along_wire_history(
     wires: Sequence[int] | None = None,
     max_increment: float = 0.5,
     relief: LateralRelief | None = None,
+    anchor_stiffness_N_m: Sequence[float | None] = (None, None),
 ) -> AlongWireHistory:
     """Wire forces along a non-uniform, time-varying curvature field.
 
@@ -1770,6 +1836,10 @@ def along_wire_history(
         largest curvature magnitude and the largest ``|dkappa/dx|`` of the
         history at that position, and the distance to the nearest anchored
         end (``None``: unchanged).
+    anchor_stiffness_N_m : (float or None, float or None)
+        Axial stiffness of each anchored end per wire [N/m]
+        (:meth:`WireChain.build`): ``None`` or ``inf`` rigid (default), ``0``
+        free, finite an elastic anchor.
     """
     x = np.asarray(x_m, dtype=np.float64)
     kx = np.asarray(kappa_x, dtype=np.float64)
@@ -1795,7 +1865,13 @@ def along_wire_history(
         raise CableInputError("max_increment must be positive (inf: samples only)")
     lo, hi = (float(x[0]), float(x[-1])) if extent_m is None else extent_m
     chain = WireChain.build(
-        layer, lo, hi, ends=ends, segments_per_pitch=segments_per_pitch, wires=wires
+        layer,
+        lo,
+        hi,
+        ends=ends,
+        segments_per_pitch=segments_per_pitch,
+        wires=wires,
+        anchor_stiffness_N_m=anchor_stiffness_N_m,
     )
     kc = layer.kappa_c_1_m
 
@@ -1883,7 +1959,7 @@ def along_wire_history(
             float(chain.h),
             chain.weights,
             chain.fixed,
-            chain.any_fixed,
+            chain.held,
             inc,
             layer.rigid,
             rec_j,
@@ -1891,6 +1967,7 @@ def along_wire_history(
             out_n,
             out_e,
             stats,
+            chain.spring,
         )
         if status != 0:
             raise CableInputError(
@@ -1916,6 +1993,7 @@ def along_wire_history(
             "lam": float(layer.lam),
             "stick": layer.stick,
             "ends": chain.ends,
+            "anchor_stiffness_N_m": chain.anchor_stiffness_N_m,
             "max_increment": inc,
             "substeps": int(stats[3]),
             "max_newton": int(stats[0]),
