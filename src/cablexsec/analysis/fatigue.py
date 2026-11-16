@@ -96,6 +96,11 @@ from cablexsec.mechanics.distributed_friction import (
     distributed_wire_friction_stress,
 )
 from cablexsec.mechanics.fast_slip import wire_friction_stress
+from cablexsec.mechanics.friction_law import (
+    FrictionLaw,
+    active_friction_law,
+    friction_law_time_steps,
+)
 from cablexsec.mechanics.mindlin_contact import (
     MindlinContact,
     TransverseMap,
@@ -514,11 +519,16 @@ def _wire_stress_series(
     distributed_max_increment: float = DEFAULT_MAX_INCREMENT,
     progressive: ProgressiveFriction | None = None,
     friction_out: list[FloatArray] | None = None,
+    friction_law: FrictionLaw | None = None,
+    time_s: FloatArray | None = None,
 ) -> FloatArray:
     """Build ``sigma_total(phi_k, t)`` for every wire of one layer [Pa].
 
     ``friction_out``, when given, receives the friction stress ``sigma_f``
-    (for the component stress concentration factors).
+    (for the component stress concentration factors). ``friction_law`` and
+    ``time_s`` (:class:`~cablexsec.mechanics.friction_law.FrictionLaw`) pass to
+    the direction-tied and distributed kernels; the progressive law refuses a
+    non-neutral law.
 
     Shape ``(n_wires, n_steps)``. ``sigma_total = sigma_A + sigma_B + sigma_f``.
     Curvatures are axial-strain-gradient components, not rotation-curvature
@@ -585,6 +595,12 @@ def _wire_stress_series(
         raise CableInputError(
             "progressive settings require friction_model='progressive'"
         )
+    law = active_friction_law(friction_law)
+    if law is not None and friction_model == "progressive":
+        raise CableInputError(
+            "a friction law acts on the single spring-slider per wire; the "
+            "progressive law is not implemented with it"
+        )
     if friction_model == "progressive":
         # Progressive (Iwan) split of the direction-tied cap (gap G8).
         if stick_modulus_Pa is None and _FAST_SLIP:
@@ -616,6 +632,8 @@ def _wire_stress_series(
             stick_modulus_Pa=stick_modulus_Pa,
             nodes_per_pitch=distributed_nodes_per_pitch,
             max_increment=distributed_max_increment,
+            friction_law=law,
+            time_s=time_s,
         )
     elif stick_modulus_Pa is None and _FAST_SLIP:
         # Compiled force recursion, identical to wire_slip_history().stress_Pa
@@ -626,6 +644,8 @@ def _wire_stress_series(
             kappa_y,
             contact_pressure_Pa=contact_pressure_Pa,
             direction_hold_fraction=direction_hold_fraction,
+            friction_law=law,
+            time_s=time_s,
         )
     else:
         sigma_f_kt = wire_slip_history(
@@ -635,6 +655,8 @@ def _wire_stress_series(
             contact_pressure_Pa=contact_pressure_Pa,
             stick_modulus_Pa=stick_modulus_Pa,
             direction_hold_fraction=direction_hold_fraction,
+            friction_law=law,
+            time_s=time_s,
         ).stress_Pa
 
     # sigma_A (tension) — [Nasution2014b] Eq. 5: sigma_A = E cos^2 a * N / EA_full.
@@ -793,6 +815,8 @@ def wire_stress_field(
     curvature_gradient: tuple[FloatArray, FloatArray] | None = None,
     relief: LateralRelief | None = None,
     keep_friction: bool = False,
+    friction_law: FrictionLaw | None = None,
+    time_s: FloatArray | None = None,
 ) -> WireStressField:
     """Recover the shared stress field once, retaining all preceding slip history.
 
@@ -834,8 +858,26 @@ def wire_stress_field(
     estimate of the relief); it needs ``friction_model="distributed"``, whose
     bound follows the azimuth along each wire. ``None`` for all three leaves
     the field of a round wire unchanged, bit for bit.
+
+    ``friction_law`` (:class:`~cablexsec.mechanics.friction_law.FrictionLaw`)
+    sets a static/dynamic and rate-dependent coefficient of the armour
+    friction (direction-tied model; static/dynamic only for the distributed
+    model), with the sample times ``time_s`` when the law needs them. The
+    termination clamp increment is rate independent and is refused with a
+    non-neutral law. ``None`` or a neutral law leaves the field unchanged,
+    bit for bit.
     """
     kx, ky = real_array(kappa_x, "kappa_x"), real_array(kappa_y, "kappa_y")
+    if (
+        active_friction_law(friction_law) is not None
+        and isinstance(termination, TerminationSpec)
+        and termination.anchor != "none"
+    ):
+        raise CableInputError(
+            "the termination clamp increment is rate independent; it is not "
+            "combined with a non-neutral friction law"
+        )
+    friction_law_time_steps(friction_law, time_s, kx.size)  # checks the time base
     unrelieved_spec = layer.spec
     gradient = None
     if curvature_gradient is not None:
@@ -882,6 +924,8 @@ def wire_stress_field(
         distributed_max_increment=distributed_max_increment,
         progressive=progressive,
         friction_out=friction_parts,
+        friction_law=friction_law,
+        time_s=time_s,
     )
     spec = layer.spec
     increment = None
@@ -1109,6 +1153,8 @@ def compute_fatigue(
     termination: TerminationSpec | Mapping[str, TerminationSpec] | None = None,
     progressive: ProgressiveFriction | None = None,
     count_from_sample: int = 0,
+    friction_law: FrictionLaw | None = None,
+    time_s: FloatArray | None = None,
 ) -> FatigueResult:
     """Run the per-wire fatigue pipeline over a curvature/tension history.
 
@@ -1195,6 +1241,17 @@ def compute_fatigue(
         bit for bit as before). Lets a record start from the stress-free
         section and drop the start-up from the damage. Not available with a
         contact-life branch.
+    friction_law : FrictionLaw, optional
+        Static/dynamic and rate-dependent armour friction coefficient
+        (:class:`~cablexsec.mechanics.friction_law.FrictionLaw`), for the
+        direction-tied model and (static/dynamic only) the distributed model;
+        refused with the progressive model and a termination correction. The
+        contact-life branches keep their own rate-independent crossing
+        contact. ``None`` (default) or a neutral law gives the earlier
+        result, bit for bit.
+    time_s : numpy.ndarray, optional
+        Sample times [s] of the history, required by a law that depends on
+        time (slip rate or a finite healing time).
 
     Returns
     -------
@@ -1415,6 +1472,8 @@ def compute_fatigue(
             progressive=progressive,
             keep_friction=layer.component_scf is not None
             and not layer.component_scf.is_identity,
+            friction_law=friction_law,
+            time_s=time_s,
         )
         if field.termination is not None and layer_termination is not None:
             clamp_summary[name] = _clamp_summary(layer_termination, field.termination)
@@ -1687,6 +1746,22 @@ def compute_fatigue(
         )
     if clamp_summary:
         prov = _termination_provenance(prov, clamp_summary)
+    law = active_friction_law(friction_law)
+    if law is not None:
+        prov = Provenance(
+            method=prov.method
+            + f"; armour friction coefficient: friction law ({law.describe()})",
+            citations=prov.citations,
+            gates=(*prov.gates, "tests/test_friction_law.py"),
+            limitations=(
+                *prov.limitations,
+                "friction law: no rate-dependent or static/dynamic friction data "
+                "of armour interfaces is in the validation set; the slip rate of "
+                "the direction-tied kernel is a representative wire value "
+                "(r / |sin a| times the plastic strain rate); the crossing "
+                "contact branches keep the rate-independent coefficient",
+            ),
+        )
     if count_from:
         prov = dataclasses.replace(
             prov,

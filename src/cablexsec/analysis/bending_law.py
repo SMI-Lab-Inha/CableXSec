@@ -94,6 +94,7 @@ import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
 from cablexsec.exceptions import CableInputError
+from cablexsec.mechanics.friction_law import FrictionLaw
 from cablexsec.mechanics.papailiou import wire_slip_stress_bounds
 from cablexsec.provenance import Provenance
 
@@ -851,7 +852,10 @@ def export_bending_law(
     **mkappa_options
         Passed to :func:`cablexsec.api.compute_mkappa` (``mu``,
         ``contact_model``, ``friction_model``, ``progressive``,
-        ``core_friction``); planar bending only.
+        ``core_friction``); planar bending only. A non-neutral
+        ``friction_law`` (static/dynamic or rate dependent) is refused: the
+        exported parallel elastic-plastic law with Masing's rules is rate
+        independent and cannot represent it.
 
     Notes
     -----
@@ -883,6 +887,21 @@ def export_bending_law(
     ):
         if name in mkappa_options:
             raise CableInputError(f"{name} is set by the export, not an option")
+    friction_law = mkappa_options.get("friction_law")
+    if friction_law is not None and (
+        not isinstance(friction_law, FrictionLaw) or not friction_law.is_neutral
+    ):
+        # A static/dynamic or rate-dependent coefficient has no Masing/Iwan
+        # (rate-independent, parallel elastic-plastic) representation.
+        raise CableInputError(
+            "a non-neutral friction law cannot be exported as a Masing/Iwan "
+            "bending law (it is state or rate dependent); export the "
+            "rate-independent law"
+        )
+    if "time_s" in mkappa_options:
+        raise CableInputError(
+            "time_s is not an export option: the exported backbone is rate independent"
+        )
     if not slip_scale and (
         slip_scale_reference_N is not None
         or slip_scale_tensions_N is not None
