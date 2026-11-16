@@ -58,6 +58,7 @@ from __future__ import annotations
 
 import dataclasses
 import math
+import warnings
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from typing import Literal
@@ -90,6 +91,7 @@ from cablexsec.exceptions import CableInputError
 from cablexsec.materials.mean_stress import MeanStressSpec
 from cablexsec.materials.sn_curves import SNcurve, SWTLifeConstants
 from cablexsec.mechanics.distributed_friction import (
+    BOUND_FORMS,
     DEFAULT_MAX_INCREMENT,
     DEFAULT_NODES_PER_WIRE,
     FRICTION_MODELS,
@@ -118,7 +120,11 @@ from cablexsec.mechanics.progressive_friction import (
 from cablexsec.mechanics.tendon_bending import LateralRelief, TransverseSlipModel
 from cablexsec.mechanics.tendon_section import WireSection
 from cablexsec.mechanics.wire_stress import local_bending_fibre_stress
-from cablexsec.provenance import Provenance, real_array
+from cablexsec.provenance import (
+    DirectionTiedFrictionWarning,
+    Provenance,
+    real_array,
+)
 
 # The compiled kernels are selected only when numba is active (module
 # attributes, so that tests can force the reference paths).
@@ -126,21 +132,142 @@ _FAST_SLIP = HAVE_NUMBA
 _FAST_RAINFLOW = HAVE_NUMBA
 
 RainflowCounter = Literal["auto", "compiled", "reference"]
-FrictionModel = Literal["direction_tied", "distributed", "progressive"]
+FrictionModel = Literal["auto", "direction_tied", "distributed", "progressive"]
+DistributedBound = Literal["signed", "uniform"]
+#: Out-of-plane ratio (:func:`curvature_path_out_of_plane_ratio`) at or below
+#: which ``friction_model="auto"`` treats a curvature path as planar (and above
+#: which the default direction-tied law warns).
+PLANAR_PATH_TOLERANCE = 1e-3
+#: Measured bias of the direction-tied law under rotating curvature, quoted by
+#: :class:`~cablexsec.provenance.DirectionTiedFrictionWarning`.
+DIRECTION_TIED_ROTATION_BIAS = (
+    "under a steadily rotating curvature at twice the slip onset its largest "
+    "per-wire friction-stress range was 0.94 (template interface, xi = 0.81) "
+    "and 0.86 (near-rigid interface, xi = 0.99) of the distributed helix "
+    "model on the 66 kV template inner armour, i.e. bulk damage about 0.79 "
+    "and 0.55 of it at an S-N slope of 4 where the friction range governs; "
+    "on planar and flat paths (minor over major axis up to about 0.3) its "
+    "ranges are at or above the distributed ones"
+)
 CopperContactModel = Literal["slip_cycle", "legacy_gross_sliding"]
 COPPER_CONTACT_MODELS: tuple[str, ...] = ("slip_cycle", "legacy_gross_sliding")
 
 __all__ = [
+    "PLANAR_PATH_TOLERANCE",
     "FatigueLayer",
     "FatigueResult",
     "WireStressField",
     "wire_stress_field",
     "compute_fatigue",
+    "curvature_path_out_of_plane_ratio",
     "miner_damage",
     "rainflow_cycles",
 ]
 
 FloatArray = NDArray[np.float64]
+
+
+def curvature_path_out_of_plane_ratio(
+    kappa_x: FloatArray, kappa_y: FloatArray
+) -> float:
+    """Out-of-plane extent of a curvature path, relative to its largest curvature.
+
+    A planar history keeps one bending plane: every sample ``(kappa_x,
+    kappa_y)`` lies on one line through the origin. The line is the principal
+    axis of the second moment ``sum k k^T`` of the samples about the origin
+    (not about their mean: the bending plane passes through the straight
+    cable). The ratio is the largest distance of a sample from that line over
+    the largest curvature magnitude: zero for a planar path in any plane, one
+    for a circle, ``b/a`` for an ellipse of semi-axes ``a >= b`` centred on
+    the origin. A zero history returns zero.
+    """
+    kx = np.asarray(kappa_x, dtype=np.float64)
+    ky = np.asarray(kappa_y, dtype=np.float64)
+    if kx.shape != ky.shape:
+        raise CableInputError("kappa_x and kappa_y must have the same shape")
+    peak = float(np.max(np.hypot(kx, ky))) if kx.size else 0.0
+    if peak == 0.0 or not math.isfinite(peak):
+        return 0.0
+    # Scale first: the second moment of tiny or huge curvatures stays finite.
+    x, y = kx / peak, ky / peak
+    sxx, syy, sxy = float(x @ x), float(y @ y), float(x @ y)
+    angle = 0.5 * math.atan2(2.0 * sxy, sxx - syy)
+    distance = np.abs(y * math.cos(angle) - x * math.sin(angle))
+    return float(np.max(distance))
+
+
+def _distributed_spec(
+    spec: HelicalLayerSpec,
+    stick_modulus_Pa: FloatArray | None,
+    friction_law: FrictionLaw | None,
+) -> tuple[HelicalLayerSpec | None, str]:
+    """Layer for the distributed model, or ``None`` and why the model does not apply.
+
+    A constant stick modulus is the Yun coefficient ``xi = k / (E cos^2 a)``
+    of that state (a thermal block recomputes ``xi`` from its moduli), so the
+    layer is returned with that coefficient. A stick modulus that changes
+    over the record, a rigid interface (``xi >= 1``) and a rate-dependent
+    friction law are not covered by the distributed model.
+    """
+    law = active_friction_law(friction_law)
+    if law is not None and law.rate_dependent:
+        return None, "the friction law is rate dependent"
+    if stick_modulus_Pa is not None:
+        stick = np.asarray(stick_modulus_Pa, dtype=np.float64)
+        if stick.size and not np.allclose(stick, stick[0], rtol=1e-12, atol=0.0):
+            return None, "the stick modulus changes over the record"
+        if stick.size and not np.allclose(stick, spec.k_f, rtol=1e-12, atol=0.0):
+            spec = dataclasses.replace(
+                spec,
+                xi=float(stick[0])
+                / (spec.E_wire_Pa * math.cos(spec.lay_angle_rad) ** 2),
+            )
+    if not (math.isfinite(spec.xi) and 0.0 <= spec.xi < 1.0):
+        return None, f"the interface is rigid (xi = {spec.xi:.6g})"
+    return spec, ""
+
+
+def _resolve_friction_model(
+    friction_model: str,
+    spec: HelicalLayerSpec,
+    out_of_plane: float,
+    stick_modulus_Pa: FloatArray | None,
+    friction_law: FrictionLaw | None,
+) -> tuple[str, str]:
+    """Friction model of one layer and, for ``"auto"``, why it fell back."""
+    _check_friction_model(friction_model)
+    if friction_model != "auto":
+        return friction_model, ""
+    if out_of_plane <= PLANAR_PATH_TOLERANCE:
+        return "direction_tied", ""
+    usable, reason = _distributed_spec(spec, stick_modulus_Pa, friction_law)
+    if usable is None:
+        return "direction_tied", reason
+    return "distributed", ""
+
+
+def _warn_default_direction_tied(out_of_plane: float, stacklevel: int) -> None:
+    """Warn that the default direction-tied law runs on a non-planar path."""
+    if out_of_plane <= PLANAR_PATH_TOLERANCE:
+        return
+    warnings.warn(
+        "the default friction_model will change from 'direction_tied' to 'auto' "
+        "in the next release; pass friction_model explicitly to keep the current "
+        "behaviour. This curvature path is not planar (out-of-plane ratio "
+        f"{out_of_plane:.3g} > {PLANAR_PATH_TOLERANCE:g}), so 'auto' would "
+        "solve the distributed helix model on every layer it covers. The "
+        "direction-tied cap turns "
+        f"with the bending direction: {DIRECTION_TIED_ROTATION_BIAS}.",
+        DirectionTiedFrictionWarning,
+        stacklevel=stacklevel + 1,
+    )
+
+
+def _check_distributed_bound(bound: str) -> None:
+    if bound not in BOUND_FORMS:
+        raise CableInputError(
+            f"distributed_bound must be one of {BOUND_FORMS}, got {bound!r}"
+        )
 
 
 def _validate_tension(
@@ -521,6 +648,7 @@ def _wire_stress_series(
     friction_out: list[FloatArray] | None = None,
     friction_law: FrictionLaw | None = None,
     time_s: FloatArray | None = None,
+    distributed_bound: DistributedBound = "signed",
 ) -> FloatArray:
     """Build ``sigma_total(phi_k, t)`` for every wire of one layer [Pa].
 
@@ -590,7 +718,15 @@ def _wire_stress_series(
         a,
     )
 
-    _check_friction_model(friction_model)
+    friction_model, _reason = _resolve_friction_model(  # type: ignore[assignment]
+        friction_model,
+        spec,
+        curvature_path_out_of_plane_ratio(kappa_x, kappa_y)
+        if friction_model == "auto"
+        else 0.0,
+        stick_modulus_Pa,
+        friction_law,
+    )
     if progressive is not None and friction_model != "progressive":
         raise CableInputError(
             "progressive settings require friction_model='progressive'"
@@ -624,16 +760,19 @@ def _wire_stress_series(
             ).stress_Pa
     elif friction_model == "distributed":
         # Distributed elastic-Coulomb helix model (see distributed_friction).
+        # A constant stick modulus enters as the Yun coefficient of its state.
+        usable, _reason = _distributed_spec(spec, stick_modulus_Pa, None)
         sigma_f_kt = distributed_wire_friction_stress(
-            spec,
+            spec if usable is None else usable,
             kappa_x,
             kappa_y,
             contact_pressure_Pa=contact_pressure_Pa,
-            stick_modulus_Pa=stick_modulus_Pa,
+            stick_modulus_Pa=stick_modulus_Pa if usable is None else None,
             nodes_per_pitch=distributed_nodes_per_pitch,
             max_increment=distributed_max_increment,
             friction_law=law,
             time_s=time_s,
+            bound=distributed_bound,
         )
     elif stick_modulus_Pa is None and _FAST_SLIP:
         # Compiled force recursion, identical to wire_slip_history().stress_Pa
@@ -817,6 +956,7 @@ def wire_stress_field(
     keep_friction: bool = False,
     friction_law: FrictionLaw | None = None,
     time_s: FloatArray | None = None,
+    distributed_bound: DistributedBound = "signed",
 ) -> WireStressField:
     """Recover the shared stress field once, retaining all preceding slip history.
 
@@ -828,10 +968,14 @@ def wire_stress_field(
     (default, :func:`~cablexsec.mechanics.fast_slip.wire_friction_stress`) or
     ``"distributed"``
     (:func:`~cablexsec.mechanics.distributed_friction.distributed_friction_history`
-    with ``distributed_nodes_per_pitch`` and ``distributed_max_increment``).
+    with ``distributed_nodes_per_pitch``, ``distributed_max_increment`` and
+    the bound form ``distributed_bound``).
     ``"progressive"`` splits each wire into parallel sub-elements on the
     direction-tied cap
     (:mod:`cablexsec.mechanics.progressive_friction`, settings ``progressive``).
+    ``"auto"`` (opt-in) takes the direction-tied model for a planar
+    curvature path and the distributed model otherwise, where it applies
+    (see :func:`compute_fatigue`).
     ``direction_hold_fraction`` applies to the direction-tied and progressive
     models.
 
@@ -868,6 +1012,15 @@ def wire_stress_field(
     bit for bit.
     """
     kx, ky = real_array(kappa_x, "kappa_x"), real_array(kappa_y, "kappa_y")
+    _check_distributed_bound(distributed_bound)
+    if friction_model == "auto":
+        friction_model, _reason = _resolve_friction_model(  # type: ignore[assignment]
+            friction_model,
+            layer.spec,
+            curvature_path_out_of_plane_ratio(kx, ky),
+            stick_modulus_Pa,
+            friction_law,
+        )
     if (
         active_friction_law(friction_law) is not None
         and isinstance(termination, TerminationSpec)
@@ -926,6 +1079,7 @@ def wire_stress_field(
         friction_out=friction_parts,
         friction_law=friction_law,
         time_s=time_s,
+        distributed_bound=distributed_bound,
     )
     spec = layer.spec
     increment = None
@@ -1145,9 +1299,10 @@ def compute_fatigue(
     n_fibres: int = 32,
     rainflow_counter: RainflowCounter = "auto",
     direction_hold_fraction: float = DIRECTION_HOLD_FRACTION,
-    friction_model: FrictionModel = "direction_tied",
+    friction_model: FrictionModel | None = None,
     distributed_nodes_per_pitch: int | Mapping[str, int] | None = None,
     distributed_max_increment: float = DEFAULT_MAX_INCREMENT,
+    distributed_bound: DistributedBound = "signed",
     copper_contact_model: CopperContactModel = "slip_cycle",
     partial_slip_cycles: PartialSlipCycles = "skip",
     termination: TerminationSpec | Mapping[str, TerminationSpec] | None = None,
@@ -1192,19 +1347,36 @@ def compute_fatigue(
         slip-cap bending direction is held (default
         ``DIRECTION_HOLD_FRACTION``); ``0`` reproduces the earlier update.
         Used by the direction-tied friction model only.
-    friction_model : {"direction_tied", "distributed", "progressive"}, optional
-        Armour friction-stress model. ``"direction_tied"`` (default) is the
-        pointwise Papailiou cap at the held bending direction
+    friction_model : {"direction_tied", "auto", "distributed", "progressive"}, optional
+        Armour friction-stress model. ``"direction_tied"`` (the default,
+        ``None``) is the pointwise Papailiou cap at the held bending direction
         (:mod:`cablexsec.mechanics.fast_slip`). ``"distributed"`` solves the
         elastic--Coulomb friction field along one pitch of the helix with the
         capstan bound ``mu |sin a|`` and interface stiffness
         ``k_hat = xi/(1 - xi)``
         (:mod:`cablexsec.mechanics.distributed_friction`); it is slower and
-        requires a constant stick modulus. ``"progressive"`` splits each wire
-        of the direction-tied law into parallel sub-elements whose caps
-        average to the same cap
+        requires a constant stick modulus (a constant one other than the
+        layer's enters as the Yun coefficient of that state). ``"progressive"``
+        splits each wire of the direction-tied law into parallel sub-elements
+        whose caps average to the same cap
         (:mod:`cablexsec.mechanics.progressive_friction`, gap G8; settings in
-        ``progressive``).
+        ``progressive``). ``"auto"`` (opt-in) takes the direction-tied model
+        when the curvature path is planar (out-of-plane ratio
+        :func:`curvature_path_out_of_plane_ratio` at most
+        ``PLANAR_PATH_TOLERANCE``) and the distributed model otherwise; a
+        layer that the distributed model does not cover (rigid interface
+        ``xi >= 1``, a stick modulus that changes over the record, a
+        rate-dependent friction law) keeps the direction-tied model, and the
+        provenance records the model of every layer and the reason for such a
+        fallback. The direction-tied cap turns with the bending direction:
+        under a steadily rotating curvature its stress ranges fall below those
+        of the distributed model (to 0.86 of them at twice the slip onset on a
+        near-rigid interface), while on planar and flat elliptical paths they
+        are at or above them. The default changes to ``"auto"`` in the next
+        release: left at its default on a non-planar path (the only case in
+        which the two differ), the model warns once per call
+        (:class:`~cablexsec.provenance.DirectionTiedFrictionWarning`, a
+        ``FutureWarning``); the result of this release is unchanged.
     distributed_nodes_per_pitch : int, dict[str, int] or None, optional
         Helix nodes per pitch of the distributed model, for every layer or per
         layer name (default ``DEFAULT_NODES_PER_WIRE`` times the wire count of
@@ -1212,6 +1384,11 @@ def compute_fatigue(
     distributed_max_increment : float, optional
         Largest curvature increment per substep of the distributed model, in
         units of the slip-onset curvature (default ``DEFAULT_MAX_INCREMENT``).
+    distributed_bound : {"signed", "uniform"}, optional
+        Friction bound of the distributed model: ``"signed"`` (default) with
+        the capstan term on the signed bending force of the wire,
+        ``"uniform"`` without it
+        (:func:`~cablexsec.mechanics.distributed_friction.distributed_friction_history`).
     copper_contact_model : {"slip_cycle", "legacy_gross_sliding"}, optional
         Copper SWT contact branch. ``"slip_cycle"`` (default) counts cycles of
         the crossing's tangential force, skips cycles without slip and gives
@@ -1288,7 +1465,11 @@ def compute_fatigue(
     :class:`~cablexsec.provenance.UnevaluatedFatigueCurveWarning`.
     """
     compiled = _use_compiled_counter(rainflow_counter)
+    default_model = friction_model is None
+    if friction_model is None:
+        friction_model = "direction_tied"
     _check_friction_model(friction_model)
+    _check_distributed_bound(distributed_bound)
     if copper_contact_model not in COPPER_CONTACT_MODELS:
         raise CableInputError(
             f"copper_contact_model must be one of {COPPER_CONTACT_MODELS}, "
@@ -1430,6 +1611,11 @@ def compute_fatigue(
     critical_adjusted_fibre: dict[str, FloatArray] = {}
     clamp_summary: dict[str, dict[str, float | bool | str]] = {}
     fibre_angles = np.arange(n_fibres) * (2 * math.pi / n_fibres)
+    out_of_plane = curvature_path_out_of_plane_ratio(kx, ky)
+    if default_model:
+        _warn_default_direction_tied(out_of_plane, stacklevel=2)
+    chosen_model: dict[str, str] = {}
+    fallback_reason: dict[str, str] = {}
     if count_from:
         for layer in layers:
             if (layer.swt_const is not None and layer.contact_p0_Pa > 0.0) or (
@@ -1443,6 +1629,13 @@ def compute_fatigue(
     for layer in layers:
         spec = layer.spec
         name = layer.name
+        layer_stick = None if stick_modulus_Pa is None else stick_modulus_Pa[name]
+        model, reason = _resolve_friction_model(
+            friction_model, spec, out_of_plane, layer_stick, friction_law
+        )
+        chosen_model[name] = model
+        if reason:
+            fallback_reason[name] = reason
         layer_termination = (
             termination
             if termination is None or isinstance(termination, TerminationSpec)
@@ -1461,13 +1654,12 @@ def compute_fatigue(
             if normal_stress_Pa is None
             else normal_stress_Pa[name],
             wire_modulus_Pa=None if wire_modulus_Pa is None else wire_modulus_Pa[name],
-            stick_modulus_Pa=None
-            if stick_modulus_Pa is None
-            else stick_modulus_Pa[name],
+            stick_modulus_Pa=layer_stick,
             direction_hold_fraction=direction_hold_fraction,
-            friction_model=friction_model,
+            friction_model=model,  # type: ignore[arg-type]
             distributed_nodes_per_pitch=_layer_nodes(distributed_nodes_per_pitch, name),
             distributed_max_increment=distributed_max_increment,
+            distributed_bound=distributed_bound,
             termination=layer_termination,
             progressive=progressive,
             keep_friction=layer.component_scf is not None
@@ -1724,10 +1916,27 @@ def compute_fatigue(
         ),
     )
     prov = _sn_option_provenance(prov, layers)
-    if friction_model == "distributed":
+    distributed_layers = [
+        lyr for lyr in layers if chosen_model[lyr.name] == "distributed"
+    ]
+    if distributed_layers:
+        # The layer as solved (a constant stick modulus sets its xi).
+        solved_specs = {}
+        for lyr in distributed_layers:
+            stick = None if stick_modulus_Pa is None else stick_modulus_Pa[lyr.name]
+            usable, _reason = _distributed_spec(lyr.spec, stick, None)
+            solved_specs[lyr.name] = lyr.spec if usable is None else usable
         prov = _distributed_provenance(
-            prov, layers, distributed_nodes_per_pitch, distributed_max_increment
+            prov,
+            distributed_layers,
+            distributed_nodes_per_pitch,
+            distributed_max_increment,
+            solved_specs,
+            distributed_bound,
         )
+    prov = _friction_model_provenance(
+        prov, friction_model, out_of_plane, chosen_model, fallback_reason
+    )
     if friction_model == "progressive":
         settings = progressive or ProgressiveFriction()
         prov = Provenance(
@@ -1928,16 +2137,56 @@ def _check_friction_model(friction_model: str) -> None:
         )
 
 
+def _friction_model_provenance(
+    prov: Provenance,
+    friction_model: str,
+    out_of_plane: float,
+    chosen: Mapping[str, str],
+    fallback: Mapping[str, str],
+) -> Provenance:
+    """Record the friction model of every layer and the path planarity."""
+    method = prov.method
+    limitations = list(prov.limitations)
+    planar = out_of_plane <= PLANAR_PATH_TOLERANCE
+    if friction_model == "auto":
+        method += (
+            "; armour friction model 'auto' (curvature path out-of-plane ratio "
+            f"{out_of_plane:.3g}, planar at or below {PLANAR_PATH_TOLERANCE:g}): "
+            + ", ".join(f"{name}: {model}" for name, model in chosen.items())
+        )
+        limitations.extend(
+            f"friction_model='auto' kept the direction-tied model for {name} on a "
+            f"non-planar curvature path because {reason}; the distributed model "
+            "does not cover that case"
+            for name, reason in fallback.items()
+        )
+    tied = [name for name in fallback if chosen[name] == "direction_tied"]
+    if tied and not planar:
+        limitations.append(
+            "direction-tied friction cap on a non-planar curvature path "
+            f"(out-of-plane ratio {out_of_plane:.3g}; layers "
+            + ", ".join(tied)
+            + "): the cap turns with the bending direction; "
+            f"{DIRECTION_TIED_ROTATION_BIAS} (doc/local_analysis_guide.md, "
+            "Section 9)"
+        )
+    if method == prov.method and len(limitations) == len(prov.limitations):
+        return prov
+    return dataclasses.replace(prov, method=method, limitations=tuple(limitations))
+
+
 def _distributed_provenance(
     prov: Provenance,
     layers: list[FatigueLayer],
     nodes_per_pitch: int | Mapping[str, int] | None,
     max_increment: float,
+    specs: Mapping[str, HelicalLayerSpec] | None = None,
+    bound: str = "signed",
 ) -> Provenance:
     """Record the distributed friction model and its parameters."""
     parts = []
     for layer in layers:
-        spec = layer.spec
+        spec = layer.spec if specs is None else specs[layer.name]
         chosen = _layer_nodes(nodes_per_pitch, layer.name)
         nodes = DEFAULT_NODES_PER_WIRE * spec.n_wires if chosen is None else int(chosen)
         k_hat = spec.xi / (1.0 - spec.xi) if spec.xi < 1.0 else math.inf
@@ -1946,10 +2195,16 @@ def _distributed_provenance(
             f"{layer.name}: N = {nodes} nodes per pitch, k_hat = {k_hat:.6g}, "
             f"lam = {lam:.6g}"
         )
+    bound_text = (
+        "capstan bound lam = mu |sin a|"
+        if bound == "signed"
+        else "uniform bound without the capstan term (stress unit sigma_0 lam, "
+        "lam = mu |sin a|)"
+    )
     return Provenance(
         method=prov.method
         + "; armour friction stress: distributed elastic-Coulomb helix model "
-        "(friction_model='distributed', capstan bound lam = mu |sin a|, "
+        f"(friction_model='distributed', {bound_text}, "
         "interface k_hat = xi/(1 - xi), max increment "
         f"{max_increment:g} kappa_on; " + "; ".join(parts) + ")",
         citations=(*prov.citations, "[Papailiou1997]", "[Yun2020]"),

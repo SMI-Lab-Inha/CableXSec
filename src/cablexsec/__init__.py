@@ -307,6 +307,7 @@ from cablexsec.mechanics.tendon_bending import (
 from cablexsec.mechanics.tendon_section import WireSection
 from cablexsec.mechanics.thermal_network import ThermalNetwork, thermal_network
 from cablexsec.provenance import (
+    DirectionTiedFrictionWarning,
     MissingClampingStateWarning,
     UnmodelledPolymerSofteningWarning,
 )
@@ -570,6 +571,7 @@ __all__ = [
     "Provenance",
     "ValidatedRange",
     "ExtrapolationWarning",
+    "DirectionTiedFrictionWarning",
     "UnevaluatedFatigueCurveWarning",
     "UnvalidatedModelWarning",
     "MissingClampingStateWarning",

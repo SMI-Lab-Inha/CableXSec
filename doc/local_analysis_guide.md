@@ -1477,11 +1477,38 @@ run uncompiled.
   the ξ-reduced stick stiffness and the Papailiou bounds of the current bending
   direction (held below `0.1 m κ_on`, `direction_hold_fraction`,
   `m = 1 − 3λ²/8`, `λ = μ |sin α|`).
+
+  **Planned change of the default.** The default of `compute_fatigue` becomes
+  `"auto"` (below) in the next release. The two are the same, bit for bit, on
+  a planar curvature path, so only non-planar paths change. Until then, left
+  at the default on a non-planar path (out-of-plane ratio above
+  `PLANAR_PATH_TOLERANCE`), `compute_fatigue` warns once per call
+  (`DirectionTiedFrictionWarning`, a `FutureWarning`, with the measured bias
+  below); the result of this release is unchanged. Pass `friction_model`
+  explicitly to keep the current behaviour (`"direction_tied"`) or to take the
+  coming one (`"auto"`) without the warning. The sea-state batch passes its
+  option explicitly and does not warn.
+- `"auto"` (opt-in): the direction-tied law for a planar curvature path and
+  the distributed law for any other. The path is planar when its out-of-plane ratio
+  (`curvature_path_out_of_plane_ratio`: the largest distance of a sample
+  `(κ_x, κ_y)` from the principal line through the origin, over the largest
+  curvature) is at most `PLANAR_PATH_TOLERANCE = 1e-3`. A planar path in any
+  plane gives round-off, the same path written with six significant digits
+  less than `1e-5`, an ellipse its axis ratio. A layer the distributed law
+  does not cover (rigid interface `ξ ≥ 1`, a stick modulus that changes over
+  the record, a rate-dependent friction law) keeps the direction-tied law. The
+  provenance records the ratio, the model of every layer and the reason for a
+  fallback. `wire_stress_field` takes `"auto"` too.
 - `"distributed"`: the friction force is solved along one pitch of the helix
   with interface shear stiffness `k̂ = ξ/(1 − ξ)` and the capstan bound
   `λ n` on the signed wire force, for any biaxial curvature history and the
   same clamping history. Stick zones then anchor the force distribution, so
-  the result does not depend on a bending direction.
+  the result does not depend on a bending direction. `distributed_bound=
+  "uniform"` drops the capstan term (`b = ρ g`, the linear Coulomb bound of the
+  clamping, for sensitivity studies); the default `"signed"` is the bound
+  above. A capstan term on the total wire force (bending plus tension share)
+  is not offered: the clamping `P1+P2` that scales `g` already contains the
+  radial load of the tension share.
 
 In every law the capstan term acts on the wire's own force (Papailiou 1997,
 Eq. 14 with the signed helix angle): a rising wire stress is bounded by
@@ -1530,7 +1557,9 @@ most 0.03% between four and eight; at the reference arc, substeps of 0.03
 `κ_on` instead of 0.1 changed it by less than 1e-6 (relative). Check both
 settings for a new history. The model requires
 a constant stick modulus (a section-state history that changes ξ or the wire
-modulus is rejected) and `0 < ξ < 1`.
+modulus is rejected; a constant one other than the layer's, as in one block
+of a thermal history, enters as the Yun coefficient `ξ = k/(E cos²α)` of that
+state) and `0 < ξ < 1`.
 
 The two laws coincide below slip onset and in planar full slip. In planar
 partial slip the distributed law gives smaller stress ranges because the
@@ -1540,14 +1569,19 @@ law at `κ/κ_on` = 1.2, 1.5, 3, 10 and 30. On the companion article's reference
 distributed total armour damage is 0.44–1.15 of the default law, depending on
 the section; at the 263.478 m arc it is 0.62 (U = 10.74 m/s). These are
 model-to-model differences, not a validation; no measured armour strain under
-biaxial bending is available. Cost is about twice the default stress and
-damage time (1.46 s against 0.70 s per section-hour on one thread at four
-nodes per wire).
+biaxial bending is available. Cost grows with the curvature increment per
+sample in units of `κ_on` (the substeps are at most 0.1 `κ_on`). On one
+thread, the distributed law took 1.0 to 1.5 times the direction-tied stress
+and damage time on the shipped fatigue examples (inter-array single-core
+cable, `examples/demo_05_fatigue_damage.py`, the long-term examples and the
+release profile) and 13 to 16 times on the 66 kV template (an hour sampled at
+10 Hz at 0.004 1/m: 43.6 s against 3.2 s; the 2000 s record of
+[template_66kv.md](template_66kv.md): 36 s against 2.2 s). Planar records keep
+the direction-tied cost under `"auto"`.
 
-**Friction work under rotating curvature.** The stress ranges of the two laws
-stay close under biaxial bending, but their friction work does not. The
-direction-tied cap is the friction stress accumulated from the current
-neutral axis, so it turns with the bending direction. On a circular orbit a
+**Rotating curvature.** The direction-tied cap is the friction stress
+accumulated from the current neutral axis, so it turns with the bending
+direction. On a circular orbit a
 wire passes the extreme fibre, where its cap is largest, while its drive is
 stationary, and it slips mostly near the neutral axis, where its cap is close
 to zero. In the distributed law every helix node slips at its own traction
@@ -1568,8 +1602,59 @@ up to `O(λ²)`; `tests/test_orbit_friction_heat.py` checks both limits. On the 
 A planar cycle of the same amplitudes dissipates the same work in both laws
 within 3 % (at large amplitude the direction-tied work is `sinh(x₀)/x₀`
 times the distributed one, 1.0005–1.0008 here), and a figure-eight orbit
-(`κ_y` at twice the frequency of `κ_x`) 0.66–0.78 of the distributed work. Fatigue is not affected, but a heat source
-is: `compute_thermal_fatigue` takes the frictional heat of its `Pi2`
+(`κ_y` at twice the frequency of `κ_x`) 0.66–0.78 of the distributed work.
+
+The stress ranges also fall short on near-circular paths, and more so on a
+stiffer interface, because the distributed law's stick zones then hold more
+of the force. Largest per-wire friction-stress range of the inner armour of
+the 66 kV template (100 kN), direction-tied over distributed, in the last of
+four revolutions of an ellipse centred on the straight cable (the circle row
+of the template interface is the table above; a stiffer interface widens the
+gap):
+
+| Minor / major axis | ξ | 1.5 `κ_on` | 2 `κ_on` | 4 `κ_on` | 8 `κ_on` |
+| --- | --- | --- | --- | --- | --- |
+| 1 (circle) | 0.81 (template) | 0.937 | 0.943 | 0.981 | 1.001 |
+| 1 (circle) | 0.99 | 0.854 | 0.863 | 0.933 | 0.970 |
+| 0.8 | 0.81 | 1.021 | 1.056 | 1.057 | 1.039 |
+| 0.8 | 0.99 | 0.933 | 0.976 | 1.011 | 1.009 |
+| 0.5 | 0.81 | 1.093 | 1.080 | 1.050 | 1.031 |
+| 0.5 | 0.99 | 0.984 | 1.023 | 1.011 | 1.007 |
+| 0.3 | 0.81 | 1.121 | 1.068 | 1.041 | 1.025 |
+| 0.3 | 0.99 | 1.009 | 1.016 | 1.010 | 1.006 |
+| 0 (planar) | 0.81 | 1.117 | 1.080 | 1.023 | 1.010 |
+| 0 (planar) | 0.99 | 1.019 | 1.008 | 1.001 | 1.001 |
+
+At an S–N slope of 4 the circle at twice the onset gives 0.79 (ξ = 0.81) and
+0.55 (ξ = 0.99) of the distributed bulk damage where friction governs the
+range. The friction work of one revolution is 0.38 to 0.69 of the planar cycle
+of the same amplitude in the direction-tied law and 1.8 to 2.6 in the
+distributed law (ξ = 0.99, two to eight times the onset). Flat paths
+(minor over major axis up to about 0.3, and planar ones) give direction-tied
+ranges at or above the distributed ones, so the switch of `"auto"` at the
+planarity tolerance moves a result from the direction-tied value towards the
+lower distributed one (at most the planar rows above). On the shipped
+examples `"auto"` changes the largest damage by at most 0.02 %; on the 66 kV
+hour above it gives 0.92 of the direction-tied value, and on the
+[template_66kv.md](template_66kv.md) record 0.99
+(`tests/test_biaxial_friction_default.py`).
+
+**Pitch mean of the direction-tied law.** Its bounds integrate the capstan
+growth from the neutral axis, where the friction stress is zero (Papailiou
+1997, Eq. 14). In planar full slip the wire at the azimuth `x` from the
+neutral axis toward tension carries `σ0 (exp(λx) − 1)`, whose pitch mean is
+`σ0 (sinh(x₀)/x₀ − 1)`, `x₀ = λπ/2`: `λπ/12` of the peak tensile friction
+stress to leading order (1.1 % on the 66 kV inner armour, 0.054 MPa; 0.9 % on
+its outer armour). A periodic friction field of a uniformly bent pitch has zero
+mean, as in the distributed law (`σ0 (C exp(λx) − 1)`). The offset is kept,
+because a zero-mean condition couples the wires of a layer, which the
+independent spring–sliders of this law do not. Removing it by a uniform shift
+would leave the moment unchanged (round-off), change the largest per-wire
+stress range by less than `1e-4` (planar, one-sided and rotating cycles from
+two to 32 times the onset) and lower the mean stress of every wire by the
+offset.
+
+The frictional heat is affected the most: `compute_thermal_fatigue` takes the frictional heat of its `Pi2`
 diagnostic from the distributed law whatever `friction_model` the fatigue
 uses (64 nodes per pitch and substeps of `κ_on`, within 0.25 % of the
 fatigue-path settings at about a hundredth of their cost;

@@ -46,6 +46,7 @@ from numpy.typing import ArrayLike, NDArray
 from cablexsec.exceptions import PhysicalRangeError
 
 __all__ = [
+    "DirectionTiedFrictionWarning",
     "ExtrapolationWarning",
     "MissingClampingStateWarning",
     "Provenance",
@@ -63,6 +64,26 @@ class ExtrapolationWarning(UserWarning):
 
     The result is still returned — the model *may* be sound here, but it has
     not been validated. The warning message names the bound and its source.
+    """
+
+
+class DirectionTiedFrictionWarning(FutureWarning):
+    """The default armour friction law of the fatigue path will change.
+
+    Emitted once per call by :func:`cablexsec.api.compute_fatigue` and
+    :func:`cablexsec.analysis.fatigue.compute_fatigue` when ``friction_model``
+    is left at its default and the curvature path is not planar
+    (:func:`cablexsec.analysis.fatigue.curvature_path_out_of_plane_ratio`
+    above :data:`cablexsec.analysis.fatigue.PLANAR_PATH_TOLERANCE`). The
+    default changes from ``"direction_tied"`` to ``"auto"`` in the next
+    release; on a planar path the two are the same, bit for bit, so only
+    non-planar paths warn. The direction-tied cap turns with the bending
+    direction, and under rotating curvature its friction-stress ranges fall
+    below those of the distributed helix model (the message gives the
+    measured bias). The result of this release is the direction-tied one,
+    unchanged. Pass ``friction_model`` explicitly to keep the current
+    behaviour (``"direction_tied"``) or to take the coming one (``"auto"``)
+    without the warning.
     """
 
 

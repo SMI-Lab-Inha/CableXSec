@@ -3,12 +3,14 @@
 r"""Distributed elastic--Coulomb friction along the helix of one armour layer.
 
 Alternative to the direction-tied pointwise cap of
-:mod:`cablexsec.mechanics.fast_slip` (``friction_model="direction_tied"``,
-the default). Here the axial force of a wire is solved as a field along one
-pitch of its helix, with interface shear compliance and the Papailiou capstan
-bound, so that stick zones anchor the force distribution for arbitrary biaxial
+:mod:`cablexsec.mechanics.fast_slip` (``friction_model="direction_tied"``).
+Here the axial force of a wire is solved as a field along one pitch of its
+helix, with interface shear compliance and the Papailiou capstan bound, so
+that stick zones anchor the force distribution for arbitrary biaxial
 curvature histories. No bending direction is needed: the model has no
-held-direction rule.
+held-direction rule. The fatigue option ``friction_model="auto"`` uses it
+for every non-planar curvature path and the direction-tied cap for planar
+ones.
 
 Model (normalised; one wire on a rigid core, uniform curvature, periodic over
 one pitch, axial slip only)::
@@ -24,7 +26,8 @@ below slip the periodic solution is ``n = a xi cos(phi)``, i.e. the
 ``xi``-reduced stick stiffness of the package), ``lam = mu |sin a|`` (capstan
 bound on the signed force: a rising force raises its normal load, a falling
 one lowers it, as in [Papailiou1997] Eqs. 9-14 with the signed helix angle;
-``b`` is floored at zero; ``lam -> 0`` is the constant bound),
+``b`` is floored at zero; ``lam -> 0`` is the constant bound, available as
+``bound="uniform"``),
 ``rho = P(t) / P_ref`` the clamping-pressure ratio and ``g(phi)`` the
 optional azimuthal contact shape (periodic linear interpolation of
 ``shape_g``). The wire stress is
@@ -96,6 +99,7 @@ if TYPE_CHECKING:
     from cablexsec.mechanics.mkappa import HelicalLayerSpec
 
 __all__ = [
+    "BOUND_FORMS",
     "DEFAULT_MAX_INCREMENT",
     "DEFAULT_NODES_PER_WIRE",
     "FRICTION_MODELS",
@@ -107,8 +111,13 @@ __all__ = [
 
 FloatArray = NDArray[np.float64]
 
-#: Accepted values of the ``friction_model`` option of the fatigue path.
-FRICTION_MODELS = ("direction_tied", "distributed", "progressive")
+#: Accepted values of the ``friction_model`` option of the fatigue path
+#: (``"auto"`` is resolved per layer by :mod:`cablexsec.analysis.fatigue`).
+FRICTION_MODELS = ("direction_tied", "auto", "distributed", "progressive")
+#: Forms of the friction bound of the distributed model: ``"signed"`` (capstan
+#: term ``lam n`` on the signed bending force of the wire, the default) and
+#: ``"uniform"`` (no capstan term, ``b = rho g``).
+BOUND_FORMS = ("signed", "uniform")
 #: Default helix nodes per wire (``N = DEFAULT_NODES_PER_WIRE * n_wires``).
 DEFAULT_NODES_PER_WIRE = 4
 #: Default largest curvature increment per substep, in units of ``kappa_on``.
@@ -1095,6 +1104,7 @@ def distributed_friction_history(
     field_samples: NDArray[np.int64] | None = None,
     friction_law: FrictionLaw | None = None,
     time_s: FloatArray | None = None,
+    bound: str = "signed",
 ) -> DistributedFrictionHistory:
     """Friction stress of every wire from the distributed helix model [Pa].
 
@@ -1141,7 +1151,21 @@ def distributed_friction_history(
     time_s : numpy.ndarray, optional
         Sample times [s] for a finite positive healing time; each sample step
         is divided equally among its substeps.
+    bound : {"signed", "uniform"}, optional
+        Form of the friction bound. ``"signed"`` (default) is
+        ``b = rho g + lam n`` with the capstan term on the signed bending
+        force ``n`` of the wire (module notes). ``"uniform"`` drops the
+        capstan term, ``b = rho g``: the linear Coulomb bound of the clamping
+        alone, for sensitivity studies and for comparison with solvers that
+        carry a constant bound (:mod:`cablexsec.mechanics.clamp_layer`). The
+        stress unit ``sigma_0 lam`` and the slip-onset curvature are the same
+        in both forms. A bound on the total wire force (bending plus tension
+        share) is not offered: the clamping history ``P(t)`` that scales ``g``
+        already contains the radial load of the tension share, which a
+        capstan term on the tension share would count a second time.
     """
+    if bound not in BOUND_FORMS:
+        raise CableInputError(f"bound must be one of {BOUND_FORMS}, got {bound!r}")
     kx = np.ascontiguousarray(kappa_x, dtype=np.float64)
     ky = np.ascontiguousarray(kappa_y, dtype=np.float64)
     if (
@@ -1201,6 +1225,9 @@ def distributed_friction_history(
     n_w = int(spec.n_wires)
     width = 2.0 * math.pi * spec.r_helix_m / n_w
     lam = mu * sin_a
+    # Capstan coefficient of the bound (zero for the uniform bound); ``lam``
+    # itself also sets the stress unit sigma_0 lam of both forms.
+    capstan = lam if bound == "signed" else 0.0
     zero = xi == 0.0 or mu == 0.0 or sin_a < 1.0e-12 or p_ref <= 0.0
     sigma0 = (
         0.0
@@ -1219,6 +1246,7 @@ def distributed_friction_history(
         "xi": xi,
         "k_hat": math.inf if xi >= 1.0 else xi / (1.0 - xi),
         "lam": lam,
+        "bound": bound,
         "reference_pressure_Pa": p_ref,
         "stress_unit_Pa": stress_unit,
     }
@@ -1273,7 +1301,7 @@ def distributed_friction_history(
             ky / kappa_c,
             pressure / p_ref,
             khat,
-            lam,
+            capstan,
             gnode,
             0.0,
             xi,
@@ -1293,7 +1321,7 @@ def distributed_friction_history(
             ky / kappa_c,
             pressure / p_ref,
             khat,
-            lam,
+            capstan,
             gnode,
             0.0,
             xi,
@@ -1316,7 +1344,7 @@ def distributed_friction_history(
             ky / kappa_c,
             pressure / p_ref,
             khat,
-            lam,
+            capstan,
             gnode,
             0.0,
             xi,
@@ -1381,6 +1409,7 @@ def distributed_wire_friction_stress(
     max_increment: float = DEFAULT_MAX_INCREMENT,
     friction_law: FrictionLaw | None = None,
     time_s: FloatArray | None = None,
+    bound: str = "signed",
 ) -> FloatArray:
     """Friction stress [Pa], shape (wires, samples); see
     :func:`distributed_friction_history`."""
@@ -1394,4 +1423,5 @@ def distributed_wire_friction_stress(
         max_increment=max_increment,
         friction_law=friction_law,
         time_s=time_s,
+        bound=bound,
     ).stress_Pa

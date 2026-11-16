@@ -187,7 +187,7 @@ gives `T_e − p_o A_o`, and use `fatigue_from_series`.
 
 <!-- tutorial-output -->
 ```text
-warnings: MissingClampingStateWarning
+warnings: DirectionTiedFrictionWarning, MissingClampingStateWarning
 inner_armour: 139 wires, damage 7.749e-09 to 1.388e-08, largest on wire 70 at 181.3 deg, fibre 180.00 deg
 outer_armour: 145 wires, damage 7.462e-09 to 8.927e-09, largest on wire 73 at 181.2 deg, fibre 180.00 deg
 governing: inner_armour, wire at 181.3 deg, fibre 180.00 deg (bulk damage)
@@ -213,6 +213,12 @@ The 66 kV template declares zero {term}`manufacturing clamping` because its sour
 publishes none, and the run says so with `MissingClampingStateWarning`. The
 armour friction then comes from the tension alone, so the friction stresses
 and damages sit at their low end (Section 4.4 of the local analysis guide).
+
+`DirectionTiedFrictionWarning` announces a change of default: the record
+bends the cable in more than one plane, and the next release will solve such
+records with `friction_model="auto"`, the distributed helix friction model,
+instead of the direction-tied law used here (Section 9 of the local analysis
+guide). Pass `friction_model` explicitly to choose the law and silence it.
 
 ```{figure} figures/tutorial_03_damage_circumference.png
 :alt: Miner damage of every inner and outer armour wire against its azimuth.

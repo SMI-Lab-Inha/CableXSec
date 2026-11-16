@@ -797,11 +797,36 @@ def wire_slip_history(
     ``pi / 4`` for any ``lam``. The direction-tied work is thus 0.57 of the
     distributed work at large amplitude, and less closer to slip onset (0.16
     at twice the onset and 0.39 at eight times on the 66 kV template). The
-    per-wire stress ranges, which fatigue uses, agree with the distributed
-    model within 10 % on the same orbits: the cap bounds the stress amplitude
-    much as the distributed bound does, but narrows the stress-drive loop of
-    each wire. Frictional heat uses the distributed dissipation
+    per-wire stress ranges, which fatigue uses, are also low on such orbits:
+    at twice the slip onset the largest one is 0.94 of the distributed model's
+    on the template interface of the 66 kV inner armour (``xi = 0.81``) and
+    0.86 on a near-rigid one (``xi = 0.99``), and 0.97 to 1.00 at eight times
+    the onset. On planar and flat elliptical paths (minor over major axis up
+    to about 0.3) they are at or above the distributed ranges instead.
+    :func:`~cablexsec.analysis.fatigue.compute_fatigue` therefore offers
+    ``friction_model="auto"``, which takes the distributed model for every
+    such path and becomes its default in the next release; until then its
+    default (this law) warns on a non-planar path
+    (:class:`~cablexsec.provenance.DirectionTiedFrictionWarning`).
+    Frictional heat uses the distributed dissipation
     (:func:`~cablexsec.analysis.thermal_coupling.record_friction_work`).
+
+    Pitch mean. The bounds integrate the capstan growth from the neutral
+    axis, where the friction stress is zero ([Papailiou1997] Eq. 14). In
+    planar full slip the stress of a wire at the azimuth ``x`` from the
+    neutral axis toward tension is ``sigma_0 (exp(lam x) - 1)`` on both sides,
+    whose mean over the pitch is ``sigma_0 (sinh(x0)/x0 - 1)``,
+    ``x0 = lam pi / 2``: ``lam pi / 12`` of the peak tensile friction stress
+    to leading order (1.1 % on the 66 kV inner armour, 0.054 MPa), whereas
+    the periodic friction field of a uniformly bent pitch has zero mean (the
+    distributed model, ``sigma_0 (C exp(lam x) - 1)``). The offset is kept: a
+    zero-mean condition couples the wires of a layer, which the independent
+    spring-sliders of this model do not, and a uniform shift that removed it
+    would move the wire stresses out of their own bounds. Its effect is
+    small: it leaves the moment unchanged (the wires are equally spaced), it
+    changes the largest per-wire stress range by less than 1e-4 (66 kV
+    template, planar, one-sided and rotating cycles from twice to 32 times
+    the onset) and it raises the mean stress of every wire by the offset.
 
     Friction law. ``friction_law``
     (:class:`~cablexsec.mechanics.friction_law.FrictionLaw`) scales the
