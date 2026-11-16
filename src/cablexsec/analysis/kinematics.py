@@ -62,7 +62,11 @@ curvature.
 The distributed law solves the displacement ``u`` and the slip ``p`` along the
 helix itself (:mod:`cablexsec.mechanics.distributed_friction`); its nodal slip
 ``p`` (the Coulomb part of ``u``) is taken as it is, in metres
-(``parameters["length_unit_m"]``), with no reconstruction.
+(``parameters["length_unit_m"]``), with no reconstruction. Over an increment
+in which every node slips, the law itself keeps the pitch mean of the slip
+(or comes as near to it as the slip directions allow), as above for the
+pointwise laws when no station sticks: its equations leave that slide free
+(module notes of the law).
 
 A station is slipping at a sample when its slip changed over the step to that
 sample (the plastic drive, or the distributed nodal slip).
