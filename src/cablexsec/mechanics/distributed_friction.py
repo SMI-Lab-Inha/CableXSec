@@ -87,6 +87,7 @@ from cablexsec._numba import HAVE_NUMBA, njit
 from cablexsec.exceptions import CableInputError
 from cablexsec.mechanics.friction_law import (
     FrictionLaw,
+    _pressure_factor,
     active_friction_law,
     friction_law_time_steps,
 )
@@ -550,6 +551,8 @@ def _advance(
     mfac: FloatArray,
     law: FloatArray,
     lstate: FloatArray,
+    ptab: FloatArray,
+    p_ref: float,
 ) -> bool:
     """One backward-Euler increment to ``(ax, ay, rho)``; False on failure.
 
@@ -564,6 +567,10 @@ def _advance(
     traction leaves its static bound breaks away: its factor becomes ``m_d``
     and the increment is solved again, until no node breaks away (each node
     at most once per increment).
+
+    ``ptab`` (rows ``[P, f]``, shape (2, K); K = 0 for none) is the pressure
+    factor of the law: node ``j`` carries ``m_j f(p_ref rho g_j)`` on its
+    bound, with the pressure of the end of the increment.
     """
     n = u.size
     y = work[0]
@@ -586,6 +593,16 @@ def _advance(
     prev = work[17]
     broke = work[18]
     bend = work[19]
+    meff = work[20]
+    pfac = work[21]
+    has_table = ptab.shape[1] > 0
+    for j in range(n):
+        if has_table:
+            pfac[j] = _pressure_factor(p_ref * rho * gnode[j], ptab)
+            meff[j] = mfac[j] * pfac[j]
+        else:
+            pfac[j] = 1.0
+            meff[j] = mfac[j]
     # Residual scale: the largest term entering the force differences.
     scale = 1.0
     for j in range(n):
@@ -636,7 +653,7 @@ def _advance(
             ncur,
             stats,
             capstan_newton,
-            mfac,
+            meff,
         ):
             return False
         if not law_on:
@@ -645,11 +662,12 @@ def _advance(
         for j in range(n):
             if lstate[0, j] != 0.0:
                 jm = j - 1 if j > 0 else n - 1
-                bj = mfac[j] * (rho * gnode[j] + lam * 0.5 * (ncur[j] + ncur[jm]))
+                bj = meff[j] * (rho * gnode[j] + lam * 0.5 * (ncur[j] + ncur[jm]))
                 if bj < 0.0:
                     bj = 0.0
                 if abs(khat * (z0[j] + v[j])) > bj:
                     mfac[j] = law[2]
+                    meff[j] = mfac[j] * pfac[j] if has_table else mfac[j]
                     lstate[0, j] = 0.0
                     broke[j] = 1.0
                     changed = True
@@ -660,7 +678,7 @@ def _advance(
     rem = 0.0
     for j in range(n):
         jm = j - 1 if j > 0 else n - 1
-        bj = mfac[j] * (rho * gnode[j] + lam * 0.5 * (ncur[j] + ncur[jm]))
+        bj = meff[j] * (rho * gnode[j] + lam * 0.5 * (ncur[j] + ncur[jm]))
         if bj < 0.0:
             bj = 0.0
         bend[j] = bj
@@ -825,6 +843,8 @@ def _distributed_kernel(
     kinematics: FloatArray | None = None,
     law: FloatArray | None = None,
     dt_path: FloatArray | None = None,
+    ptab: FloatArray | None = None,
+    p_ref: float = 0.0,
 ) -> tuple[FloatArray, FloatArray, FloatArray, NDArray[np.int64], FloatArray]:
     """Normalised wire force history.
 
@@ -842,7 +862,9 @@ def _distributed_kernel(
     ``law`` = ``[m_s, m_d, t_stick]`` (static and dynamic factors, healing
     time) and ``dt_path`` (the duration of every sample step, divided equally
     among its substeps) switch on the static/dynamic friction law; ``None``
-    keeps a unit factor on every node.
+    keeps a unit factor on every node. ``ptab`` (rows ``[P, f]``) and the
+    reference pressure ``p_ref`` [Pa] add the pressure factor of the law at
+    every node's local pressure ``p_ref rho g_j``.
     """
     n = gnode.size
     h = 2.0 * math.pi / n
@@ -863,7 +885,10 @@ def _distributed_kernel(
     snf = np.empty(n)
     stau = np.empty(n)
     se = np.empty(n)
-    work = np.zeros((20, n))
+    work = np.zeros((22, n))
+    table = np.zeros((2, 0))
+    if ptab is not None:
+        table = ptab
     mfac = np.ones(n)
     smfac = np.ones(n)
     lstate = np.zeros((2, n))
@@ -936,6 +961,8 @@ def _distributed_kernel(
                     mfac,
                     lparams,
                     lstate,
+                    table,
+                    p_ref,
                 ):
                     ok = False
                     break
@@ -1106,9 +1133,11 @@ def distributed_friction_history(
         ``m (rho g + lam n)`` and its own stick timer. A healed node whose
         trial traction leaves its static bound breaks away and the increment
         is solved again with the dynamic factor (each node at most once per
-        increment). Rate-dependent terms are not implemented for this model
-        and are refused. ``None`` or a neutral law is the rate-independent
-        model, bit for bit.
+        increment). A pressure factor multiplies each node's bound at its
+        local pressure ``P g(phi)`` (``P`` the sample's clamping pressure,
+        linear within substeps). Rate-dependent terms are not implemented for
+        this model and are refused. ``None`` or a neutral law is the
+        rate-independent model, bit for bit.
     time_s : numpy.ndarray, optional
         Sample times [s] for a finite positive healing time; each sample step
         is divided equally among its substeps.
@@ -1300,6 +1329,8 @@ def distributed_friction_history(
             np.zeros((0, 4, n_nodes)) if kinematics is None else kinematics,
             np.array([law.static_factor, law.dynamic_factor, law.stick_time_s]),
             np.zeros(count) if steps is None else steps,
+            law.pressure_table,
+            p_ref,
         )
     if stats[0] != 0:
         raise CableInputError(

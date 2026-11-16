@@ -45,6 +45,7 @@ registered measured comparisons listed in [`VALIDATION.md`](../VALIDATION.md#sum
 | `check_torque_balance.py` | Torque balance against Feyrer, Knapp, Kim and Lee, and Utting and Jones |
 | `check_fretting_regime.py`, `run_fretting_regime.py` | Fretting regime, Mindlin energy and wear checks |
 | `periodic_friction_cell.py`, `periodic_shear_cell.py` | Independent spatial references: a helical rod on frictional support and a finite-element check of the elastic shear support |
+| `check_dai2018_friction.py`, `digitise_dai2018_fig4.py` | Static/dynamic friction law against the measured wire-on-tape loops of Dai, Sævik and Ye (2018), and the digitisation of those loops (DAI18 rows) |
 | `slider_initial_work.py` | Exact path-work bounds for an elastic–Coulomb slider with an unknown initial force |
 | `transverse_friction_cell.py`, `transverse_friction_runs.py` | Helical rod on elastic support with two-component Coulomb friction, and the same-cable comparison of contact-level and section-level bending work |
 | `radial_foundation_fd.py` | Independent periodic finite-difference solution of a unilateral radial ring |

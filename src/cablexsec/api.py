@@ -774,9 +774,11 @@ def compute_mkappa(
         (:class:`~cablexsec.mechanics.friction_law.FrictionLaw`) of every
         armour wire: a static factor until a wire slips, a dynamic factor
         while it slips and after it until it has stuck for the healing time,
-        and a logarithmic and viscous rate term. Only with the
-        direction-tied law and without ``core_friction``. ``work`` then
-        carries the rate-dependent dissipation in ``viscous_J_per_m``.
+        and a logarithmic and viscous rate term, and a factor on the
+        coefficient as a function of the local contact pressure
+        (``pressure_factor``, evaluated at each sample's ``P1+P2``). Only
+        with the direction-tied law and without ``core_friction``. ``work``
+        then carries the rate-dependent dissipation in ``viscous_J_per_m``.
         ``None`` (default) or a neutral law is the rate-independent law, bit
         for bit.
     time_s : numpy.ndarray, optional
@@ -2130,9 +2132,10 @@ def compute_fatigue(
         sample times ``time_s`` when it depends on time: the direction-tied
         model takes every option, the distributed model the static/dynamic
         option; refused with the progressive model and a termination
-        correction. The crossing contact-life branches keep their
-        rate-independent coefficient. ``None`` (default) or a neutral law
-        gives the earlier result, bit for bit.
+        correction. A pressure factor of the law follows the contact pressure
+        of every sample (both models). The crossing contact-life branches keep
+        their rate-independent coefficient. ``None`` (default) or a neutral
+        law gives the earlier result, bit for bit.
 
     Returns
     -------

@@ -1,12 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 Jae Hoon Seo, SMI Lab, Inha University
-r"""State- and rate-dependent friction coefficient of the armour slip kernels.
+r"""State-, rate- and pressure-dependent friction coefficient of the armour
+slip kernels.
 
 The slip kernels of the package use one rate-independent Coulomb coefficient
 ``mu`` per contact pair. A :class:`FrictionLaw` replaces it by an effective
 coefficient ``m mu`` with a dimensionless factor ``m`` that depends on the
 slip state and the slip rate of every wire (direction-tied kernel) or helix
-node (distributed kernel). The factor multiplies the coefficient where the
+node (distributed kernel), and optionally by a factor ``f(P)`` of the local
+contact pressure (below). The factor multiplies the coefficient where the
 kernel applies it: inside the capstan exponent of the direction-tied bounds
 (``sigma_0 g expm1(m lam psi)`` and ``sigma_0 g (1 - exp(-m lam psi))``,
 :func:`~cablexsec.mechanics.papailiou.wire_slip_stress_bounds`) and on the
@@ -76,8 +78,28 @@ rising). The stress-free start lies one sampling interval ``time_s[1] -
 time_s[0]`` before the first sample. Entry points without a time base
 refuse such a law.
 
-Neutral parameters (``m_s = m_d = 1``, ``c = 0``, ``v_eta = inf``) leave
-every kernel on its rate-independent code path, bit for bit.
+Contact-pressure dependence
+---------------------------
+Measured coefficients of armour wire on anti-wear tape fall with the contact
+pressure (Dai, Sævik and Ye, Marine Structures 59 (2018) 423-443, Sec. 4.1,
+p. 428: ``mu_d`` 0.32, 0.20 and 0.18 at 1, 4 and 8 MPa). ``pressure_factor``
+is a table of ``(P, f)`` pairs: a further factor ``f(P)`` on the coefficient,
+piecewise linear in the local friction-setting pressure ``P`` and clamped to
+the end values outside the table. It multiplies the coefficient where the
+static, dynamic and rate factors do, so that the effective coefficient is
+``m f(P) mu``. ``P`` is the pressure with which the kernel evaluates the bound
+at that sample: ``(P1 + P2) g`` of the wire (direction-tied kernel, ``g`` the
+contact shape of the wire) or of the helix node (distributed kernel), the sum
+of the two face pressures of the armour layer. A rig that presses one wire
+between two faces at the same pressure ``p`` therefore has ``P = 2 p``. Where
+``P1`` and ``P2`` differ, one factor at their sum stands for the two faces;
+it is exact for equal faces or a linear factor. The factor is rate
+independent and needs no time base. Zero contact pressure gives a zero bound
+whatever the factor.
+
+Neutral parameters (``m_s = m_d = 1``, ``c = 0``, ``v_eta = inf``, no
+pressure factor) leave every kernel on its rate-independent code path, bit
+for bit.
 """
 
 from __future__ import annotations
@@ -114,7 +136,8 @@ _BRACKET = 4.0e-16
 
 @dataclass(frozen=True)
 class FrictionLaw:
-    """Static/dynamic and rate-dependent friction coefficient (module notes).
+    """Static/dynamic, rate- and pressure-dependent friction coefficient
+    (module notes).
 
     Parameters
     ----------
@@ -133,6 +156,13 @@ class FrictionLaw:
     viscous_velocity_m_per_s : float
         ``v_eta > 0`` [m/s] of the viscous term (``eta = b / v_eta``);
         ``inf`` (default) has no viscous term.
+    pressure_factor : sequence of (float, float), optional
+        ``(P [Pa], f)`` pairs of the factor ``f(P)`` on the coefficient at the
+        local friction-setting pressure ``P = (P1 + P2) g`` (module notes):
+        at least two pairs, pressures finite, non-negative and strictly
+        rising, factors finite and positive; piecewise linear, clamped to the
+        end factors outside the table. ``None`` (default) or a table of unit
+        factors has no pressure dependence.
     """
 
     static_factor: float = 1.0
@@ -141,8 +171,12 @@ class FrictionLaw:
     rate_coefficient: float = 0.0
     rate_reference_m_per_s: float = 1.0e-3
     viscous_velocity_m_per_s: float = math.inf
+    pressure_factor: tuple[tuple[float, float], ...] | None = None
 
     def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "pressure_factor", _checked_pressure_table(self.pressure_factor)
+        )
         values = {}
         for name in (
             "static_factor",
@@ -192,13 +226,26 @@ class FrictionLaw:
         )
 
     @property
-    def is_neutral(self) -> bool:
-        """True when the law reproduces the rate-independent coefficient."""
+    def pressure_dependent(self) -> bool:
+        """True when the pressure factor is not identically one."""
+        return self.pressure_factor is not None and any(
+            f != 1.0 for _, f in self.pressure_factor
+        )
+
+    @property
+    def coefficient_neutral(self) -> bool:
+        """True when the static, dynamic and rate factors are all one (the
+        pressure factor aside)."""
         return (
             self.static_factor == 1.0
             and self.dynamic_factor == 1.0
             and not self.rate_dependent
         )
+
+    @property
+    def is_neutral(self) -> bool:
+        """True when the law reproduces the rate-independent coefficient."""
+        return self.coefficient_neutral and not self.pressure_dependent
 
     @property
     def needs_time(self) -> bool:
@@ -208,8 +255,32 @@ class FrictionLaw:
 
     @property
     def minimum_factor(self) -> float:
-        """Smallest factor the law can give (``R >= 1``)."""
-        return min(self.static_factor, self.dynamic_factor)
+        """Smallest factor the law can give (``R >= 1``), the pressure factor
+        included."""
+        smallest = min(self.static_factor, self.dynamic_factor)
+        if self.pressure_dependent:
+            assert self.pressure_factor is not None
+            smallest *= min(f for _, f in self.pressure_factor)
+        return smallest
+
+    @property
+    def pressure_table(self) -> FloatArray:
+        """The pressure factor as rows ``[P, f]``, shape (2, K); (2, 0) when
+        there is no pressure dependence (kernel argument)."""
+        if not self.pressure_dependent:
+            return np.zeros((2, 0))
+        assert self.pressure_factor is not None
+        return np.ascontiguousarray(np.array(self.pressure_factor, dtype=np.float64).T)
+
+    def pressure_factor_at(self, pressure_Pa: float | FloatArray) -> FloatArray:
+        """``f(P)`` at the local friction-setting pressure ``P`` [Pa]: linear
+        between the table points, the end factors outside (one without a
+        table)."""
+        p = np.asarray(pressure_Pa, dtype=np.float64)
+        table = self.pressure_table
+        if not table.shape[1]:
+            return np.ones_like(p)
+        return np.asarray(np.interp(p, table[0], table[1]))
 
     @property
     def inverse_viscous_velocity(self) -> float:
@@ -242,7 +313,46 @@ class FrictionLaw:
             parts.append(
                 f"viscous term eta = b / {self.viscous_velocity_m_per_s:g} m/s"
             )
+        if self.pressure_dependent:
+            assert self.pressure_factor is not None
+            points = ", ".join(
+                f"{f:g} at {p / 1e6:g} MPa" for p, f in self.pressure_factor
+            )
+            parts.append(
+                f"pressure factor on P1+P2 (piecewise linear, clamped): {points}"
+            )
         return "; ".join(parts) if parts else "neutral (rate-independent Coulomb)"
+
+
+def _checked_pressure_table(
+    table: object,
+) -> tuple[tuple[float, float], ...] | None:
+    """The pressure factor as a tuple of ``(P, f)`` float pairs (checked)."""
+    if table is None:
+        return None
+    if isinstance(table, (str, bytes)) or np.iscomplexobj(table):
+        raise CableInputError("friction law pressure_factor must be (P, f) pairs")
+    try:
+        rows = np.asarray(table, dtype=np.float64)
+    except (TypeError, ValueError) as error:
+        raise CableInputError(
+            "friction law pressure_factor must be (P, f) pairs of real numbers"
+        ) from error
+    if rows.ndim != 2 or rows.shape[1] != 2 or rows.shape[0] < 2:
+        raise CableInputError(
+            "friction law pressure_factor needs at least two (P, f) pairs"
+        )
+    pressure, factor = rows[:, 0], rows[:, 1]
+    if not np.isfinite(rows).all():
+        raise CableInputError("friction law pressure_factor must be finite")
+    if np.any(pressure < 0.0) or np.any(np.diff(pressure) <= 0.0):
+        raise CableInputError(
+            "friction law pressure_factor pressures must be non-negative and rise "
+            "strictly"
+        )
+    if np.any(factor <= 0.0):
+        raise CableInputError("friction law pressure_factor factors must be positive")
+    return tuple((float(p), float(f)) for p, f in rows)
 
 
 def active_friction_law(friction_law: FrictionLaw | None) -> FrictionLaw | None:
@@ -296,6 +406,30 @@ def friction_law_time_steps(
 @njit(cache=True)
 def _em1(y: float) -> float:
     return math.expm1(min(y, _EXP_LIMIT))
+
+
+@njit(cache=True)
+def _pressure_factor(p: float, table: FloatArray) -> float:
+    """``f(p)`` of a pressure table (rows ``[P, f]``, shape (2, K)): linear
+    between the points (the interpolation formula of ``numpy.interp``),
+    clamped outside; one for an empty table."""
+    count = table.shape[1]
+    if count == 0:
+        return 1.0
+    if p <= table[0, 0]:
+        return float(table[1, 0])
+    if p >= table[0, count - 1]:
+        return float(table[1, count - 1])
+    lo = 0
+    hi = count - 1
+    while hi - lo > 1:
+        mid = (lo + hi) // 2
+        if table[0, mid] <= p:
+            lo = mid
+        else:
+            hi = mid
+    slope = (table[1, hi] - table[1, lo]) / (table[0, hi] - table[0, lo])
+    return float(slope * (p - table[0, lo]) + table[1, lo])
 
 
 @njit(cache=True)
@@ -637,6 +771,7 @@ def slider_history(
     *,
     friction_law: FrictionLaw | None = None,
     time_s: FloatArray | None = None,
+    contact_pressure_Pa: float | FloatArray | None = None,
 ) -> SliderHistory:
     """One elastic spring in series with a slider under the friction law.
 
@@ -646,6 +781,12 @@ def slider_history(
     viscous term ``f = m_d b sign(v) + (b / v_eta) v`` in slip. The return
     map is the one of the armour kernels (module notes), here with a bound
     linear in the factor. ``None`` is the rate-independent slider.
+
+    ``contact_pressure_Pa`` (constant or per sample, the local pressure ``P``
+    of the module notes) is required by a law with a pressure factor and
+    refused without one: the bound of each sample is then ``f(P) b``, with
+    ``b`` the bound at the coefficient ``mu`` (it carries the normal force,
+    so a pressure history changes ``b`` and ``f(P)`` together).
     """
     if np.iscomplexobj(displacement_m):
         raise CableInputError("displacement must be real")
@@ -664,6 +805,28 @@ def slider_history(
     steps = friction_law_time_steps(law, time_s, drive.size)
     if law is None:
         law = FrictionLaw()
+    if law.pressure_dependent:
+        if contact_pressure_Pa is None:
+            raise CableInputError(
+                "this friction law has a pressure factor: give contact_pressure_Pa"
+            )
+        if np.iscomplexobj(contact_pressure_Pa):
+            raise CableInputError("contact_pressure_Pa must be real")
+        try:
+            pressure = np.broadcast_to(
+                np.asarray(contact_pressure_Pa, dtype=np.float64), drive.shape
+            )
+        except ValueError as error:
+            raise CableInputError(
+                "contact_pressure_Pa must be a constant or one value per sample"
+            ) from error
+        if not np.isfinite(pressure).all() or np.any(pressure < 0.0):
+            raise CableInputError("contact_pressure_Pa must be finite and non-negative")
+        bound = np.ascontiguousarray(bound * law.pressure_factor_at(pressure))
+    elif contact_pressure_Pa is not None:
+        raise CableInputError(
+            "contact_pressure_Pa is used only by a friction law with a pressure factor"
+        )
     dt = np.ones(drive.size) if steps is None else steps
     force, slip, fric, visc, rem = _slider_kernel(
         drive,

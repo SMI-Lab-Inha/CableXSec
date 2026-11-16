@@ -1244,11 +1244,11 @@ def compute_fatigue(
     friction_law : FrictionLaw, optional
         Static/dynamic and rate-dependent armour friction coefficient
         (:class:`~cablexsec.mechanics.friction_law.FrictionLaw`), for the
-        direction-tied model and (static/dynamic only) the distributed model;
-        refused with the progressive model and a termination correction. The
-        contact-life branches keep their own rate-independent crossing
-        contact. ``None`` (default) or a neutral law gives the earlier
-        result, bit for bit.
+        direction-tied model and (static/dynamic and pressure factor only)
+        the distributed model; refused with the progressive model and a
+        termination correction. The contact-life branches keep their own
+        rate-independent crossing contact. ``None`` (default) or a neutral
+        law gives the earlier result, bit for bit.
     time_s : numpy.ndarray, optional
         Sample times [s] of the history, required by a law that depends on
         time (slip rate or a finite healing time).
@@ -1755,8 +1755,10 @@ def compute_fatigue(
             gates=(*prov.gates, "tests/test_friction_law.py"),
             limitations=(
                 *prov.limitations,
-                "friction law: no rate-dependent or static/dynamic friction data "
-                "of armour interfaces is in the validation set; the slip rate of "
+                "friction law: the static/dynamic law is compared with measured "
+                "wire-on-tape friction loops on one spring-slider only (DAI18 "
+                "rows, doc/benchmarks.md), not on a cable section; no rate law "
+                "of armour friction is in the validation set; the slip rate of "
                 "the direction-tied kernel is a representative wire value "
                 "(r / |sin a| times the plastic strain rate); the crossing "
                 "contact branches keep the rate-independent coefficient",

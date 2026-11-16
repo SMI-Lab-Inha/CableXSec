@@ -185,6 +185,30 @@ def active_overlay() -> MaterialOverlay | None:
 # This module-level mapping IS the designated data store for material
 # constants; the literal values here are data, not magic numbers in code.
 # ---------------------------------------------------------------------------
+#: Provenance of the 0.20 armour-on-anti-wear-tape coefficient. Dai, Saevik
+#: and Ye, Marine Structures 55 (2017) 137-161, doi
+#: 10.1016/j.marstruc.2017.05.010, Sec. 4.3.1, p. 156: "The friction
+#: coefficient between anti-wear tape and inner armor, and between two layers
+#: of steel armors was estimated to be 0.20 at 20 MPa internal pressure, see
+#: Saevik [21]" ([21] the 1992 thesis). Dai, Saevik and Ye, Marine Structures
+#: 59 (2018) 423-443, Sec. 4.1, p. 428: at that internal pressure the contact
+#: pressure is 4 MPa (inner wire on tape) and 2 MPa (outer wire on tape), and
+#: the measured dynamic (static) coefficient of armour wire on in-service tape
+#: is 0.32 (0.38) at 1 MPa, 0.20 (0.24) at 4 MPa and 0.18 (0.22) at 8 MPa.
+_DAI2017_ANTIWEAR_TAPE = (
+    "[DaiSaevikYe2017] Sec. 4.3.1, p. 156: 0.20 estimated between anti-wear tape "
+    "and inner armour and between two steel armour layers 'at 20 MPa internal "
+    "pressure', quoted from [Saevik1992]; an anti-wear tape interface, not HDPE. "
+    "The contact pressure at that internal pressure is 2-4 MPa; the measured "
+    "mu_d of armour wire on in-service tape is 0.32, 0.20 and 0.18 at 1, 4 and "
+    "8 MPa ([DaiSaevikYe2018] Sec. 4.1, p. 428)"
+)
+_DAI2017_STEEL = (
+    "[DaiSaevikYe2017] Sec. 4.3.1, p. 156: 0.20 estimated between two steel "
+    "armour layers (and between anti-wear tape and inner armour) 'at 20 MPa "
+    "internal pressure', quoted from [Saevik1992]"
+)
+
 MATERIALS: dict[str, Material] = {
     "galvanised_steel_armour": {
         "E_Pa": (210.0e9, "[DNVGL-ST-0359] Table 4-1"),
@@ -195,10 +219,12 @@ MATERIALS: dict[str, Material] = {
         "alpha_T_K": (12.0e-6, "[DNVGL-ST-0359]"),
         "lambda_W_mK": (50.0, "Standard steel"),
         "rho_cp_J_m3K": (3.76e6, "Standard steel"),
+        # Interface: armour wire on a polymer anti-wear tape (not measured on
+        # HDPE). The 20 MPa is the internal pressure of the full-scale test,
+        # not a contact pressure.
         "mu_on_hdpe": (
             0.20,
-            "[Saevik1992] steel on anti-wear tape at 20 MPa, as reported by "
-            "[DaiSaevikYe2017] Sec. 4.3",
+            _DAI2017_ANTIWEAR_TAPE,
         ),
         "mu_on_steel": (
             0.12,
@@ -494,9 +520,10 @@ MATERIALS: dict[str, Material] = {
     # sheath) is identified so that the full-slip EI_min of saevik2011.yaml
     # equals the tabulated "elastic bending stiffness (20 degC)" of 72.8 kN m2
     # ([Saevik2011] Table 1), a section property independent of the compared
-    # armour stresses. Friction 0.20: steel against anti-wear tape and steel
-    # against steel at 20 MPa internal pressure, [Saevik1992] as reported by
-    # [DaiSaevikYe2017] Sec. 4.3; not identified on this test.
+    # armour stresses. Friction 0.20: the estimate between anti-wear tape and
+    # inner armour and between two steel armour layers "at 20 MPa internal
+    # pressure" of [DaiSaevikYe2017] Sec. 4.3.1, p. 156, quoted from
+    # [Saevik1992] (_DAI2017_ANTIWEAR_TAPE); not identified on this test.
     "steel_saevik2011": {
         "E_Pa": (
             207.0e9,
@@ -508,16 +535,8 @@ MATERIALS: dict[str, Material] = {
             1400.0e6,
             "[ModelAssumption] as galvanised_steel_armour; not in [Saevik2011]",
         ),
-        "mu_on_hdpe": (
-            0.20,
-            "[Saevik1992] steel on anti-wear tape at 20 MPa, as reported by "
-            "[DaiSaevikYe2017] Sec. 4.3",
-        ),
-        "mu_on_steel": (
-            0.20,
-            "[Saevik1992] steel on steel at 20 MPa, as reported by "
-            "[DaiSaevikYe2017] Sec. 4.3",
-        ),
+        "mu_on_hdpe": (0.20, _DAI2017_ANTIWEAR_TAPE),
+        "mu_on_steel": (0.20, _DAI2017_STEEL),
     },
     "polymer_saevik2011": {
         "E_Pa": (

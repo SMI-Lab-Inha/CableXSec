@@ -27,6 +27,7 @@ Every row is computed from published data or closed-form references in this repo
 | 1 | M-rec-3core | Cross-engine moment vs compute_mkappa with offset-core geometry and shared mean armour pressure | < 2% | 0.000% | PASS |
 | 1 | MK-Tcyc | compute_mkappa with a tension history cycling within the bending cycles vs the fatigue-path friction stress on the same history; work balance under the changing friction bound | < 1e-12 relative; < 1e-12 relative | 3.4e-16; 1.1e-15 | PASS |
 | 1 | MX-scale | Exported law with a slip scaling variable: compute_mkappa at T2 vs the T1 law with the bound scaled (66 kV, cores included); group elements at T2 vs the T1 elements with yield curvatures scaled (Menard, two layers); tension cycle inside the bending cycles, scaled law vs the contact-tension history over the fixed-tension Iwan residual | < 1e-12 relative; < 1e-9 relative; ratio <= 1.25 | 4.1e-16; 8.3e-14; 1.02 | PASS |
+| 1 | FL-P | Pressure-dependent friction coefficient (FrictionLaw.pressure_factor): spring-slider under pressure steps vs closed form; compiled vs NumPy direction-tied kernel under a pressure history (static/dynamic law, local pressures across the table); work balance | < 1e-9 relative; < 1e-9 relative; < 1e-9 relative | 3.0e-16; 8.7e-16; 2.5e-15 | PASS |
 | 1 | slip-onset | First-to-slip wire at the neutral axis (|cos| → 0, compression side at psi ≈ 3 lam/2; Raoof/Papailiou, not extreme-fibre loop) | |cos| < 0.2 | |cos|=0.156 | PASS |
 | 1 | xsec-K | Coupling tangent bounds (κ→0=EI_max, κ→∞=EI_min); slip-front local slope | < 0.01% | κ0:3.16e-14% / κ∞:5.99e-13% | PASS |
 | 1 | QP-KKT | Concentric contact max|normal line force times gap| (common extension, twist and radial equilibrium) | < 1e-8 N | 1.9e-13 (q>=0: True) | PASS |
@@ -57,14 +58,18 @@ Every row is computed from published data or closed-form references in this repo
 | 2 | WITZ-ID | Witz (1996) 300-bar loop predicted after p0 identified on the 0-bar width at kappa = 0 (mu = 0.10 declared) | width within [1692, 2489] N·m and energy within 15% of 3125 J/m | p0 1.071 MPa (YAML 1.071); 0-bar energy 1114 vs 1118 J/m; 300-bar width 1356 vs [1990, 2164] N·m (-31.8% / -37.3%), energy 2682 J/m (-14.2%) | FAIL |
 | 2 | SV11-PLANE | Sævik (2011) Figs 17-23, 14 load cases: normalised inner-armour axial stress range at the 8 bending-plane FBG stations, termination-corrected prediction, mu = 0.20 declared | median R in [0.85, 1.18] and >= 12 of 14 R in [0.70, 1.43] (R = mean predicted / mean measured, bending-plane stations) | median R 1.62 (0.45-3.59), 3 of 14 in band; sectional median 1.00 (0.45-2.17), 11 of 14 | FAIL |
 | 2 | SV11-GJ | Gjøsteen et al. (2027) Figs 27-35, LC 14 at +-8 deg: absolute axial range at stations 2.1, 2.5, 3.1, 3.5, termination-corrected, mu = 0.20 | mean ratio in [0.72, 1.38] | 1.80 (sectional 1.24); static stress 271 MPa | FAIL |
+| 2 | DAI18-DIG | Dai et al. (2018) Fig. 4a, Test 1 (armour wire on anti-wear tape, 8/4/1 MPa), digitised: loop maximum vs printed mu_s 0.22/0.24/0.38 (p. 428) | within 0.005 (printed precision) + reading resolution | 0.2237/0.2405/0.3786 (largest deviation 0.0037 vs 0.0071) | PASS |
+| 2 | DAI18-RS | Dai et al. (2018) Fig. 4a/4c, 7 loops: re-stick peak above the dynamic level at every reversal; spring-slider (FrictionLaw static_factor = mu_s/mu_d) with stick_time_s = 0 vs the default inf, third cycle | excess > 5 reading resolutions on all 14 measured strokes; stick_time_s = 0 on all 14; inf on none | measured 14/14 (excess 0.039-0.094); stick_time_s = 0 14/14; inf 0/14 | PASS |
+| 2 | DAI18-T1 | Dai et al. (2018) Test 1 loops vs spring-slider with the printed mu_s/mu_d, stick_time_s = 0 and each loop's stick slope (last 0.5 mm before each reversal excluded): peak and dynamic level (+x/-x stroke), stroke work; decay and peak position, Tests 1 and 3 | stated, not gated | 8 MPa: peak -1.8/-0.8%, level +0.1/+4.7%, work -2.6%; 4 MPa: peak -0.4/+0.6%, level -1.0/+6.6%, work -1.9%; 1 MPa: peak +1.0/+0.2%, level -3.3/+12.3%, work -2.1%; decay to 10% of peak-level 0.6-2.3 mm (model: one step); peak 1.4-2.5x the slider's elastic travel from the reversal | INFO |
+| 2 | DAI18-T3 | Dai et al. (2018) Test 3 (4 MPa, groove track, 0.01-0.2 Hz) vs the rate-independent spring-slider with the 0.01 Hz peak and level | stated, not gated | dynamic level vs 0.01 Hz -3.5, -2.4, +0.3% at 0.05/0.1/0.2 Hz (model 0); static peak +10.6% at 0.2 Hz (model 0: no rate term on mu_s); 0.2 Hz peak error -7.9/-11.4%; work -5.4 to -0.9% | INFO |
 | 2 | BM5 | CIGRE TB880 conductor temp (cited Poradowski tabulated T-network, λ1') | ≤ 90 °C, ~5 K low | 84.4 °C (FEM 89.62 / IEC 90; λ1″ closes residual). NOT yet from compute_thermal(cable) — three-core geometric factor pending IEC 60287-2-1 (not yet implemented) | PARTIAL (cited network; λ1″ + 3-core factor gated) |
 | 2 | BM4 | Saevik-Bruaseth EA population; no-radial-interaction bound | mean model/measured < 1.25 | mean ratio about 1.45; U1 > 2.0 | NOT VALIDATED (negative finding; radial interaction missing) |
 
 ## Test taxonomy (full gate suite)
 
-- analytical_sanity: `1138 passed, 3167 deselected`
-- independent_method: `70 passed, 4235 deselected`
-- full_scale: `29 passed, 4276 deselected`
+- analytical_sanity: `1151 passed, 3195 deselected`
+- independent_method: `70 passed, 4276 deselected`
+- full_scale: `31 passed, 4315 deselected`
 
 Run `pytest -m <marker>` to reproduce each group.
 

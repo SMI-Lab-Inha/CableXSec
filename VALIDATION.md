@@ -42,6 +42,7 @@ afterwards: a comparison that misses its target is reported as failed.
 | **M-rec, M-rec-3core** | Assembled per-wire moment against the section engine | cross-engine | 0.000 % | <2 % | Pass |
 | **MK-Tcyc** | Moment–curvature law with tension cycling inside the bending cycles; work balance under the changing friction bound | fatigue-path friction stress, same kernels | 3.4e-16; 1.1e-15 | <1e-12 | Pass |
 | **MX-scale** | Exported bending law with a slip scaling variable: bound homogeneity, scaled group yield curvatures, tension cycle inside the bending cycles | `compute_mkappa` at another tension; contact-tension history | 4.1e-16; 8.3e-14; ratio 1.02 | <1e-12; <1e-9; ≤1.25 | Pass |
+| **FL-P** | Pressure-dependent friction coefficient: spring-slider under pressure steps; compiled against NumPy kernel under a pressure history; work balance | closed form; NumPy reference | 3.0e-16; 8.7e-16; 2.5e-15 | <1e-9 | Pass |
 | **slip-onset** | First wire to slip lies at the neutral axis (compression side, ψ ≈ 3λ/2) | Raoof; Papailiou | \|cos\| = 0.156 | \|cos\| < 0.2 | Pass |
 | **xsec-K** | Coupling tangent bounds | EI_max, EI_min limits | ≤6.3e-13 % | <0.01 % | Pass |
 | **QP-KKT, QP-Lamé** | Concentric contact complementarity; shrink-fit compliances | KKT conditions; compound cylinder | 1.9e-13 N; 1.3e-16 | <1e-8 N; <1e-6 | Pass |
@@ -67,14 +68,19 @@ afterwards: a comparison that misses its target is reported as failed.
 | **WITZ-ID** | 300-bar loop predicted after identifying the initial pressure at 0 bar | Witz (1996), Figs 5–6 | width 1356 N·m vs 1990–2164; energy −14.2 % | width 1692–2489 N·m; energy ±15 % | **Fail** |
 | **SV11-PLANE** | Inner-armour stress ranges at the bending-plane FBG stations, 14 load cases | Sævik (2011), Figs 17–23 | median ratio 1.62 (3 of 14 in band); sectional 1.00 (11 of 14) | median 0.85–1.18 and ≥12 of 14 in 0.70–1.43 | **Fail** |
 | **SV11-GJ** | Absolute stress ranges near the termination, load case 14 | Gjøsteen et al. (2027), Figs 27–35 | mean ratio 1.80 (sectional 1.24) | 0.72–1.38 | **Fail** |
+| **DAI18-DIG** | Digitised friction loops of armour wire on anti-wear tape, Test 1: loop maximum against the printed static coefficient | Dai, Sævik and Ye (2018), Fig. 4a, p. 428 | 0.2237 / 0.2405 / 0.3786 vs 0.22 / 0.24 / 0.38 | within 0.005 + 0.0021 | Pass |
+| **DAI18-RS** | Re-stick peak at every reversal, seven loops; spring-slider with `stick_time_s = 0` against the default `inf` | Dai, Sævik and Ye (2018), Figs 4a, 4c | measured 14 of 14 strokes; `0`: 14 of 14; `inf`: 0 of 14 | all; all; none | Pass |
+| **DAI18-T1** | Test 1 loops (8, 4, 1 MPa) against the spring-slider with the printed coefficients | Dai, Sævik and Ye (2018), Fig. 4a | peak −1.8 to +1.0 %; level −3.3 to +12.3 %; work −1.9 to −2.6 %; no gradual decay after the peak | stated, not gated | Info |
+| **DAI18-T3** | Test 3 loops (0.01–0.2 Hz) against the rate-independent spring-slider | Dai, Sævik and Ye (2018), Fig. 4c | dynamic level −3.5 to +0.3 %; static peak +10.6 % at 0.2 Hz not represented | stated, not gated | Info |
 | **BM5** | Conductor temperature of the CIGRE TB 880 export cable, from the source's tabulated network inputs (`compute_thermal` on the cable itself is not yet comparable) | Poradowski tabulated thermal network; FEM 89.62 °C | 84.4 °C | ≤90 °C, about 5 K low | Partial |
 | **BM4** | Axial stiffness of a population of umbilicals | Sævik and Bruaseth (2005) | mean ratio about 1.45 | <1.25 | Not validated |
 
 **Pass** meets the registered target. **Fail** does not; the target is unchanged and the row
 names the discrepancy. **Partial** reproduces a stated part of the comparison. **Not comparable**
 records a comparison whose reference does not support the definition used. **Not validated**
-records a negative finding that limits the scope of the model. The values above are rounded from
-the generated report, which holds every digit.
+records a negative finding that limits the scope of the model. **Info** is a comparison stated
+without a target. The values above are rounded from the generated report, which holds
+every digit.
 
 ## Scope
 
@@ -91,6 +97,11 @@ quantities are those of the passing rows. In particular:
 - The termination-corrected (anchored-wire) armour stress is an upper estimate that the
   published near-termination measurements do not support (SV11-PLANE, SV11-GJ); the sectional
   result is the one that matches them.
+- The static/dynamic friction law is compared with measured friction loops of armour wire on
+  anti-wear tape on one spring-slider, not on a cable section (DAI18 rows): the loops re-stick
+  at every reversal (`stick_time_s = 0`), the dynamic level is rate independent at 0.01–0.2 Hz,
+  and the law does not represent the gradual decay after the breakaway peak or the rise of the
+  static peak with frequency.
 - Cyclic redistribution of three-core contact is not solved; contact stress functions use
   prescribed tractions; fretting is excluded from the long-term fatigue projections.
 - BM4 shows that the axial stiffness of umbilicals with radial interaction is not reproduced
@@ -119,6 +130,7 @@ python -m pytest -q -m full_scale
 python validation/scripts/check_saevik2011.py
 python validation/scripts/check_t1_test_arrangement.py
 python validation/scripts/check_g8_gradual_reversal.py
+python validation/scripts/check_dai2018_friction.py
 ```
 
 The cases, their sources, the digitisation and the registered targets are described in the

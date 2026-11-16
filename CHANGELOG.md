@@ -10,6 +10,36 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Added
 
+- The armour friction coefficient can depend on the contact pressure:
+  `FrictionLaw(pressure_factor=((P, f), ...))`, a piecewise-linear factor `f(P)` on the
+  coefficient, clamped at the table ends, evaluated at the local friction-setting pressure
+  `(P1 + P2) g` of each wire (direction-tied kernel, NumPy reference and compiled) or helix node
+  (distributed kernel) at every sample, so it follows a tension or pressure history in
+  `compute_mkappa` and `compute_fatigue`. Measured coefficients of armour wire on anti-wear tape
+  fall with pressure (μ_d 0.32, 0.20, 0.18 at 1, 4 and 8 MPa; Dai, Sævik and Ye 2018, p. 428).
+  It combines with the static/dynamic and rate factors (`m f(P) μ`), needs no time base and
+  is refused where a friction law is (progressive model, laid-core friction, termination clamp
+  increment). The exported bending law accepts a law with only a pressure factor at the fixed
+  contact state of each tension, and refuses it with `slip_scale=True`: `f(P)` breaks the
+  homogeneity `M(κ; ρ) = ρ M(κ/ρ; 1)` the scaling rests on. `slider_history` takes
+  `contact_pressure_Pa`. No table (or a table of unit factors) reproduces every result bit for
+  bit within each code path. Checked by a spring-slider under pressure steps in closed form, the
+  full-slip bound of every wire at its local pressure, the energy identity, a constant table
+  against the scaled coefficient and the compiled kernel against the NumPy reference (new
+  validation row FL-P).
+- Measured friction loops of armour wire on anti-wear tape (Dai, Sævik and Ye, Marine Structures
+  59 (2018) 423–443, Fig. 4: Test 1 at 8, 4 and 1 MPa; Test 3 at 0.01–0.2 Hz), digitised with
+  provenance and a reproducible procedure (`validation/paper_data/dai2018_fig4a_test1.csv`,
+  `dai2018_fig4c_test3.csv`; `validation/scripts/digitise_dai2018_fig4.py`), are compared with
+  the static/dynamic `FrictionLaw` on one spring-slider (`check_dai2018_friction.py`, rows
+  DAI18-DIG, DAI18-RS, DAI18-T1, DAI18-T3). Gated and passing: the digitised loop maxima against
+  the printed static coefficients, and a re-stick peak at every reversal of all seven loops,
+  which the law reproduces with `stick_time_s = 0` and not with the default `inf`. Stated, not
+  gated: with the printed coefficients the peaks are within 1.8 % and the +x-stroke levels
+  within 3.3 % (the measured −x-stroke levels run 4–14 % lower); the law drops to the dynamic
+  level in one step where the measured force decays over 0.6–2.3 mm, so the work is 1–5 % low;
+  the static peak rises 10.6 % from 0.01 to 0.2 Hz, which the law cannot represent, while the
+  dynamic level does not move with frequency (no rate term supported at 0.13–2.5 mm/s).
 - An anchored armour wire can be held by an elastic anchor instead of a rigid one, in every
   route that anchors a wire: the termination correction (`TerminationSpec(k_anchor_N_m=K)`,
   clamp and along-wire solvers, with or without a curvature field), the along-wire chain
@@ -52,8 +82,8 @@ All notable changes to CableXSec are recorded in this file. The format follows
   law is rate independent). A law that depends on time needs the sample times and is refused
   without them. Neutral parameters reproduce every result bit for bit. `slider_history` runs
   the law on one spring-slider: breakaway peak, healing, steady logarithmic rate and the
-  viscous loop area `pi eta omega x0^2` are tested in closed form. No rate-dependent friction
-  data of armour interfaces is in the validation set.
+  viscous loop area `pi eta omega x0^2` are tested in closed form. No rate law of armour
+  friction is validated (the measured wire-on-tape loops above show no rate effect on the dynamic level).
 - `compute_mkappa` can let the armour contact pressure follow the bending history:
   `contact_tension_history_N` sets the per-sample `P1+P2` from a tension history through the
   contact model (the histories `compute_fatigue` forms from `tension_N`), and
@@ -104,6 +134,14 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Fixed
 
+- Provenance of the default armour coefficient `mu_on_hdpe = 0.20` (and `mu_on_steel = 0.20` of
+  `steel_saevik2011`); the values are unchanged. The source is Dai, Sævik and Ye, Marine
+  Structures 55 (2017) 137–161, Sec. 4.3.1, p. 156 (cited as Sec. 4.3 before): an estimate
+  between anti-wear tape and inner armour and between two steel armour layers "at 20 MPa
+  internal pressure", quoted from Sævik (1992). The interface is an anti-wear tape, not HDPE,
+  and the 20 MPa is an internal pressure; the contact pressure is 2–4 MPa (Dai, Sævik and Ye
+  2018, p. 428), where the measured dynamic coefficient of armour wire on in-service tape is
+  0.32, 0.20 and 0.18 at 1, 4 and 8 MPa.
 - The exported bending law no longer claims to follow `compute_mkappa` exactly. With the signed
   capstan bound the slip interval of a wire is asymmetric (the falling bound is the rising one
   times `exp(−λψ)`), which no Masing element carries; the Iwan law misses the section law's loops

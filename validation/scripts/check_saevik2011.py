@@ -74,7 +74,7 @@ from scipy.interpolate import PchipInterpolator  # noqa: E402
 ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / "validation" / "paper_data"
 
-MU_DECLARED = 0.20  # [Saevik1992] via [DaiSaevikYe2017] Sec. 4.3
+MU_DECLARED = 0.20  # [DaiSaevikYe2017] Sec. 4.3.1, p. 156, quoting [Saevik1992]
 R_BORE_M = 0.1076  # seal-layer bore, [Saevik2011] Table 1 (215.2 mm)
 INNER = "inner_tensile_armour"
 TENDON_WIDTH_M = 0.0125  # [Saevik2011] Table 1
