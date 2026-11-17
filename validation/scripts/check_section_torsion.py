@@ -105,9 +105,15 @@ def chae_cable(pitch_m: float, core_pitch_m: float | None = None) -> CableData:
     """The packaged Chae cable re-pitched; optionally with S-lay cores."""
     text = Path(cx.chae2023_yaml_path()).read_text(encoding="utf-8")
     angle = math.degrees(math.atan(2 * math.pi * CHAE_HELIX_RADIUS / pitch_m))
-    text = re.sub(r"lay_angle_deg: [0-9.]+", f"lay_angle_deg: {angle:.6f}", text)
+    text, count = re.subn(
+        r"lay_angle_deg: [0-9.]+", f"lay_angle_deg: {angle:.6f}", text
+    )
+    if count != 1:
+        raise RuntimeError("the packaged Chae cable must have one armour lay angle")
     if core_pitch_m is not None:
         # The source lays the cores S, as the armour (Sec. 2.1.2).
+        if "\ncore_lay:" in text or text.count("\nlayers:\n") != 1:
+            raise RuntimeError("cannot add a core_lay block to the Chae cable")
         block = f"\ncore_lay:\n  pitch_m: {core_pitch_m}\n  lay_direction: left_hand\n"
         text = text.replace("\nlayers:\n", block + "\nlayers:\n", 1)
     with tempfile.TemporaryDirectory() as folder:
@@ -124,10 +130,13 @@ def chae_free_torsion(pitch_m: float, core_pitch_m: float | None = None) -> floa
     coiling request.
     """
     cable = chae_cable(pitch_m, core_pitch_m)
+    (armour,) = cable.helical_layers
+    # Positive twist tightens a right-hand lay, so it unwinds a left-hand one.
+    sign = 1.0 if armour.lay_direction == "left_hand" else -1.0
     state = solve_cable_radial_state(
         cable,
         0.0,
-        prescribed_twist_per_m=CHAE_TWIST,  # left-hand armour: positive unwinds
+        prescribed_twist_per_m=sign * CHAE_TWIST,
         loose_layers="neighbour",
     )
     return abs(float(state.result.torque_Nm)) / CHAE_TWIST
