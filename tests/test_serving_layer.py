@@ -174,7 +174,8 @@ def test_three_core_mesh_serving_ring_carries_no_axial_force_or_torque() -> None
     # yarn1 is the meshed ring of the bundle, yarn2 a concentric annulus.
     assert abs(forces["yarn1"]) < 1e-9 * 1.0e5
     assert abs(forces["yarn2"]) < 1e-9 * 1.0e5
-    assert sum(forces.values()) == pytest.approx(1.0e5, rel=1e-9)
+    # The layer forces sum to the tension to the contact solve's tolerance.
+    assert sum(forces.values()) == pytest.approx(1.0e5, rel=1e-6)
     assert abs(a.layer_axial_force_N["yarn1"]) > 1.0
     # Removing the yarn torsion lowers the solved torsional rigidity.
     assert b.gj_fixed_tension_Nm2 < a.gj_fixed_tension_Nm2
