@@ -711,7 +711,14 @@ def compute_mkappa(
     kappa_history : numpy.ndarray
         Driven curvature time series [1/m].
     tension_N : float, optional
-        Axial tension for the contact ``F_n`` [N].
+        Axial tension for the contact ``F_n`` [N]: the true wall tension, the
+        force the layers carry, as ``tension_N`` of :func:`compute_fatigue`.
+        No external pressure acts in this call, so an effective tension from
+        a global model is converted first (sealed annulus ``T_e - p_o A_o``,
+        :func:`cablexsec.analysis.compression.true_wall_tension`;
+        :func:`cablexsec.compute_section_properties` does this per load case,
+        or pass a ``section_state`` or ``radial_state`` solved with the
+        pressure). Without external pressure the two are equal.
     mu : float, optional
         Armour friction coefficient (default: material ``mu_on_hdpe``).
     phi_bend : float, optional

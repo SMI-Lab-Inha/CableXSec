@@ -355,6 +355,28 @@ All notable changes to CableXSec are recorded in this file. The format follows
   its plane stays planar. Over the 1 203 tests that reach the planarity test and the shipped
   fatigue examples and tutorials, no path other than the new checks changes its verdict.
 
+- `read_cabledyn_sections` closes every output file it reads. The per-line `.p.out` and
+  `.t.out` readers were left open after a read (and after a failed one) until garbage
+  collection, which raised `ResourceWarning`. The files of one run must now also end on the same
+  row: a per-line file with more or fewer rows than the main table is rejected ("different row
+  counts"), where before the extra rows were dropped when the chunk boundaries hid them.
+- `read_cabledyn_deck` reads the OPTIONS record forms of CableDyn: `value keyword [commentary]`,
+  positional records with the model first and the keyword after the numbers
+  (`uniform 0.0 0.6 0.0 current` was read as a keyword `0.0` with the value `uniform`), the
+  keyword-first `dynamic_solver` row, and a ` - ` description. The last record of a keyword
+  wins, as in CableDyn (the first won), and the aliases `gravity`, `WtrDnsty`/`water_density`,
+  `water_depth` and `dt` set `g`, `rhoW`, `WtrDpth` and `dtM` (they were ignored, so a deck
+  that set the water density as `WtrDnsty` got the default 1025 kg/m³ in the hydrostatic
+  pressure).
+- `run_sea_state_batch` checks and digests `cable_source` before it reads any run; a missing
+  file failed only after every section of every run had been computed.
+- The global–local guide (Sections 1, 2, 2.1 and 7), `ARCHITECTURE.md` and the CableDyn reader
+  describe CableDyn 0.4.x: node tension, curvature and bend moment recovered from nodal
+  equilibrium (since CableDyn 0.2.0), the signed section-axis components `CurvX`/`CurvY` and
+  torsion of lines restrained at one end (since 0.4.0), and the node tangent of finite-EI lines
+  in the `Dec`/`Azi` channels (since 0.4.2; the tangent reader places an end node's tangent half
+  an element inside the line on such output). The `compute_mkappa` docstring states that
+  `tension_N` is the true wall tension, as in `compute_fatigue`.
 - The slip of the distributed friction model over a full-slip increment (every helix node on its
   bound) is now unique. The equations fix the forces, the tractions and `u − p` there, but not a
   slide common to the displacement `u` and the slip `p` of all nodes; the solver left one node

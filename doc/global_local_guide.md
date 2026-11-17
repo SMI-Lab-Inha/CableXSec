@@ -5,8 +5,8 @@
 Stage 1 of the global–local coupling is one way: CableDyn solves the global
 cable, CableXSec reads the histories of selected material sections and runs
 its local fatigue on them, as it does on other global results. The global bending
-law stays CableDyn's (constant `EI`); the hysteretic two-way element is
-stage 2 (Section 7).
+law stays CableDyn's (linear elastic: the `EI` of the line type, tapered under a
+bend stiffener); the hysteretic two-way element is stage 2 (Section 7).
 
 | Piece | Where |
 |---|---|
@@ -17,8 +17,10 @@ stage 2 (Section 7).
 
 ## 1. What CableDyn writes
 
-From the CableDyn manual (`doc/outputs.rst`, `doc/conventions.rst`) and the
-writers in `src/CableDyn_DeckDriver.f90` (CableDyn v0.1.x):
+From the CableDyn manual (`doc/driver_format.md`, `doc/outputs.rst`,
+`doc/theory.rst`) for CableDyn 0.4.x. The genuine runs in `tests/data/cabledyn/`
+were written by the CableDyn 0.1.0 driver; where a later release changed a
+channel, the item says so.
 
 - **Files.** Standalone driver: `<root>.out` (title line, header
   `Time(s)` and the deck `OUTPUTS` tokens, no units row);
@@ -27,25 +29,43 @@ writers in `src/CableDyn_DeckDriver.f90` (CableDyn v0.1.x):
   `<root>.static.out` and `<root>.elements.out` (initial state and element
   reference arcs, cubic-Hermite route). OpenFAST (`CompMooring = 5`):
   `<root>.CD.out` with a header `Time` and a units row, and
-  `<root>.CD.static.out`; there are no per-line files. Fields are
+  `<root>.CD.static.out`; there are no per-line position or tension files.
+  Fields are
   TAB-separated; values have 8 significant digits, time 17. The output step is
   always `dtM`.
 - **Order and frame.** Node 1 is End A (hang-off), node N End B; the parser
   swaps a line listed anchor first. Global axes are right-handed, `z` up,
   still water at `z = 0`, all SI, angles in degrees.
-- **Curvature.** `Curv<L>N<J>` is a magnitude at nodes only (for finite-EI
-  lines the larger of the two one-sided element curvatures at an interior
-  node). No signed components and no material frame are written.
-- **Tangent.** `L<L>N<J>Dec` and `L<L>N<J>Azi` give the direction of the chord
-  between the neighbouring nodes (one-sided at the ends), End A to End B.
+- **Curvature.** `Curv<L>N<J>` is the curvature magnitude at a node. On a
+  finite-EI line it is recovered from nodal equilibrium (since CableDyn 0.2.0):
+  the geometric curvature of the stretched line, `(1 + ε) BendMom / EI`, the
+  larger of the two sides at a section junction (`OutputRecovery element`
+  restores the larger one-sided element curvature). Since CableDyn 0.4.0 a
+  finite-EI line also writes the signed components `CurvX<L>N<J>` and
+  `CurvY<L>N<J>` on section axes (Section 2.1), with `CurvX² + CurvY² =
+  Curv²`. The reader of Section 2 rebuilds the vector from the geometry and
+  uses `Curv` as a check.
+- **Tangent.** `L<L>N<J>Dec` and `L<L>N<J>Azi` give a direction from End A to
+  End B. Up to CableDyn 0.4.1 it is the chord between the neighbouring nodes
+  (one-sided at the ends). From CableDyn 0.4.2 a finite-EI line writes the
+  node's own tangent, the cubic-Hermite tangent degree of freedom (at an end
+  clamped by a `Rigid` row, the direction the clamp holds); an `EI = 0` line
+  keeps the chord. The reader places every value at the mid-arc of the chord
+  (Section 2): at an interior node of a uniform mesh that is the node itself,
+  but the tangent of an end node of 0.4.2 output is then taken half an
+  element inside the line.
 - **Tension.** Effective tension of a solid line without contents
-  (`T_e = EA ε`). `.t.out` holds the element-midpoint axial force;
-  `Ten<L>N<J>` the length-weighted mean of the two neighbouring element-mean
-  forces (an end node: the end force). On a curved coarse element the two
-  differ (Section 5).
-- **Torsion.** Only on a line restrained in torsion at both ends:
-  `Torq<L>N<J>` (uniform along the line) and `Twist<L>N<J>`, the material twist
-  from End A in degrees.
+  (`T_e = EA ε`). On a finite-EI line `Ten<L>N<J>` is the axial component of
+  the section force recovered from nodal equilibrium (since CableDyn 0.2.0;
+  `OutputRecovery element` restores the length-weighted mean of the two
+  neighbouring element-mean forces), and `.t.out` holds the axial resultant at
+  each segment midpoint; an end node reports the end force. On a curved coarse
+  element the two can differ (Section 5).
+- **Torsion.** On a line solved in torsion: restrained at both ends or, since
+  CableDyn 0.4.0, at one end with the other free to twist. `Torq<L>N<J>`
+  (uniform along the line in statics; with the nodal twist of the 0.4.0
+  dynamics it varies along the line) and `Twist<L>N<J>`, the material twist
+  accumulated from End A in degrees.
 - **Pressure.** Not written.
 
 ## 2. Section history
@@ -76,9 +96,13 @@ twist: `frame="arc"` (default) transports them along the line from End A by
 minimal rotations between element chords, with the End-A axes transported in
 time; this is the material frame of a torque-free isotropic rod.
 `frame="section"` transports the section's own axes in time and needs only
-the channels near the section. On a line restrained in torsion the axes are
-turned right-handed about `t` by the `Twist` channel (a restrained line
-without these channels is rejected). The hang-off's rotation about its own
+the channels near the section. Where `Twist` channels bracket a section the
+axes are turned right-handed about `t` by the material twist from End A. A
+line restrained in torsion at both ends without these channels is rejected; a
+line restrained at one end only is read with its `Twist` channels when they
+are written; restrained at End B only, its End A turns freely with the line's
+twist, which the reader, whose axes start at End A, does not represent. The
+hang-off's rotation about its own
 tangent (vessel yaw at a vertical hang-off) is not visible in the geometry and
 is not represented.
 
@@ -138,17 +162,23 @@ tolerance or refine the mesh.
 **Deck outputs.** `section_channels(deck, sections)` lists the `OUTPUTS`
 channels the tangent source needs for the section frame: `Dec`/`Azi` on the
 window, `Ten`, `Curv` and `p{x,y,z}` at the bracketing nodes, and
-`Twist`/`Torq` on a restrained line. The arc frame also needs the line's `p`
+`Twist`/`Torq` on a line restrained at both ends (request them too on a line
+restrained at one end). The arc frame also needs the line's `p`
 flag. Adding `t` gives the element tensions.
 
 ### 2.1 CableDyn 0.4.0 signed curvature components
 
-CableDyn 0.4.0 writes, per station, the effective
-tension `Ten` and the curvature vector on two section axes, `CurvX` and
-`CurvY` [1/m]. The vector points to the centre of curvature, so a fibre at
-`(x, y)` has bending strain `−(CurvX·x + CurvY·y)`; `x` is the upper normal at
-the hang-off, fixed in the hang-off axes and parallel-transported along the
-line. The local route takes the strain gradient on the same axes:
+Since CableDyn 0.4.0 a finite-EI line writes, at a node, the effective
+tension `Ten<L>N<J>` and the curvature vector on two section axes,
+`CurvX<L>N<J>` and `CurvY<L>N<J>` [1/m]. The vector points to the centre of
+curvature, so a fibre at `(x, y)` has bending strain `−(CurvX·x + CurvY·y)`.
+On a line not restrained in torsion `x` starts as the upper normal at the
+hang-off, fixed in the hang-off axes (in global axes at a pinned End A), and
+is parallel-transported along the line; on a line restrained in torsion it
+starts from the restrained end's torsion normal `Nx` (carried to End A when
+only End B is restrained) and is turned by the line's twist (CableDyn
+`doc/theory.rst`, curvature on the section axes). The
+local route takes the strain gradient on the same axes:
 
 ```text
 g_x = −CurvX,   g_y = −CurvY
@@ -166,8 +196,11 @@ a turn from the `e1` of Section 2. Because the axes are fixed in the hang-off
 axes, the hang-off's rotation about its own tangent, which the tangent
 reconstruction of Section 2 cannot see, is carried. Tests:
 `tests/test_cabledyn_components.py` (sag, hog and out-of-plane signs, a
-rotating plane, separators, a missing column). Reading the 0.4.0 `.out` files
-directly follows once their channel names are fixed by a release.
+rotating plane, separators, a missing column). The station reader takes one
+station's columns under the names above; a CableDyn `.out` file holds them as
+`Ten<L>N<J>`, `CurvX<L>N<J>` and `CurvY<L>N<J>` for every requested node, so a
+station is passed to `series_from_curvature_components` from its three
+columns. `read_cabledyn_sections` does not read `CurvX`/`CurvY`.
 
 ## 3. Sea-state batch
 
@@ -336,7 +369,8 @@ damage.
 
 ## 7. Stage 2 and limitations
 
-Stage 1 is one way and uses CableDyn's constant `EI`. Stage 2 is the
+Stage 1 is one way and uses CableDyn's linear-elastic bending (the `EI` of
+the line type, tapered under a bend stiffener). Stage 2 is the
 two-way hysteretic element: the section's slip-dependent moment–curvature
 law (`xsec_stiffness`, the backbone of `compute_mkappa`) returned to CableDyn
 as an element constitutive law with history (biaxial stick–slip state per
