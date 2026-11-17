@@ -22,11 +22,15 @@ sin²beta u_c / r_c, where u_c is the radial displacement of the core centre
 (for a hollow core, the mean of the two bore points on the mirror axis).
 The cross-section plane of the core is taken as the cable cross-section
 (an error of order 1 - cos beta). Layers inside a core are bonded. Ring and
-filler share the cable extension. Twist rigidities of the ring and filler
-assume no interface slip; each core adds its own St Venant rigidity with
-twist cos²beta tau. No ovalisation of the ring from non-uniform outer
-pressure is modelled: layers outside the ring are coupled through the mean
-radial displacement of its outer surface and apply uniform pressure.
+filler share the cable extension. The Saint-Venant twist rigidity follows
+the contact model: the bonded ring layers twist about the cable axis; each
+core adds its own rigidity about its centre with twist cos²beta tau; the
+filler, which touches cores and ring through frictionless contacts that
+carry no axial shear, twists as separate lobes with their own warping
+(:func:`saint_venant_rigidity`), not about the cable axis. No ovalisation
+of the ring from non-uniform outer pressure is modelled: layers outside the
+ring are coupled through the mean radial displacement of its outer surface
+and apply uniform pressure.
 
 A small grounded stabilising stiffness is added to every in-plane degree of
 freedom so that a core or filler that is separated from all its neighbours
@@ -43,6 +47,8 @@ from dataclasses import dataclass, replace
 import numpy as np
 import scipy.sparse as sp
 from numpy.typing import NDArray
+from scipy.sparse.csgraph import connected_components
+from scipy.sparse.linalg import spsolve
 
 from cablexsec.exceptions import CableInputError
 from cablexsec.mechanics.concentric_section import ElasticAnnulus
@@ -52,6 +58,7 @@ __all__ = [
     "TrefoilBundle",
     "TrefoilModel",
     "build_trefoil_model",
+    "saint_venant_rigidity",
 ]
 
 FloatArray = NDArray[np.float64]
@@ -741,6 +748,77 @@ def _mirror_transform(
     return sp.csr_matrix((vals, (rows, cols)), shape=(n_dof, column))
 
 
+def saint_venant_rigidity(
+    xy: FloatArray,
+    conn: NDArray[np.int64],
+    shear_modulus: FloatArray,
+    *,
+    mirror_angles: tuple[float, ...] = (0.0, SECTOR),
+) -> float:
+    """Saint-Venant torsional rigidity [N m²] of a region of six-node triangles.
+
+    The twist is about the origin. The warping ``w = tau psi`` of the region
+    is free and minimises the shear energy, so the rigidity is
+    ``int G |grad psi + (-y, x)|² dA``, which is the polar moment
+    ``int G r² dA`` less the warping relief. Nodes on a mirror line through
+    the origin at one of ``mirror_angles`` have ``psi = 0`` (torsion warping is
+    antisymmetric about a mirror plane that contains the twist axis); a
+    connected part of the region with no such node has its first node held,
+    which removes its rigid axial translation. ``conn`` lists the elements of
+    the region in the node numbering of ``xy``; ``shear_modulus`` gives one
+    value per element.
+    """
+    conn = np.asarray(conn, dtype=np.int64)
+    if conn.size == 0:
+        return 0.0
+    nodes, inverse = np.unique(conn, return_inverse=True)
+    local = inverse.reshape(conn.shape)
+    n = len(nodes)
+    coords = xy[conn]  # (ne, 6, 2)
+    ne = len(conn)
+    ke = np.zeros((ne, 6, 6))
+    fe = np.zeros((ne, 6))
+    polar = 0.0
+    for (shape, dshape), w in zip(_SHAPES, _QW, strict=True):
+        jac = np.einsum("ka,eki->eai", dshape, coords)
+        det = jac[:, 0, 0] * jac[:, 1, 1] - jac[:, 0, 1] * jac[:, 1, 0]
+        if np.any(det == 0):
+            raise CableInputError("degenerate element in the torsion region")
+        inv = np.empty_like(jac)
+        inv[:, 0, 0] = jac[:, 1, 1] / det
+        inv[:, 1, 1] = jac[:, 0, 0] / det
+        inv[:, 0, 1] = -jac[:, 0, 1] / det
+        inv[:, 1, 0] = -jac[:, 1, 0] / det
+        dn = np.einsum("ka,eia->eki", dshape, inv)
+        weight = w * np.abs(det) * shear_modulus
+        point = np.einsum("k,eki->ei", shape, coords)
+        x, y = point[:, 0], point[:, 1]
+        ke += np.einsum("e,eki,eli->ekl", weight, dn, dn)
+        fe += weight[:, None] * (dn[:, :, 0] * -y[:, None] + dn[:, :, 1] * x[:, None])
+        polar += float(np.sum(weight * (x * x + y * y)))
+    rows = np.repeat(local, 6, axis=1).ravel()
+    cols = np.tile(local, (1, 6)).ravel()
+    k = sp.csr_matrix((ke.ravel(), (rows, cols)), shape=(n, n))
+    f = np.zeros(n)
+    np.add.at(f, local.ravel(), fe.ravel())
+    pts = xy[nodes]
+    scale = max(1.0, float(np.max(np.abs(pts))))
+    fixed = np.zeros(n, dtype=bool)
+    for angle in mirror_angles:
+        distance = np.abs(pts[:, 0] * math.sin(angle) - pts[:, 1] * math.cos(angle))
+        fixed |= distance <= 1e-9 * scale
+    count, label = connected_components(k, directed=False)
+    for part in range(count):
+        members = np.flatnonzero(label == part)
+        if not np.any(fixed[members]):
+            fixed[members[0]] = True
+    free = ~fixed
+    if not np.any(free):
+        return polar
+    psi = spsolve(k[free][:, free].tocsc(), -f[free])
+    return polar + float(f[free] @ psi)
+
+
 def _assemble(
     xy: FloatArray,
     conn: NDArray[np.int64],
@@ -778,6 +856,8 @@ def _assemble(
     polar = np.zeros(ne)
     core_set = set(groups.get("core", []))
     is_core = np.array([i in core_set for i in range(ne)])
+    filler_set = set(groups.get("filler", []))
+    is_filler = np.array([i in filler_set for i in range(ne)])
     for (shape, dshape), w in zip(_SHAPES, _QW, strict=True):
         jac = np.einsum("ka,eki->eai", dshape, coords)  # d(x_i)/d(xi_a)
         det = jac[:, 0, 0] * jac[:, 1, 1] - jac[:, 0, 1] * jac[:, 1, 0]
@@ -808,7 +888,16 @@ def _assemble(
             point[:, 0] ** 2 + point[:, 1] ** 2,
         )
         polar += weight * mu * r2 * carries
-    twist = float(np.sum(np.where(is_core, polar * cb**4, polar)))
+    # Cores about their own centres (exact for annuli), ring layers about the
+    # cable axis (exact for a bonded annulus stack). The filler lobes touch
+    # cores and ring through frictionless contacts, so they twist as separate
+    # bodies with their own warping, solved below.
+    twist = float(np.sum(np.where(is_core, polar * cb**4, 0.0)))
+    twist += float(np.sum(polar[~is_core & ~is_filler]))
+    if np.any(is_filler):
+        twist += saint_venant_rigidity(
+            xy, conn[is_filler], (mu * carries)[is_filler]
+        )
     dofs = np.zeros((ne, ndof_e), dtype=np.int64)
     dofs[:, 0:12:2] = 2 + 2 * conn
     dofs[:, 1:12:2] = 3 + 2 * conn

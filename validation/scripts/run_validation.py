@@ -791,11 +791,25 @@ def _torque_rows() -> list[Row]:
     """Torque balance (gap 3.5); scripts/check_torque_balance.py."""
     if str(ROOT) not in sys.path:
         sys.path.insert(0, str(ROOT))
+    import check_section_torsion as sv  # noqa: PLC0415
     import check_torque_balance as tq  # noqa: PLC0415
 
     v = tq.verification_checks()
     p = tq.published_checks()
+    w = sv.verification_checks()
     return [
+        Row(
+            "1",
+            "TQ-SV",
+            "Saint-Venant twist rigidity with free warping (trefoil filler lobes): "
+            "2 x 1 rectangle vs series solution; bonded annulus as a mirrored "
+            "60 deg sector vs polar moment",
+            "< 3e-4 relative; < 1e-6 relative",
+            f"{w['rectangle']:.1e}; {w['annulus']:.1e}",
+            "PASS"
+            if abs(w["rectangle"]) < 3e-4 and abs(w["annulus"]) < 1e-6
+            else "FAIL",
+        ),
         Row(
             "1",
             "TQ",
