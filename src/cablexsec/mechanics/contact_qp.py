@@ -30,6 +30,7 @@ from cablexsec.cables.schema import (
     CylindricalOffsetLayer,
     CylindricalShellLayer,
     HelicalLayer,
+    is_serving,
 )
 from cablexsec.exceptions import CableSchemaError
 from cablexsec.materials import library
@@ -233,6 +234,7 @@ def _concentric_layers(
                 e,
                 library.get_property(layer.material, "nu"),
                 free_transverse_strain=-float(shrink.hoop_strain) if shrink else 0.0,
+                carries_axial_load=not is_serving(layer),
             )
         )
     result.sort(key=lambda layer: layer.inner_radius_m)

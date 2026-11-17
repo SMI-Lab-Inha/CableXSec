@@ -48,7 +48,12 @@ from numpy.typing import NDArray
 from scipy.optimize import nnls
 
 from cablexsec.exceptions import CableInputError, CableSolverError
-from cablexsec.mechanics.concentric_section import ElasticAnnulus, ElasticHelicalRing
+from cablexsec.mechanics.concentric_section import (
+    ElasticAnnulus,
+    ElasticHelicalRing,
+    annulus_constitutive,
+    annulus_torsional_rigidity,
+)
 from cablexsec.mechanics.trefoil_section import (
     SYMMETRY_FACTOR,
     TrefoilBundle,
@@ -434,10 +439,9 @@ class RadialSection:
                     )
                 )
                 continue
-            nu = layer.poisson_ratio
-            shear = e / (2 * (1 + nu))
-            lame = e * nu / ((1 + nu) * (1 - 2 * nu))
-            constitutive = lame * np.ones((3, 3)) + 2 * shear * np.eye(3)
+            constitutive = annulus_constitutive(
+                e, layer.poisson_ratio, layer.carries_axial_load
+            )
             if a > 0:
                 ids = [0, inner_ids[i], outer_ids[i]]
                 coeff = np.linalg.inv(np.array([[a, 1 / a], [b, 1 / b]]))
@@ -463,7 +467,7 @@ class RadialSection:
             axial_rows.append(
                 (layer.name, ids, block[0].copy(), float(vec_load[0]), 0.0)
             )
-            torsion += shear * math.pi * (b**4 - a**4) / 2
+            torsion += annulus_torsional_rigidity(layer)
         for member in self.members:
             if member.axial_rigidity_N < 0 or member.torsional_rigidity_Nm2 < 0:
                 raise CableInputError("member rigidities must be non-negative")
@@ -975,7 +979,7 @@ class RadialSection:
             szz = lam * (exx + eyy + ezz - 3 * e0 - 2 * transverse) + 2 * mu * (
                 ezz - e0
             )
-            force += w * det * szz
+            force += w * det * szz * model.element_axial_weight
         return np.asarray(SYMMETRY_FACTOR * force * amap[:, 0], dtype=np.float64)
 
     def _bundle_state(

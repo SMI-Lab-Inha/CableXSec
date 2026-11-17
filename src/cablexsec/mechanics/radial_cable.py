@@ -59,6 +59,7 @@ from cablexsec.cables.schema import (
     CylindricalOffsetLayer,
     CylindricalShellLayer,
     HelicalLayer,
+    is_serving,
 )
 from cablexsec.exceptions import CableInputError, CableSchemaError
 from cablexsec.materials import library
@@ -350,6 +351,10 @@ def build_radial_section(
         ]
         if len(fillers) > 1:
             raise CableSchemaError("more than one interstitial filler layer")
+        if any(is_serving(x) for x in fillers):
+            raise CableSchemaError(
+                "a serving is wound on a layer; it cannot fill the core interstices"
+            )
         filler_body = None
         if fillers:
             concentric_source.remove(fillers[0])
@@ -402,6 +407,7 @@ def build_radial_section(
                     mats[item.name].poisson,
                     mats[item.name].free_strain,
                     free_transverse_strain=mats[item.name].transverse_strain,
+                    carries_axial_load=not is_serving(item),
                 )
             )
         if not ring:
@@ -466,6 +472,7 @@ def build_radial_section(
                     m.poisson,
                     m.free_strain,
                     free_transverse_strain=m.transverse_strain,
+                    carries_axial_load=not is_serving(x),
                 )
             )
         else:

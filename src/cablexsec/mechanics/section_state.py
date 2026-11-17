@@ -271,22 +271,30 @@ def solve_section_state(
                 coeff_a = (b * u_b - a * u_a) / (b * b - a * a)
                 coeff_b = a * b * (b * u_a - a * u_b) / (b * b - a * a)
                 shear = e / (2 * (1 + nu))
-                lame = e * nu / ((1 + nu) * (1 - 2 * nu))
-                # Free strain (radial, hoop, axial) = (e + t, e + t, e): the
-                # isotropic thermal part e and the in-plane extrusion shrinkage t.
                 free_e = elastic.free_thermal_strain
                 free_t = elastic.free_transverse_strain
-                common = lame * (2 * coeff_a + strain - 3 * free_e - 2 * free_t)
-                axial = common + 2 * shear * (strain - free_e)
-                hoop_const = common + 2 * shear * (coeff_a - free_e - free_t)
-                torque = shear * math.pi * (b**4 - a**4) / 2 * twist
+                if elastic.carries_axial_load:
+                    lame = e * nu / ((1 + nu) * (1 - 2 * nu))
+                    # Free strain (radial, hoop, axial) = (e + t, e + t, e): the
+                    # isotropic thermal part e and the in-plane extrusion
+                    # shrinkage t.
+                    common = lame * (2 * coeff_a + strain - 3 * free_e - 2 * free_t)
+                    axial = common + 2 * shear * (strain - free_e)
+                    hoop_const = common + 2 * shear * (coeff_a - free_e - free_t)
+                    twist_shear = shear
+                else:
+                    # A serving: plane stress along the axis, no torsion.
+                    axial = 0.0
+                    hoop_const = e * (coeff_a - free_e - free_t) / (1 - nu)
+                    twist_shear = 0.0
+                torque = twist_shear * math.pi * (b**4 - a**4) / 2 * twist
                 layer_states[elastic.name] = LayerNormalState(
                     axial,
                     axial * math.pi * (b * b - a * a),
                     torque,
                     hoop_const,
                     2 * shear * coeff_b,
-                    shear,
+                    twist_shear,
                 )
         recovered = sum(layer.axial_force_N for layer in layer_states.values())
         if not math.isclose(recovered, tension_N, rel_tol=1e-9, abs_tol=1e-5):

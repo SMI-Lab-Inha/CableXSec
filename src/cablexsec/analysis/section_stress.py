@@ -90,6 +90,7 @@ from cablexsec.cables.schema import (
     CylindricalShellLayer,
     HelicalLayer,
     HelicalStrandedLayer,
+    is_serving,
 )
 from cablexsec.exceptions import CableInputError
 from cablexsec.mechanics.core_friction import CoreFrictionSpec
@@ -405,7 +406,7 @@ def compute_section_stress(
         if isinstance(layer, HelicalStrandedLayer):
             fields.append(_none(name, states[name].basis))
             continue
-        if section_state.radial is not None:
+        if section_state.radial is not None and not is_serving(layer):
             fields.append(
                 _radial_field(
                     layer,

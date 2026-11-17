@@ -55,11 +55,11 @@ the stress (tension, core-axis friction or stick) is not scaled. A resolved
 conductor (wire rings) is on the wire basis already: each wire bends about its
 own axis with its own diameter.
 
-Layers outside the load path (a loose tape or wire screen of a core: no axial
-stiffness, :data:`KINEMATIC`) are given the stress of the strain they follow,
-their modulus times that strain, and are assessed against their limits as
-the others; ``kinematic`` marks them. That stress is an upper bound: a loose
-screen that slips over its core takes less.
+Layers outside the load path (a loose tape or wire screen of a core, or a
+serving: no axial stiffness, :data:`KINEMATIC`) are given the stress of the
+strain they follow, their modulus times that strain, and are assessed against
+their limits as the others; ``kinematic`` marks them. That stress is an upper
+bound: a loose screen that slips over its core takes less.
 
 Thermal stress is formed from axial-force equilibrium. A common cable strain
 is solved from the imposed tension and the free thermal forces of every
@@ -93,6 +93,7 @@ from cablexsec.cables.schema import (
     HelicalLayer,
     HelicalStrandedLayer,
     Layer,
+    is_serving,
 )
 from cablexsec.exceptions import CableInputError, CableSchemaError
 from cablexsec.materials import library
@@ -1188,7 +1189,10 @@ def compute_component_response(
             )
             continue
 
-        if section_state.radial is not None:
+        # A serving is outside the load path in either contact model: it
+        # takes the kinematic stress of the strain it follows, as a loose
+        # screen does, not the coupled normal stress.
+        if section_state.radial is not None and not is_serving(layer):
             normal = section_state.layers[layer.name]
             if isinstance(layer, CylindricalShellLayer):
                 assert layer.r_mid_m is not None and layer.t_m is not None

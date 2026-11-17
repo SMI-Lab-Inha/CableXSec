@@ -40,6 +40,10 @@ class ElasticAnnulus:
     # In-plane (radial and hoop) free strain added to the isotropic one: a
     # frozen extrusion shrinkage is -hoop_strain (no axial part).
     free_transverse_strain: float = 0.0
+    # False for a yarn or tape serving: plane stress along the cable axis
+    # (no axial stress) and no Saint-Venant torsion; the radial and hoop
+    # stiffness are those of the isotropic material.
+    carries_axial_load: bool = True
 
     @property
     def free_strain_vector(self) -> NDArray[np.float64]:
@@ -47,6 +51,37 @@ class ElasticAnnulus:
         e = self.free_thermal_strain
         t = self.free_transverse_strain
         return np.array([e + t, e + t, e], dtype=np.float64)
+
+
+def annulus_constitutive(
+    youngs_modulus_Pa: float, poisson_ratio: float, carries_axial_load: bool = True
+) -> FloatArray:
+    """Isotropic stiffness in (radial, hoop, axial) strains [Pa], 3 x 3.
+
+    Three-dimensional elasticity for a solid annulus; plane stress along the
+    axis (zero axial row and column) for a serving that carries no axial load.
+    """
+    e, nu = youngs_modulus_Pa, poisson_ratio
+    if not carries_axial_load:
+        plane = e / (1 - nu * nu)
+        out = np.zeros((3, 3))
+        out[:2, :2] = plane * np.array([[1.0, nu], [nu, 1.0]])
+        return out
+    shear = e / (2 * (1 + nu))
+    lame = e * nu / ((1 + nu) * (1 - 2 * nu))
+    return np.asarray(lame * np.ones((3, 3)) + 2 * shear * np.eye(3), dtype=np.float64)
+
+
+def annulus_torsional_rigidity(layer: ElasticAnnulus) -> float:
+    """Saint-Venant torsional rigidity ``G J`` of an annulus [N m^2].
+
+    Zero for a serving, which carries no torque.
+    """
+    if not layer.carries_axial_load:
+        return 0.0
+    a, b = layer.inner_radius_m, layer.outer_radius_m
+    shear = layer.youngs_modulus_Pa / (2 * (1 + layer.poisson_ratio))
+    return shear * math.pi * (b**4 - a**4) / 2
 
 
 @dataclass(frozen=True)
@@ -266,10 +301,9 @@ def solve_concentric_section(
                 * strain_map
             )
         else:
-            nu = layer.poisson_ratio
-            shear = e / (2 * (1 + nu))
-            lame = e * nu / ((1 + nu) * (1 - 2 * nu))
-            constitutive = lame * np.ones((3, 3)) + 2 * shear * np.eye(3)
+            constitutive = annulus_constitutive(
+                e, layer.poisson_ratio, layer.carries_axial_load
+            )
             # Rows of the strain map are radial, circumferential and axial.
             if a > 0:
                 coeff = np.linalg.inv(np.array([[a, 1 / a], [b, 1 / b]]))
@@ -295,7 +329,7 @@ def solve_concentric_section(
                     @ constitutive
                     @ layer.free_strain_vector
                 )
-            matrix[1, 1] += shear * math.pi * (b**4 - a**4) / 2
+            matrix[1, 1] += annulus_torsional_rigidity(layer)
     initial_load = load.copy()
     load[0] += tension_N
     load[1] += torque_Nm
