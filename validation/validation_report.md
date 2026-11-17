@@ -67,9 +67,9 @@ Every row is computed from published data or closed-form references in this repo
 
 ## Test taxonomy (full gate suite)
 
-- analytical_sanity: `1153 passed, 3250 deselected`
-- independent_method: `76 passed, 4327 deselected`
-- full_scale: `31 passed, 4372 deselected`
+- analytical_sanity: `1153 passed`
+- independent_method: `76 passed`
+- full_scale: `31 passed`
 
 Run `pytest -m <marker>` to reproduce each group.
 

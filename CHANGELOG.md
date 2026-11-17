@@ -181,6 +181,11 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Changed
 
+- The validation report's test-taxonomy lines record the passed count only: the deselected
+  count is the rest of the suite, so a test added anywhere else marked the committed report
+  stale without changing a gate. CI checks the committed report before the coverage run, so a
+  stale report fails within about 15 minutes instead of after the 45-minute coverage run.
+
 - The distributed helix friction model (`friction_model="distributed"`, and `"auto"` on
   non-planar paths) runs about three times faster on the 66 kV template. `compute_fatigue` on
   one thread, warm, an hour of the 66 kV template at 10 Hz (36 001 samples, both armour
