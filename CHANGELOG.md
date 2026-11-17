@@ -216,6 +216,25 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Fixed
 
+- `export_bending_law` keeps the stick stiffness at every tension. Its geometric curvature grid
+  started at `1e-4 κ_max` whatever the tension, so a slip onset below that floor (66 kV template,
+  `κ_max` 0.4 1/m: outer armour 7.3e-6 1/m and inner 2.3e-5 1/m at 10 kN) was inside the first
+  chord, and the law started partly or fully slipped: stick stiffness 5.80e5 instead of the
+  section's 1.26e6 N m² at 10 kN (1.255e6 at 50 kN). With `slip_scale=True` the default reference
+  is the smallest tension, so every scaled tension inherited the softened group laws (secant
+  `M/κ` of the scaled law 0.46–0.65 of `compute_mkappa` below full slip at 50–200 kN). The grid
+  now extends below its floor at the same ratio until its first point lies under half the
+  smallest first-slip curvature (the neutral-axis onset times the compression-side factor
+  `m(λ)`, and the smallest sub-element cap of the uniform progressive density), and carries the
+  onset and full-slip curvature of every armour layer and of the laid cores at every exported
+  tension and at the slip-scale reference. On the 66 kV template at 10–200 kN the exported and
+  the scaled laws start at the section's stick stiffness to round-off and match `compute_mkappa`
+  between grid points within 5.2e-4 of the moment; the core, progressive, pressure-factor and
+  solved-contact exports start at `EI_max` too. `kappa_1_m` now holds more than `n_points`
+  points (the base grid is unchanged); the linear spacing gets one stick point and the slip
+  points, and warns when a transition is narrower than its step; a law that still misses the
+  stick stiffness warns. The exported laws of the validation and benchmark rows (MX-1, MX-2,
+  MX-scale) do not change at their printed precision.
 - The slip of the distributed friction model over a full-slip increment (every helix node on its
   bound) is now unique. The equations fix the forces, the tractions and `u − p` there, but not a
   slide common to the displacement `u` and the slip `p` of all nodes; the solver left one node

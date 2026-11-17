@@ -145,14 +145,18 @@ def test_single_scale_reproduces_the_export_when_groups_scale_alike(iea66):
     table = export.slip_scale
     assert table is not None and table.reference_tension_N == t1
     np.testing.assert_allclose(table.scale[:, 0], [1.0, s], rtol=1e-12)
+    # The grid carries the slip curvatures of every exported tension: at
+    # [t2, s t2] it is the reference grid times s.
     direct = export_bending_law(
-        iea66, tensions_N=[t2], kappa_max_1_m=s * kappa_max, n_points=120
+        iea66, tensions_N=[t2, s * t2], kappa_max_1_m=s * kappa_max, n_points=120
     ).laws[0]
     scaled = table.law_at(t2, per_group=False)
     np.testing.assert_allclose(
         scaled.yield_curvature_1_m, direct.yield_curvature_1_m, rtol=1e-12
     )
-    k_scale = np.max(direct.stiffness_Nm2)
+    # Element stiffnesses are differences of backbone tangents, whose round-off
+    # scales with the stick tangent (the stick grid reaches down to 1e-6 1/m).
+    k_scale = direct.ei_stick_Nm2
     assert np.max(np.abs(scaled.stiffness_Nm2 - direct.stiffness_Nm2)) < 1e-12 * k_scale
     assert scaled.ei_slip_Nm2 == pytest.approx(direct.ei_slip_Nm2, rel=1e-12)
     # At the reference the merged groups are the exported law.

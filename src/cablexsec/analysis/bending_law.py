@@ -83,8 +83,10 @@ steady-state dynamic response, J. Appl. Mech. 33 (1966) 893-900.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import math
+import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -95,10 +97,16 @@ from numpy.typing import ArrayLike, NDArray
 
 from cablexsec.exceptions import CableInputError
 from cablexsec.mechanics.friction_law import FrictionLaw
-from cablexsec.mechanics.papailiou import wire_slip_stress_bounds
+from cablexsec.mechanics.papailiou import (
+    _compression_onset_factor,
+    full_slip_curvature,
+    slip_onset_curvature,
+    wire_slip_stress_bounds,
+)
 from cablexsec.provenance import Provenance
 
 if TYPE_CHECKING:
+    from cablexsec.api import _MkappaLaw
     from cablexsec.cables.schema import CableData
     from cablexsec.mechanics.mkappa import HelicalLayerSpec
 
@@ -121,6 +129,22 @@ CORE_GROUP = "laid_cores"
 
 #: Relative step of the central differences of the group caps.
 _DIFFERENCE_STEP = 1e-4
+
+#: Floor of the base geometric curvature grid, relative to ``kappa_max``.
+_GRID_FLOOR = 1e-4
+
+#: The first curvature of the grid lies at most this fraction of the smallest
+#: first-slip curvature, so that the first chord of every backbone is in stick.
+_STICK_MARGIN = 0.5
+
+#: Deepest extension of the geometric grid below its base floor [decades].
+_MAX_EXTENSION_DECADES = 6.0
+
+#: Grid curvatures closer than this relative gap are merged.
+_MERGE_GAP = 1e-9
+
+#: Relative tolerance of the exported stick stiffness against the section's.
+_STICK_TOLERANCE = 1e-6
 
 
 @dataclass(frozen=True)
@@ -824,10 +848,19 @@ def export_bending_law(
         Largest curvature of the backbone [1/m]; the full-slip slope continues
         it beyond.
     n_points : int, optional
-        Backbone points including zero (default 200).
+        Points of the base curvature grid including zero (default 200). The
+        export adds the slip onset and full-slip curvature of every friction
+        group (armour layer, laid cores) at every exported tension and at the
+        slip-scale reference, so ``kappa_1_m`` holds more points.
     spacing : {"geometric", "linear"}, optional
-        Point spacing. ``"geometric"`` resolves the stick-to-slip transition at
-        small curvature (default).
+        Point spacing. ``"geometric"`` (default) runs from ``1e-4
+        kappa_max_1_m`` and is extended below at the same ratio until its
+        first point lies under half the smallest first-slip curvature, so
+        every stick-to-slip transition is resolved at the grid's density and
+        the first chord of every backbone is the stick stiffness.
+        ``"linear"`` gets one stick point below the smallest first-slip
+        curvature and the onset and full-slip points; a transition narrower
+        than its step is resolved by those points alone, which is warned.
     slip_scale : bool, optional
         Also export the slip scaling variable (:class:`SlipScaleTable`,
         ``BendingLawExport.slip_scale``): the law at a reference state split
@@ -839,7 +872,9 @@ def export_bending_law(
         laws use the export's curvature grid, and a group of scale ``rho``
         reproduces its law at the state up to ``rho kappa_max_1_m``; beyond,
         the full-slip slope continues as in every exported law. With caps
-        that rise with tension the smallest tension gives ``rho >= 1``.
+        that rise with tension the smallest tension gives ``rho >= 1``. The
+        grid carries the slip curvatures of the reference, so the group laws
+        start in stick at any reference.
     slip_scale_tensions_N : sequence of float, optional
         Ascending tensions of the table [N] (default ``tensions_N``).
     slip_scale_external_pressure_Pa : sequence of float, optional
@@ -925,14 +960,43 @@ def export_bending_law(
         or slip_scale_external_pressure_Pa is not None
     ):
         raise CableInputError("the slip_scale_* options need slip_scale=True")
-    if spacing == "geometric":
-        kappa = np.concatenate(
-            [[0.0], np.geomspace(kappa_max_1_m * 1e-4, kappa_max_1_m, n_points - 1)]
-        )
-    elif spacing == "linear":
-        kappa = np.linspace(0.0, kappa_max_1_m, n_points)
-    else:
+    if spacing not in ("geometric", "linear"):
         raise CableInputError("spacing must be 'geometric' or 'linear'")
+    # compute_mkappa checks the options with its own messages before the slip
+    # curvatures are read from the same prepared law.
+    compute_mkappa(cable, np.zeros(2), tension_N=float(t[0]), **mkappa_options)
+    contact_model, common = _law_options(mkappa_options)
+    transitions: list[_Transition] = []
+    for tension in t:
+        state = _state_law(cable, float(tension), None, contact_model, common)
+        transitions += _slip_transitions(state, float(tension), friction_law)
+    reference_N: float | None = None
+    if slip_scale:
+        pressures = (
+            None
+            if slip_scale_external_pressure_Pa is None
+            else _ascending(
+                slip_scale_external_pressure_Pa, "slip_scale_external_pressure_Pa"
+            )
+        )
+        reference_pressure = (
+            None
+            if pressures is None
+            else float(cable.initial_state.external_pressure_Pa)
+        )
+        reference_N = _reference_tension(
+            cable,
+            slip_scale_reference_N,
+            t,
+            reference_pressure,
+            contact_model,
+            common,
+        )
+        state = _state_law(
+            cable, reference_N, reference_pressure, contact_model, common
+        )
+        transitions += _slip_transitions(state, reference_N, None)
+    kappa = _export_grid(kappa_max_1_m, n_points, spacing, transitions)
     moments = np.empty((t.size, kappa.size))
     ei_slip = np.empty(t.size)
     laws = []
@@ -944,13 +1008,21 @@ def export_bending_law(
         moments[i, 0] = 0.0
         ei_slip[i] = float(result.EI_min_Nm2)
         laws.append(IwanBendingLaw.from_backbone(kappa, moments[i], ei_slip[i]))
+        stick = float(result.EI_max_Nm2)
+        if abs(laws[-1].ei_stick_Nm2 - stick) > _STICK_TOLERANCE * stick:
+            warnings.warn(
+                f"the exported law at {tension:g} N starts at "
+                f"{laws[-1].ei_stick_Nm2:.6g} N m2, not at the stick stiffness "
+                f"{stick:.6g} N m2 of the section: its first grid curvature "
+                f"{kappa[1]:.3g} 1/m is already partly slipped",
+                UserWarning,
+                stacklevel=2,
+            )
     table = (
         _slip_scale_table(
             cable,
             kappa,
-            reference_N=None
-            if slip_scale_reference_N is None
-            else float(slip_scale_reference_N),
+            reference_N=reference_N,
             candidates_N=t,
             tensions_N=t if slip_scale_tensions_N is None else slip_scale_tensions_N,
             external_pressure_Pa=slip_scale_external_pressure_Pa,
@@ -1052,6 +1124,229 @@ def _ascending(values: ArrayLike, label: str) -> FloatArray:
     return grid
 
 
+@dataclass(frozen=True)
+class _Transition:
+    """Stick-to-slip transition of one friction group at one state [1/m]."""
+
+    tension_N: float
+    first_slip: float  # lower bound of the curvature of the first slip
+    onset: float
+    full_slip: float
+
+
+def _law_options(options: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    """Contact model and the law settings of :func:`_prepare_mkappa_law`."""
+    from cablexsec.mechanics.core_friction import (  # noqa: PLC0415
+        resolve_core_friction,
+    )
+    from cablexsec.mechanics.progressive_friction import (  # noqa: PLC0415
+        ProgressiveFriction,
+    )
+
+    friction_model = options.get("friction_model", "direction_tied")
+    common: dict[str, Any] = {
+        "mu": options.get("mu"),
+        "phi_bend": 0.0,
+        "core_spec": resolve_core_friction(options.get("core_friction")),
+        "progressive": (options.get("progressive") or ProgressiveFriction())
+        if friction_model == "progressive"
+        else None,
+    }
+    return options.get("contact_model") or "bounded", common
+
+
+def _state_law(
+    cable: CableData,
+    tension: float,
+    pressure: float | None,
+    contact_model: str,
+    common: dict[str, Any],
+) -> _MkappaLaw:
+    """The prepared law at a tension and, optionally, a solved pressure state.
+
+    Without a pressure, the fixed-tension contact state of
+    :func:`compute_mkappa`; with one, a solved section state
+    (``solve_section_state``, or ``solve_cable_radial_state`` for the solved
+    model).
+    """
+    from cablexsec.api import _prepare_mkappa_law  # noqa: PLC0415
+    from cablexsec.mechanics.radial_cable import (  # noqa: PLC0415
+        solve_cable_radial_state,
+    )
+    from cablexsec.mechanics.section_state import (  # noqa: PLC0415
+        solve_section_state,
+    )
+
+    if pressure is None:
+        return _prepare_mkappa_law(
+            cable,
+            tension,
+            contact_model=contact_model,
+            section_state=None,
+            radial_state=None,
+            **common,
+        )
+    if contact_model == "solved":
+        radial = solve_cable_radial_state(cable, tension, external_pressure_Pa=pressure)
+        return _prepare_mkappa_law(
+            cable,
+            radial.tension_N,
+            contact_model="solved",
+            section_state=None,
+            radial_state=radial,
+            **common,
+        )
+    state = solve_section_state(
+        cable, tension_N=tension, p_ext_Pa=pressure, contact_model=contact_model
+    )
+    return _prepare_mkappa_law(
+        cable,
+        state.tension_N,
+        contact_model=contact_model,
+        section_state=state,
+        radial_state=None,
+        **common,
+    )
+
+
+def _group_caps(law: _MkappaLaw) -> FloatArray:
+    """Planar full-slip friction moment of every friction group [N m]."""
+    values = [_friction_cap(spec) for spec in law.layers]
+    if law.core_model is not None:
+        values.append(_friction_cap(law.core_model.population))
+    return np.asarray(values, dtype=np.float64)
+
+
+def _reference_tension(
+    cable: CableData,
+    reference_N: float | None,
+    candidates_N: FloatArray,
+    pressure: float | None,
+    contact_model: str,
+    common: dict[str, Any],
+) -> float:
+    """The given reference, or the first candidate at which every group has
+    contact (the last candidate when none has)."""
+    if reference_N is not None:
+        value = float(reference_N)
+        if not (math.isfinite(value) and value >= 0.0):
+            raise CableInputError("slip_scale_reference_N must be finite and >= 0")
+        return value
+    # The smallest exported tension at which every group has contact: with
+    # caps rising with tension the scales are then >= 1.
+    return next(
+        (
+            float(value)
+            for value in candidates_N
+            if np.all(
+                _group_caps(
+                    _state_law(cable, float(value), pressure, contact_model, common)
+                )
+                > 0.0
+            )
+        ),
+        float(candidates_N[-1]),
+    )
+
+
+def _slip_transitions(
+    law: _MkappaLaw, tension: float, friction_law: FrictionLaw | None
+) -> list[_Transition]:
+    """Slip onset and full-slip curvature of every friction group with friction.
+
+    ``first_slip`` bounds the first slip of a wire from below: the neutral-axis
+    onset of :func:`~cablexsec.mechanics.papailiou.slip_onset_curvature` times
+    the compression-side factor ``m(lam)`` and, for the uniform progressive
+    density, the smallest sub-element cap fraction ``1 - h (1 - 1/N)``. A
+    pressure-dependent coefficient enters at the state's ``P1+P2``.
+    """
+    spread = 1.0
+    if law.progressive is not None and law.progressive.density == "uniform":
+        n = law.progressive.n_elements
+        spread = 1.0 - law.progressive.spread * (1.0 - 1.0 / n)
+    specs = [(spec, spread) for spec in law.layers]
+    if law.core_model is not None:
+        specs.append((law.core_model.population, 1.0))
+    out = []
+    for spec, factor in specs:
+        if friction_law is not None and friction_law.pressure_dependent:
+            scale = float(friction_law.pressure_factor_at(spec.contact_pressure_Pa))
+            spec = dataclasses.replace(spec, mu=spec.mu * scale)
+        onset = slip_onset_curvature(spec)
+        if not (math.isfinite(onset) and onset > 0.0):
+            continue  # no friction: the group is in full slip from zero
+        lam = spec.mu * abs(math.sin(spec.lay_angle_rad))
+        out.append(
+            _Transition(
+                tension,
+                onset * _compression_onset_factor(lam) * factor,
+                onset,
+                full_slip_curvature(spec),
+            )
+        )
+    return out
+
+
+def _export_grid(
+    kappa_max: float,
+    n_points: int,
+    spacing: str,
+    transitions: Sequence[_Transition],
+) -> FloatArray:
+    """Zero, the base grid, its extension into stick and the slip curvatures."""
+    if spacing == "geometric":
+        base = np.geomspace(kappa_max * _GRID_FLOOR, kappa_max, n_points - 1)
+    else:
+        base = np.linspace(0.0, kappa_max, n_points)[1:]
+    first = min((tr.first_slip for tr in transitions), default=math.inf)
+    target = _STICK_MARGIN * first
+    extra: list[float] = []
+    if target < base[0]:
+        if spacing == "geometric":
+            ratio = base[1] / base[0]
+            floor = max(target, base[0] * 10.0**-_MAX_EXTENSION_DECADES)
+            count = math.ceil(math.log(base[0] / floor) / math.log(ratio))
+            extra += (base[0] * ratio ** -np.arange(count, 0, -1)).tolist()
+            if target < floor:
+                warnings.warn(
+                    f"the first slip at {first:.3g} 1/m lies more than "
+                    f"{_MAX_EXTENSION_DECADES:g} decades below the grid floor "
+                    f"{base[0]:.3g} 1/m; the exported law starts at the stick "
+                    f"stiffness only from {floor:.3g} 1/m (raise n_points, lower "
+                    "kappa_max_1_m or drop the near-zero tension)",
+                    UserWarning,
+                    stacklevel=3,
+                )
+        else:
+            extra.append(target)
+    if spacing == "linear":
+        narrow = [
+            tr
+            for tr in transitions
+            if tr.onset < kappa_max and tr.full_slip - tr.onset < base[0]
+        ]
+        if narrow:
+            worst = min(narrow, key=lambda tr: tr.full_slip - tr.onset)
+            warnings.warn(
+                f"the linear step {base[0]:.3g} 1/m is wider than the "
+                f"stick-to-slip transition {worst.onset:.3g}-"
+                f"{worst.full_slip:.3g} 1/m at {worst.tension_N:g} N, which "
+                "only its onset and full-slip points resolve; use the "
+                "geometric spacing",
+                UserWarning,
+                stacklevel=3,
+            )
+    for tr in transitions:
+        extra += [tr.onset, tr.full_slip]
+    nodes = np.array(
+        [k for k in extra if math.isfinite(k) and 0.0 < k < kappa_max],
+        dtype=np.float64,
+    )
+    grid = np.unique(np.concatenate([base, nodes]))
+    keep = np.concatenate([[True], np.diff(grid) > _MERGE_GAP * grid[1:]])
+    return np.concatenate([[0.0], grid[keep]])
+
+
 def _slip_scale_table(
     cable: CableData,
     kappa: FloatArray,
@@ -1063,23 +1358,12 @@ def _slip_scale_table(
     options: dict[str, Any],
 ) -> SlipScaleTable:
     """Reference group laws and group caps over the table states."""
-    from cablexsec.api import _prepare_mkappa_law  # noqa: PLC0415
     from cablexsec.cable_adapters import structural_armour_layers  # noqa: PLC0415
     from cablexsec.mechanics.core_friction import (  # noqa: PLC0415
         core_friction_history,
-        resolve_core_friction,
     )
     from cablexsec.mechanics.papailiou import (  # noqa: PLC0415
         compute_mkappa_wire_slip_front,
-    )
-    from cablexsec.mechanics.progressive_friction import (  # noqa: PLC0415
-        ProgressiveFriction,
-    )
-    from cablexsec.mechanics.radial_cable import (  # noqa: PLC0415
-        solve_cable_radial_state,
-    )
-    from cablexsec.mechanics.section_state import (  # noqa: PLC0415
-        solve_section_state,
     )
 
     tensions = _ascending(tensions_N, "slip_scale_tensions_N")
@@ -1088,75 +1372,19 @@ def _slip_scale_table(
         if external_pressure_Pa is None
         else _ascending(external_pressure_Pa, "slip_scale_external_pressure_Pa")
     )
-    if reference_N is not None and not (
-        math.isfinite(reference_N) and reference_N >= 0.0
-    ):
-        raise CableInputError("slip_scale_reference_N must be finite and >= 0")
-    contact_model = options.get("contact_model") or "bounded"
-    friction_model = options.get("friction_model", "direction_tied")
-    common: dict[str, Any] = {
-        "mu": options.get("mu"),
-        "phi_bend": 0.0,
-        "core_spec": resolve_core_friction(options.get("core_friction")),
-        "progressive": (options.get("progressive") or ProgressiveFriction())
-        if friction_model == "progressive"
-        else None,
-    }
+    contact_model, common = _law_options(options)
     reference_pe = float(cable.initial_state.external_pressure_Pa)
 
-    def prepare(tension: float, pressure: float | None) -> Any:
-        if pressure is None:
-            return _prepare_mkappa_law(
-                cable,
-                tension,
-                contact_model=contact_model,
-                section_state=None,
-                radial_state=None,
-                **common,
-            )
-        if contact_model == "solved":
-            radial = solve_cable_radial_state(
-                cable, tension, external_pressure_Pa=pressure
-            )
-            return _prepare_mkappa_law(
-                cable,
-                radial.tension_N,
-                contact_model="solved",
-                section_state=None,
-                radial_state=radial,
-                **common,
-            )
-        state = solve_section_state(
-            cable, tension_N=tension, p_ext_Pa=pressure, contact_model=contact_model
-        )
-        return _prepare_mkappa_law(
-            cable,
-            state.tension_N,
-            contact_model=contact_model,
-            section_state=state,
-            radial_state=None,
-            **common,
-        )
+    def prepare(tension: float, pressure: float | None) -> _MkappaLaw:
+        return _state_law(cable, tension, pressure, contact_model, common)
 
     def caps(tension: float, pressure: float | None) -> FloatArray:
-        law = prepare(tension, pressure)
-        values = [_friction_cap(spec) for spec in law.layers]
-        if law.core_model is not None:
-            values.append(_friction_cap(law.core_model.population))
-        return np.asarray(values, dtype=np.float64)
+        return _group_caps(prepare(tension, pressure))
 
     reference_pressure = None if pressures is None else reference_pe
-    if reference_N is None:
-        # The smallest exported tension at which every group has contact:
-        # with caps rising with tension the scales are then >= 1.
-        reference_N = next(
-            (
-                float(value)
-                for value in candidates_N
-                if np.all(caps(float(value), reference_pressure) > 0.0)
-            ),
-            float(candidates_N[-1]),
-        )
+    reference_N = _reference_tension(
+        cable, reference_N, candidates_N, reference_pressure, contact_model, common
+    )
     reference = prepare(reference_N, reference_pressure)
     names = [layer.name for layer in structural_armour_layers(cable)]
     backbones = [

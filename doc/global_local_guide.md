@@ -394,6 +394,15 @@ export.to_csv("bending_law.csv")       # kappa against M at every tension
 pairs = export.backbone_table_kNm(35e3)  # (curvature rad/m, moment kN m) of the backbone
 ```
 
+Curvature grid. The backbone is computed on a geometric grid from `1e-4 κ_max` to `κ_max` (`n_points`), extended
+below at the same ratio until its first point lies under half the smallest first-slip curvature of any exported
+tension, plus the slip onset and full-slip curvature of every armour layer (and of the laid cores) at every tension
+and at the slip-scale reference. The first chord of every backbone is then the stick stiffness of the section, and
+each stick-to-slip transition is resolved at the grid's density; `kappa_1_m` holds more than `n_points` points. A
+low tension moves the onset far down (66 kV template: 7.3e-6 1/m for the outer armour at 10 kN), below a grid that
+starts at `1e-4 κ_max`. With `spacing="linear"` the export adds one stick point and the onset and full-slip points
+and warns when a transition is narrower than the step.
+
 Checks (targets registered first; [benchmarks.md](benchmarks.md), hysteretic bending law): the Iwan law
 reproduces `compute_mkappa` within 0.05 % of the moment range and the work within 0.02 % on symmetric cycles and
 an irregular history, for the Ménard cable at 0 and 50 kN and the 66 kV template at 50 kN; the decomposition
