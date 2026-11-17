@@ -359,9 +359,9 @@ All notable changes to CableXSec are recorded in this file. The format follows
   the three outer interstices are disjoint. `saint_venant_rigidity` (in
   `cablexsec.mechanics.trefoil_section`) solves the warping of the filler lobes on the section
   mesh; cores (about their centres) and bonded ring layers (about the cable axis) are unchanged.
-  The filler term falls from 7.9 to 0.17 kN m² on the Chae, Nam and Shim (2023) cable, whose free
+  The filler term falls from 7.9 to 0.32 kN m² on the Chae, Nam and Shim (2023) cable, whose free
   torsional stiffness at the source's twist of 0.125 rad/m (unwinding) falls from 89.5 to
-  81.7 kN m² at an armour pitch of 1.8 m and from 58.1 to 50.3 kN m² at 3.0 m; and from 3.6 to
+  81.9 kN m² at an armour pitch of 1.8 m and from 58.1 to 50.5 kN m² at 3.0 m; and from 3.6 to
   0.14 kN m² on the Su et al. (2026) 35 kV cable, whose torsional stiffness with the ends fixed
   axially becomes 199.5 / 177.0 kN m² (clockwise / anticlockwise; FE 209.5 / 201.2, test
   209.8 / 201.3; previously 203.0 / 180.5). The band of that anticlockwise check is widened

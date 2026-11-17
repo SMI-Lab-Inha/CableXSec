@@ -541,8 +541,27 @@ def build_trefoil_model(bundle: TrefoilBundle) -> TrefoilModel:
             2 + 2 * nodes.keys[("core", 0, 2 * n_phi)],
         )
 
+    # Filler nodes of the 60 degree mirror boundary, by mesh key: they lie
+    # off the exact line when the cores do not touch (rc sin 60 > a).
+    mirror_filler = np.array(
+        [
+            index
+            for key, index in nodes.keys.items()
+            if key[0] == "filler" and key[1] == 2 * n_theta
+        ],
+        dtype=np.int64,
+    )
     stiffness, load, twist_rigidity = _assemble(
-        xy, conn, props, axial_map, centre_dofs, n_dof, groups, rc, cb
+        xy,
+        conn,
+        props,
+        axial_map,
+        centre_dofs,
+        n_dof,
+        groups,
+        rc,
+        cb,
+        mirror_filler,
     )
     # Grounded stabilisation of in-plane freedoms.
     e_min = float(np.min(props[:, 0]))
@@ -754,19 +773,22 @@ def saint_venant_rigidity(
     shear_modulus: FloatArray,
     *,
     mirror_angles: tuple[float, ...] = (0.0, SECTOR),
+    mirror_nodes: NDArray[np.int64] | None = None,
 ) -> float:
     """Saint-Venant torsional rigidity [N m²] of a region of six-node triangles.
 
     The twist is about the origin. The warping ``w = tau psi`` of the region
     is free and minimises the shear energy, so the rigidity is
     ``int G |grad psi + (-y, x)|² dA``, which is the polar moment
-    ``int G r² dA`` less the warping relief. Nodes on a mirror line through
-    the origin at one of ``mirror_angles`` have ``psi = 0`` (torsion warping is
-    antisymmetric about a mirror plane that contains the twist axis); a
-    connected part of the region with no such node has its first node held,
-    which removes its rigid axial translation. ``conn`` lists the elements of
-    the region in the node numbering of ``xy``; ``shear_modulus`` gives one
-    value per element.
+    ``int G r² dA`` less the warping relief. Mirror nodes have ``psi = 0``
+    (torsion warping is antisymmetric about a mirror plane that contains the
+    twist axis): the nodes on a line through the origin at one of
+    ``mirror_angles`` and the nodes listed in ``mirror_nodes`` (numbering of
+    ``xy``), which a mesh gives for a mirror boundary whose nodes lie off the
+    exact line. A connected part of the region with no mirror node has its
+    first node held, which removes its rigid axial translation. ``conn``
+    lists the elements of the region in the node numbering of ``xy``;
+    ``shear_modulus`` gives one value per element.
     """
     conn = np.asarray(conn, dtype=np.int64)
     shear_modulus = np.asarray(shear_modulus, dtype=np.float64)
@@ -809,6 +831,8 @@ def saint_venant_rigidity(
     for angle in mirror_angles:
         distance = np.abs(pts[:, 0] * math.sin(angle) - pts[:, 1] * math.cos(angle))
         fixed |= distance <= 1e-9 * scale
+    if mirror_nodes is not None:
+        fixed |= np.isin(nodes, np.asarray(mirror_nodes, dtype=np.int64))
     count, label = connected_components(k, directed=False)
     for part in range(count):
         members = np.flatnonzero(label == part)
@@ -831,8 +855,13 @@ def _assemble(
     groups: dict[str, list[int]],
     rc: float,
     cb: float,
+    mirror_nodes: NDArray[np.int64] | None = None,
 ) -> tuple[sp.coo_matrix, FloatArray, float]:
-    """Generalised plane-strain T6 stiffness, free-strain load, twist rigidity."""
+    """Generalised plane-strain T6 stiffness, free-strain load, twist rigidity.
+
+    ``mirror_nodes`` are the filler nodes of the 60 degree mirror boundary,
+    which lie off the exact line when the cores do not touch.
+    """
     ne = len(conn)
     coords = xy[conn]  # (ne, 6, 2)
     e, nu, e0, carries = props[:, 0], props[:, 1], props[:, 2], props[:, 4]
@@ -897,7 +926,12 @@ def _assemble(
     twist = float(np.sum(np.where(is_core, polar * cb**4, 0.0)))
     twist += float(np.sum(polar[~is_core & ~is_filler]))
     if np.any(is_filler):
-        twist += saint_venant_rigidity(xy, conn[is_filler], (mu * carries)[is_filler])
+        twist += saint_venant_rigidity(
+            xy,
+            conn[is_filler],
+            (mu * carries)[is_filler],
+            mirror_nodes=mirror_nodes,
+        )
     dofs = np.zeros((ne, ndof_e), dtype=np.int64)
     dofs[:, 0:12:2] = 2 + 2 * conn
     dofs[:, 1:12:2] = 3 + 2 * conn

@@ -99,17 +99,34 @@ A = 0.02
 RC = 2 * A / math.sqrt(3)
 
 
-def _bundle(filler: ElasticFiller | None) -> TrefoilBundle:
+def _bundle(filler: ElasticFiller | None, rc: float = RC) -> TrefoilBundle:
     return TrefoilBundle(
         (
             ElasticAnnulus("cond", 0.0, 0.01, 117e9, 0.34),
             ElasticAnnulus("ins", 0.01, A, 0.15e9, 0.45),
         ),
-        RC,
-        (ElasticAnnulus("ring", RC + A, RC + A + 0.003, 0.9e9, 0.46),),
+        rc,
+        (ElasticAnnulus("ring", rc + A, rc + A + 0.003, 0.9e9, 0.46),),
         filler=filler,
         angular_cells=24,
     )
+
+
+def _filler_term(rc: float) -> float:
+    filler = ElasticFiller("filler", 0.9e9, 0.45)
+    with_filler = build_trefoil_model(_bundle(filler, rc)).stiffness[1, 1]
+    return float(with_filler - build_trefoil_model(_bundle(None, rc)).stiffness[1, 1])
+
+
+@pytest.mark.analytical_sanity
+def test_filler_mirror_boundary_off_the_line_stays_antisymmetric() -> None:
+    """Cores 0.2 % apart: the filler's 60 degree boundary nodes lie off the
+    exact mirror line but are the mesh's mirror boundary, so the warping
+    still vanishes there and the filler term stays continuous (a geometric
+    test of the line alone would free that boundary and halve the term)."""
+    touching = _filler_term(RC)
+    apart = _filler_term(1.002 * RC)
+    assert apart == pytest.approx(touching, rel=0.03)
 
 
 @pytest.mark.analytical_sanity
