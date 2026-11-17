@@ -307,12 +307,14 @@ registered before the runs; nothing was refitted.
 - **Core lay stage, whole report.** `validation/scripts/run_validation.py
   --core-lay-stage` evaluates every bending law of a cable with laid cores
   with the stage of the Section properties analysis (core friction 0.2, core
-  insulation shear, no internal ring slip) and writes nothing. Rows that
-  move: BM1-loop and BM1-loop-uniform ordered RMSE 2.71 % to 3.88 %, work
-  +8.8 % to +18.9 % (PASS to FAIL; with the former capstan bound 3.16 % to
-  4.49 % and +12.9 % to +23.0 %, FAIL before and after); CF reads FAIL only
-  because its armour-only reference is switched as well. No other row moves.
-  The stage stays off by default.
+  insulation shear, no internal ring slip, wedged trefoil) and writes
+  nothing. Rows that move: BM1-loop and BM1-loop-uniform ordered RMSE 2.71 %
+  to 5.15 %, work +8.8 % to +27.2 % (PASS to FAIL; before the trefoil wedge
+  3.88 % and +18.9 %); CF, CFW and MK-Tcyc read FAIL because the stage also
+  switches their armour-only references; MX-scale's tension-cycle check on
+  the Ménard cable reads 2.36 against at most 1.25 (the Ménard core group
+  then joins the scaled law). No other row moves. The stage stays off by
+  default.
 - **Su et al. (2026).** No bending loop is published for the 35 kV cable
   (axial and torsional results only); not compared.
 

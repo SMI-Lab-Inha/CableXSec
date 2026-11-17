@@ -146,12 +146,12 @@ tension and curvature, for a section stress map.
 ```text
 core state: frictional
 layer              kind      min MPa  max MPa    use  limit
-cu_conductor       annulus     -28.7    107.1  0.893  yielding
+cu_conductor       annulus     -34.9    107.1  0.893  yielding
 conductor_screen   annulus      -0.2      0.3      -  no limit given
 xlpe_insulation    annulus      -0.3      0.4      -  no limit given
 insulation_screen  annulus      -0.3      0.4      -  no limit given
-cu_screen          annulus    -243.1    309.0      -  follows the section
-hdpe_core_sheath   annulus      -2.0      2.5  0.037  strain limit
+cu_screen          annulus    -249.7    309.0      -  follows the section
+hdpe_core_sheath   annulus      -2.1      2.5  0.037  strain limit
 pp_filler          annulus      -7.0      7.6      -  no limit given
 hdpe_bedding       annulus      -4.3      4.6  0.068  strain limit
 inner_armour       wires       -71.4    152.2  0.221  yielding

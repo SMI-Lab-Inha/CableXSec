@@ -277,3 +277,36 @@ def test_bending_law_export_with_the_core_lay_stage(
     assert first == pytest.approx(bound, rel=1e-9)
     assert "core lay stage" in law.provenance.method
     assert "core_friction" in law.settings
+
+
+def test_filler_profiles_in_the_core_lay_stage(cable: cx.CableData) -> None:
+    spec = CoreFrictionSpec(strand_slip=False, filler_profiles=True)
+    result = compute_section_properties(
+        cable, [SectionLoadCase("design", T)], core_friction=spec, n_points=40
+    )
+    cores = result.cases[0].cores
+    assert cores is not None
+    model = build_core_friction(cable, spec, T)
+    assert model.fillers is not None
+    assert cores.filler_line_load_N_per_m == model.fillers.line_load_N_per_m
+    onset = slip_onset_curvature(model.fillers.population)
+    assert cores.filler_onset_curvature_1_m == pytest.approx(onset, rel=1e-12)
+    assert cores.filler_full_slip_curvature_1_m is not None
+    assert cores.filler_full_slip_curvature_1_m > onset
+    assert cores.stick_bending_stiffness_Nm2 == pytest.approx(
+        model.stick_EI_Nm2, rel=1e-12
+    )
+    kappa = result.cases[0].kappa_1_m
+    for value in (onset, cores.filler_full_slip_curvature_1_m):
+        assert np.min(np.abs(kappa - value)) <= 1e-15 * value
+    assert result.settings["core_lay_stage"]["filler_profiles"] is True
+    table = global_export.section_properties_csv(result)
+    assert "filler profiles full slip curvature [1/m]" in table
+    assert "filler profiles: line load" in global_export.bending_tables_csv(result)
+    # Without the profiles the columns stay out.
+    plain = compute_section_properties(
+        cable, [SectionLoadCase("design", T)], core_friction=RIGID, n_points=40
+    )
+    assert plain.cases[0].cores is not None
+    assert plain.cases[0].cores.filler_line_load_N_per_m is None
+    assert "filler profiles" not in global_export.section_properties_csv(plain)

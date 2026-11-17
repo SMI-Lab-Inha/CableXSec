@@ -18,7 +18,8 @@ Every row is computed from published data or closed-form references in this repo
 | 1 | OvM | Frictionless contact slip vs Out-von Morgen geodesic (Eqs. 26-28): loxodromic slip = wire-direction component; magnitude within bound; closed forms vs exact geodesic | < 1e-12 relative; ratio <= 1; < 1e-3 relative at k = 1e-4 | identity 1.07e-15; ratio 0.333; closed form 3.76e-04 | PASS |
 | 1 | OvM-g | Geodesic transverse map (eta = 1) vs Out-von Morgen slip vector (Eqs. 26-28) at mu = 0; vs exact geodesic | < 1e-12 relative; < 1e-3 relative at k = 1e-4 | closed form 1.05e-15; delta*/Eq. 28 - 1 2.7e-15; exact 2.62e-04 | PASS |
 | 1 | Out89 | Contact plastic slip vs Out (1989) effective curvature change dk - 2 kappa_s (Eq. 1) and damage ratios (Eqs. A8, A11) | < 1e-12 relative; < 1e-4 absolute | Eq. 1 9.63e-16; A8/A11 5.0e-07 | PASS |
-| 1 | CF | Laid-core friction: mu = 0 armour-only loop; large mu tangent vs EI_max; full-slip core moment vs closed form; dissipation >= 0; rotation equivariance | 0 N m; < 1e-9; < 5e-3; >= 0; < 1e-9 relative | 0.0e+00 N m; 4.4e-16; 1.0e-04; 5.0e-06; 5.4e-14 | PASS |
+| 1 | CF | Laid-core friction: mu = 0 armour-only loop; large mu tangent vs EI_max; full-slip core moment vs closed form; dissipation >= 0; rotation equivariance | 0 N m; < 1e-9; < 5e-3; >= 0; < 1e-9 relative | 0.0e+00 N m; 1.0e-15; 1.0e-04; 5.0e-06; 5.0e-14 | PASS |
+| 1 | CFW | Laid-core contact statics (wedged trefoil, central filler) and laid filler profiles: mu = 0 armour-only loop; full-slip profile moment vs closed form; stick tangent vs EI_max + E J_f cos^3 / 2 | < 1e-12 relative; 0 N m; < 5e-3; < 1e-9 | 9.5e-17; 0.0e+00 N m; 1.0e-04; 7.8e-16 | PASS |
 | 1 | FR | Fretting regime: Mindlin energy vs numerical Masing loop; Fouvry A/D/B at transition; Cattaneo strip I(0) = pi/16; mu = inf stick energy; planar-path rotation | < 1e-9; < 1e-12; < 1e-12; 0 J; < 1e-12 relative | 7.8e-12; 4.4e-16; 1.6e-15; 0.0e+00 J; 4.4e-16 | PASS |
 | 1 | TQ | Torque balance: Feyrer Ex. 2.8 torque constant c_1S (fixed radius); coupled section vs Knapp (1981) core factor, theta = 2 nu; mirror lay reverses torque and twist | 0.0345 +/- 0.2%; < 1e-4 relative; < 1e-9 relative | 0.03446 (-0.11%); -1.3e-06; 0.0e+00 | PASS |
 | 1 | A11 | M-κ energy closure (loop area vs closed form) | < 0.1% | 0.082% | PASS |
@@ -67,9 +68,9 @@ Every row is computed from published data or closed-form references in this repo
 
 ## Test taxonomy (full gate suite)
 
-- analytical_sanity: `1167 passed, 3250 deselected`
-- independent_method: `76 passed, 4341 deselected`
-- full_scale: `31 passed, 4386 deselected`
+- analytical_sanity: `1168 passed, 3250 deselected`
+- independent_method: `76 passed, 4342 deselected`
+- full_scale: `31 passed, 4387 deselected`
 
 Run `pytest -m <marker>` to reproduce each group.
 
