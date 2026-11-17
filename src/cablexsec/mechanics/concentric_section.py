@@ -37,6 +37,16 @@ class ElasticAnnulus:
     youngs_modulus_Pa: float
     poisson_ratio: float
     free_thermal_strain: float = 0.0
+    # In-plane (radial and hoop) free strain added to the isotropic one: a
+    # frozen extrusion shrinkage is -hoop_strain (no axial part).
+    free_transverse_strain: float = 0.0
+
+    @property
+    def free_strain_vector(self) -> NDArray[np.float64]:
+        """Free strain (radial, hoop, axial)."""
+        e = self.free_thermal_strain
+        t = self.free_transverse_strain
+        return np.array([e + t, e + t, e], dtype=np.float64)
 
 
 @dataclass(frozen=True)
@@ -194,7 +204,13 @@ def solve_concentric_section(
     for i, layer in enumerate(layers):
         a, b = layer.inner_radius_m, layer.outer_radius_m
         if not np.isfinite(
-            [a, b, layer.youngs_modulus_Pa, layer.free_thermal_strain]
+            [
+                a,
+                b,
+                layer.youngs_modulus_Pa,
+                layer.free_thermal_strain,
+                getattr(layer, "free_transverse_strain", 0.0),
+            ]
         ).all():
             raise CableInputError(
                 "layer geometry, modulus and free strain must be finite"
@@ -277,7 +293,7 @@ def solve_concentric_section(
                     volume_weight
                     * strain_map.T
                     @ constitutive
-                    @ np.full(3, layer.free_thermal_strain)
+                    @ layer.free_strain_vector
                 )
             matrix[1, 1] += shear * math.pi * (b**4 - a**4) / 2
     initial_load = load.copy()

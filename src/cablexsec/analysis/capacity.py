@@ -732,6 +732,13 @@ def _crush_uf(cable: CableData, T_N: float, allowable_Pa: float | None) -> float
     """Polymer-crush screen, or NaN when no project allowable is available."""
     if allowable_Pa is None:
         return math.nan
+    from cablexsec.clamping import require_radial_shrinkage_route  # noqa: PLC0415
+
+    require_radial_shrinkage_route(
+        cable,
+        "bounded pressure chain of the polymer-crush screen",
+        "no crush allowable",
+    )
     res = _contact_forces(cable, abs(T_N))
     p = res.interface_pressure_Pa
     p_max = float(np.max(p)) if p.size else 0.0

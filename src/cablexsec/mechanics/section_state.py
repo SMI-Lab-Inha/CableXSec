@@ -142,6 +142,10 @@ def solve_section_state(
         raise CableSchemaError("section-state calculation requires complete geometry")
     if contact_model not in {"bounded", "qp"}:
         raise CableSchemaError("contact_model must be 'bounded' or 'qp'")
+    if contact_model == "bounded":
+        from cablexsec.clamping import require_radial_shrinkage_route  # noqa: PLC0415
+
+        require_radial_shrinkage_route(cable, "bounded pressure chain")
     if any(isinstance(layer, HelicalStrandedLayer) for layer in cable.layers):
         raise CableSchemaError(
             "nested-strand normal section mechanics require a strand model"

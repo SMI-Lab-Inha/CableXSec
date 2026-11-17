@@ -2959,6 +2959,15 @@ def compute_fretting(
         cable, contact_tension_N=reference, mu=mu, contact_model=contact_model
     )
     p_ext = cable.initial_state.external_pressure_Pa
+    # The faces are split with the bounded chain, which cannot carry an
+    # extrusion shrinkage (an interference).
+    from cablexsec.clamping import require_radial_shrinkage_route  # noqa: PLC0415
+
+    require_radial_shrinkage_route(
+        cable,
+        "bounded chain that splits the fretting face pressures",
+        "a cable without extrusion shrinkage for compute_fretting",
+    )
     chain = compute_contact_forces(cable, reference, p_ext_Pa=p_ext)
     interface = chain.interface_pressure_Pa
     winding = winding_interface_pressure(cable)

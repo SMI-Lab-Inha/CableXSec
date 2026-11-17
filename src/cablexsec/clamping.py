@@ -40,17 +40,41 @@ declared as not published.
 from __future__ import annotations
 
 import warnings
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-from cablexsec.cables.schema import CableData, HelicalLayer
-from cablexsec.provenance import MissingClampingStateWarning
+from cablexsec.cables.schema import CableData, CylindricalLayer, HelicalLayer
+from cablexsec.exceptions import CableInputError
+from cablexsec.provenance import (
+    ClampingCalibrationWarning,
+    MissingClampingStateWarning,
+)
 
 __all__ = [
     "ClampingState",
     "LayerClamping",
+    "LayerShrinkage",
     "clamping_state",
+    "require_radial_shrinkage_route",
+    "warn_if_calibrated_with_armour_only",
     "warn_if_unclamped",
 ]
+
+
+@dataclass(frozen=True)
+class LayerShrinkage:
+    """Declared frozen extrusion shrinkage of one concentric layer."""
+
+    layer: str
+    r_inner_m: float
+    hoop_strain: float
+    basis: str
+    source: str
+
+    def describe(self) -> str:
+        return (
+            f"{self.layer}: extrusion shrinkage {self.hoop_strain * 100:g} % "
+            f"({self.basis})"
+        )
 
 
 @dataclass(frozen=True)
@@ -95,11 +119,19 @@ class ClampingState:
     initial_external_pressure_Pa: float
     initial_identification: str
     initial_source: str
+    shrinkage: tuple[LayerShrinkage, ...] = ()
+    #: Structural helical layers inside a layer that declares a shrinkage.
+    shrink_covered: frozenset[str] = field(default_factory=frozenset)
 
     @property
     def missing_layers(self) -> tuple[str, ...]:
-        """Structural helical layers with no declaration and no legacy value."""
-        return tuple(x.layer for x in self.layers if x.basis == "missing")
+        """Structural helical layers with no declaration and no legacy value,
+        and no declared extrusion shrinkage of a layer outside them."""
+        return tuple(
+            x.layer
+            for x in self.layers
+            if x.basis == "missing" and x.layer not in self.shrink_covered
+        )
 
     @property
     def has_initial_state(self) -> bool:
@@ -117,8 +149,10 @@ class ClampingState:
     @property
     def is_zero(self) -> bool:
         """No clamping at zero tension from either declaration."""
-        return self.initial_external_pressure_Pa == 0.0 and all(
-            x.is_zero for x in self.layers
+        return (
+            self.initial_external_pressure_Pa == 0.0
+            and all(x.is_zero for x in self.layers)
+            and all(x.hoop_strain == 0.0 for x in self.shrinkage)
         )
 
     def warning_message(self) -> str | None:
@@ -130,17 +164,22 @@ class ClampingState:
             "stress, fretting contact loads, thermal or tension changes of the "
             "clamping) then rest on tension-induced contact alone: friction "
             "stresses and damages sit at their low end and ratios that change "
-            "the clamping at their high end"
+            "the clamping at their high end. At low tension the friction "
+            "moment, the bending hysteresis and its damping tend to zero, which "
+            "a manufactured cable does not show, so a low-tension hysteresis is "
+            "unreliable without a declared clamping state"
         )
         if not self.is_declared:
             return (
                 f"cable {self.cable!r} declares no manufacturing clamping state "
                 f"for {', '.join(self.missing_layers)}; {consequence}. Declare "
                 "the manufacturing clamping of each armour layer, an armour "
-                "winding stress or an initial contact pressure with its basis and "
+                "winding stress or an initial contact pressure, or the frozen "
+                "extrusion shrinkage of the sheath over it, with its basis and "
                 "source (the local analysis guide, Section 4.4)."
             )
         unpublished = [x.layer for x in self.layers if x.basis == "not_published"]
+        unpublished += [x.layer for x in self.shrinkage if x.basis == "not_published"]
         if self.is_zero and unpublished:
             return (
                 f"cable {self.cable!r} has zero manufacturing clamping because "
@@ -153,6 +192,7 @@ class ClampingState:
     def describe(self) -> str:
         """One-line report of the declared state."""
         parts = [x.describe() for x in self.layers]
+        parts += [x.describe() for x in self.shrinkage]
         if self.has_initial_state:
             parts.append(
                 f"initial external pressure "
@@ -198,15 +238,92 @@ def clamping_state(cable: CableData) -> ClampingState:
     ``"undocumented"``; a legacy zero counts as missing.
     """
     initial = cable.initial_state
+    shrinkage = tuple(
+        LayerShrinkage(
+            layer.name,
+            float(layer.r_inner_m or 0.0),
+            float(layer.extrusion_shrinkage.hoop_strain),
+            layer.extrusion_shrinkage.basis,
+            layer.extrusion_shrinkage.source,
+        )
+        for layer in cable.layers
+        if isinstance(layer, CylindricalLayer) and layer.extrusion_shrinkage is not None
+    )
+    helical = [layer for layer in cable.helical_layers if layer.structural]
+    covered = frozenset(
+        layer.name
+        for layer in helical
+        if any(s.r_inner_m > float(layer.r_helix_m or 0.0) for s in shrinkage)
+    )
     return ClampingState(
         cable=cable.cable.name,
-        layers=tuple(
-            _layer_clamping(layer) for layer in cable.helical_layers if layer.structural
-        ),
+        layers=tuple(_layer_clamping(layer) for layer in helical),
         initial_external_pressure_Pa=float(initial.external_pressure_Pa),
         initial_identification=initial.identification,
         initial_source=initial.source,
+        shrinkage=shrinkage,
+        shrink_covered=covered,
     )
+
+
+def require_radial_shrinkage_route(
+    cable: CableData, route: str, remedy: str = "contact_model 'solved' or 'qp'"
+) -> None:
+    """Refuse a declared non-zero extrusion shrinkage on the bounded chain.
+
+    The frozen shrinkage of a concentric layer is an interference that only
+    a displacement-compatible solution carries: the solved radial state and
+    the concentric ``qp`` route. The bounded pressure chain would silently
+    drop it.
+    """
+    shrinking = [
+        layer.name
+        for layer in cable.layers
+        if isinstance(layer, CylindricalLayer)
+        and layer.extrusion_shrinkage is not None
+        and layer.extrusion_shrinkage.hoop_strain > 0.0
+    ]
+    if shrinking:
+        raise CableInputError(
+            f"{', '.join(shrinking)}: a frozen extrusion shrinkage is carried by "
+            f"a radial solution, not by the {route}; use {remedy}"
+        )
+
+
+def warn_if_calibrated_with_armour_only(
+    cable: CableData, *, stacklevel: int = 2
+) -> bool:
+    """Warn when core friction is added to a value fitted with the armour alone.
+
+    Issues :class:`~cablexsec.provenance.ClampingCalibrationWarning` when the
+    cable's initial pressure or an armour clamping declares
+    ``calibration_scope="armour_only"``; returns whether it did. Such a value
+    was raised until the armour friction alone matched the measured
+    dissipation, so it already holds the share of the other contacts; the
+    laid-core stick-slip law, which calls this, adds that share again.
+    """
+    names = []
+    if cable.initial_state.calibration_scope == "armour_only":
+        names.append("initial_state")
+    names += [
+        layer.name
+        for layer in cable.helical_layers
+        if layer.manufacturing_clamping is not None
+        and layer.manufacturing_clamping.calibration_scope == "armour_only"
+    ]
+    if not names:
+        return False
+    warnings.warn(
+        f"cable {cable.cable.name!r}: {', '.join(names)} was calibrated with "
+        "the armour friction alone, so it already holds the friction of the "
+        "other contacts; the core stick-slip law adds the cores' share a "
+        "second time. "
+        "Re-identify the clamping with the friction model in use (the local "
+        "analysis guide, Section 4.4).",
+        ClampingCalibrationWarning,
+        stacklevel=stacklevel + 1,
+    )
+    return True
 
 
 def warn_if_unclamped(cable: CableData, *, stacklevel: int = 2) -> ClampingState:

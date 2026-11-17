@@ -42,6 +42,7 @@ cable:
 initial_state:
   external_pressure_Pa: 1037264.0
   identification: identified
+  calibration_scope: armour_only    # identified with the armour friction law (no cores)
   source: "Identified on [Witz1996] Fig. 5 loop width at zero curvature (552.7 N m), mu = 0.10, bounded chain; scripts/run_validation.py WITZ-ID"
 
 layers:

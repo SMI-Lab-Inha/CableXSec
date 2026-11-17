@@ -46,6 +46,7 @@ from numpy.typing import ArrayLike, NDArray
 from cablexsec.exceptions import PhysicalRangeError
 
 __all__ = [
+    "ClampingCalibrationWarning",
     "DirectionTiedFrictionWarning",
     "ExtrapolationWarning",
     "MissingClampingStateWarning",
@@ -117,7 +118,21 @@ class MissingClampingStateWarning(UserWarning):
     (and the cable no identified ``initial_state``), or when the clamping is
     zero because it is declared as not published. Bending hysteresis, armour
     friction stress, fretting loads and their changes with temperature then
-    rest on tension-induced contact alone (:mod:`cablexsec.clamping`).
+    rest on tension-induced contact alone (:mod:`cablexsec.clamping`); at low
+    tension they tend to zero, so a low-tension hysteresis is unreliable.
+    """
+
+
+class ClampingCalibrationWarning(UserWarning):
+    """A calibrated clamping value is combined with friction it already holds.
+
+    Emitted by the laid-core stick-slip law when the cable's initial pressure
+    or an armour clamping was calibrated with the armour friction alone
+    (``calibration_scope="armour_only"``): that value was raised until the
+    armour matched the measured dissipation, so it already carries the
+    friction of the other contacts, which the law then adds a second time.
+    Re-identify the value with the friction model in use
+    (:mod:`cablexsec.clamping`).
     """
 
 

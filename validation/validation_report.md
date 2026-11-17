@@ -68,7 +68,7 @@ Every row is computed from published data or closed-form references in this repo
 
 ## Test taxonomy (full gate suite)
 
-- analytical_sanity: `1168 passed`
+- analytical_sanity: `1179 passed`
 - independent_method: `76 passed`
 - full_scale: `31 passed`
 

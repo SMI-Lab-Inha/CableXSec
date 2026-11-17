@@ -201,6 +201,15 @@ PressureIdentification = Literal[
     "assumed_bound",
 ]
 
+#: What friction a calibrated clamping value was fitted with: the armour
+#: friction alone, or friction on every contact (cores, fillers and sheaths
+#: included). A value fitted with the armour alone was raised until the armour
+#: matched the measured dissipation, so it already holds the friction of the
+#: other contacts: adding the laid-core law to it counts that twice.
+CalibrationScope = Literal["armour_only", "all_contacts"]
+
+_CALIBRATED = ("published_calibration", "identified")
+
 
 class InitialStateProperties(_Frozen):
     """Documented initial contact state used by nonlinear section analyses.
@@ -211,17 +220,32 @@ class InitialStateProperties(_Frozen):
     be mistaken for an independent prediction: ``"identified"`` marks a value
     that CableXSec itself fitted to a named measured response (that response
     is then not a prediction; VALIDATION_POLICY Rule 3).
+
+    ``calibration_scope`` states, for a calibrated or identified value, what
+    friction it was fitted with (:data:`CalibrationScope`): a pressure fitted
+    with the armour friction alone already carries the friction of the other
+    contacts, and the core stick-slip law then warns
+    (:class:`~cablexsec.provenance.ClampingCalibrationWarning`).
     """
 
     external_pressure_Pa: float = 0.0
     identification: PressureIdentification = "none"
     source: str = ""
     bounds_Pa: tuple[float, float] | None = None
+    calibration_scope: CalibrationScope | None = None
 
     @model_validator(mode="after")
     def _physical_values(self) -> InitialStateProperties:
         if self.external_pressure_Pa < 0.0:
             raise ValueError("external_pressure_Pa must be >= 0")
+        if (
+            self.calibration_scope is not None
+            and self.identification not in _CALIBRATED
+        ):
+            raise ValueError(
+                "calibration_scope applies to a published_calibration or "
+                "identified initial pressure"
+            )
         if self.external_pressure_Pa > 0.0:
             if self.identification == "none":
                 raise ValueError(
@@ -372,15 +396,22 @@ class ManufacturingClamping(_Frozen):
     ``"not_published"`` declares that no value is available and requires a
     zero; analyses that depend on it then warn
     (:class:`~cablexsec.provenance.MissingClampingStateWarning`).
+    ``calibration_scope`` states, for a ``published_calibration`` value, what
+    friction it was fitted with (:data:`CalibrationScope`).
     """
 
     armour_winding_stress_Pa: float | None = None
     initial_contact_pressure_Pa: float | None = None
     basis: ClampingBasis
     source: str
+    calibration_scope: CalibrationScope | None = None
 
     @model_validator(mode="after")
     def _one_value(self) -> ManufacturingClamping:
+        if self.calibration_scope is not None and self.basis != "published_calibration":
+            raise ValueError(
+                "calibration_scope applies to a published_calibration clamping"
+            )
         values = [
             v
             for v in (self.armour_winding_stress_Pa, self.initial_contact_pressure_Pa)
@@ -861,6 +892,50 @@ class HelicalStrandedLayer(_LayerBase):
         return math.radians(self.lay_angle_strand_deg)
 
 
+class ExtrusionShrinkage(_Frozen):
+    """Frozen shrinkage of an extruded concentric layer (sheath, bedding).
+
+    An extruded polymer layer cools and shrinks onto the layers it was
+    extruded over; the part of that shrinkage that is not relaxed stays as a
+    shrink fit, a manufacturing clamping of everything inside it.
+    ``hoop_strain`` (>= 0) is that frozen shrinkage: the stress-free
+    cross-section of the layer is the declared one contracted by
+    ``hoop_strain`` in every in-plane direction (hoop and radial; no axial
+    part). It is an input, not a prediction: it depends on the extrusion and
+    cooling history and on the polymer's relaxation, which CableXSec does not
+    model. ``basis`` and ``source`` are as for
+    :class:`ManufacturingClamping`; ``"not_published"`` requires zero.
+
+    The radial solutions carry it as an initial (eigen)strain of the layer:
+    the solved radial state (``contact_model="solved"``, including the
+    surrounding ring of a trefoil bundle) and the concentric ``qp`` route, so
+    contacts open or close under later loads. The bounded pressure chain has
+    no displacement compatibility to carry an interference and refuses a
+    non-zero value.
+    """
+
+    hoop_strain: float = Field(ge=0.0, lt=0.1, allow_inf_nan=False)
+    basis: ClampingBasis
+    source: str
+
+    @model_validator(mode="after")
+    def _documented(self) -> ExtrusionShrinkage:
+        if not self.source.strip():
+            raise ValueError("extrusion_shrinkage requires a source")
+        if self.basis == "not_published" and self.hoop_strain != 0.0:
+            raise ValueError(
+                "a not_published extrusion shrinkage must be zero; give the "
+                "value's basis (assumed, representative, ...) instead"
+            )
+        if self.basis == "published_calibration":
+            raise ValueError(
+                "extrusion_shrinkage takes a physical basis (measured, "
+                "manufacturing_specification, representative, assumed or "
+                "not_published)"
+            )
+        return self
+
+
 class CylindricalLayer(_LayerBase):
     """Solid annular layer (bedding, filler, polymer sheath)."""
 
@@ -870,6 +945,8 @@ class CylindricalLayer(_LayerBase):
     # Helical tape winding of the layer (gap P2) and its strain-life constants.
     tape: TapeWinding | None = None
     strain_life: str = ""
+    # Frozen extrusion shrinkage (a manufacturing clamping of the layers inside).
+    extrusion_shrinkage: ExtrusionShrinkage | None = None
 
     @model_validator(mode="after")
     def _annulus_physical_values(self) -> CylindricalLayer:
