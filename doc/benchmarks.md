@@ -318,6 +318,37 @@ registered before the runs; nothing was refitted.
 - **Su et al. (2026).** No bending loop is published for the 35 kV cable
   (axial and torsional results only); not compared.
 
+### Registered targets: full contact accounting (registered before the runs)
+
+Registered on 2026-11-17, before any run of the comparisons below, in the
+first commit of the change that adds them (`validation/scripts/check_core_friction.py`,
+`identify_then_predict`). Nothing below is refitted after the run.
+
+**Ménard and Cartraud (2023), identify on one range, predict five.**
+
+- Model: `menard2023_filled.yaml` (the fillers of the source FE), bounded
+  contact chain, armour μ 0.2, the laid-core law with the trefoil wedge and
+  the filler profiles, μ 0.2 on every core and profile contact (the source's
+  single coefficient, Section 5).
+- Identification: the initial external pressure `P0` is the one value for
+  which the matched cycle work of range (b) equals the measured 62.3 J/m
+  (bisection to 0.1 %). It replaces the source's 0.3 MPa, which belongs to
+  the source FE's contact accounting.
+- Targets: range (b) ordered RMSE < 5 % of the moment range (a shape check;
+  only the work is fitted). Ranges (a), (c), (d), (e), (f), predicted with the
+  same `P0`: matched cycle work within ±20 % and ordered RMSE < 10 %.
+- Reported beside it, not gated: the same identification with the armour law
+  alone.
+
+**Janocha et al. (2024) 66 kV, code-to-code only.**
+
+- Fig. 6 (50 kN, ±0.2 1/m): loop half-height at κ = 0 with full accounting
+  (wedge and filler profiles, MDPE μ 0.46 of Table 2), bounded and solved.
+  Reported, not gated: the source is a finite-element model, not a test, and
+  it states no initial contact state.
+- Fig. 12b knee moments (M at 0.01 1/m) and its stick slope: retired as
+  targets, for the reasons in the next subsection.
+
 ## Out and von Morgen (1997), frictionless slip bounds (OvM, Out89)
 
 Sources: Out and von Morgen, Eng. Struct. 19(6) (1997) 507–515, Eqs. 20–30
