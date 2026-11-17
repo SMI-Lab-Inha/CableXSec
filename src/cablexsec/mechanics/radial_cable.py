@@ -60,6 +60,7 @@ from cablexsec.cables.schema import (
     CylindricalShellLayer,
     HelicalLayer,
     is_serving,
+    layer_stiffness,
 )
 from cablexsec.exceptions import CableInputError, CableSchemaError
 from cablexsec.materials import library
@@ -290,6 +291,13 @@ def build_radial_section(
     """
     if cable.missing_fields():
         raise CableSchemaError("radial solution requires complete geometry")
+    stiff = [x.name for x in cable.layers if layer_stiffness(x) is not None]
+    if stiff:
+        raise CableSchemaError(
+            f"{stiff[0]}: a stiffness-defined layer has no radial constitutive law; "
+            "the coupled radial models ('qp', 'solved') need a material; use the "
+            "bounded contact model"
+        )
     if filler not in {"auto", "solid", "void"}:
         raise CableSchemaError("filler must be 'auto', 'solid' or 'void'")
     if loose_layers not in {"declared", "neighbour"}:

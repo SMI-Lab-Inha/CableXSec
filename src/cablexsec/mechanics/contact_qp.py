@@ -31,6 +31,7 @@ from cablexsec.cables.schema import (
     CylindricalShellLayer,
     HelicalLayer,
     is_serving,
+    layer_stiffness,
 )
 from cablexsec.exceptions import CableSchemaError
 from cablexsec.materials import library
@@ -145,6 +146,13 @@ def _concentric_layers(
     initial_wire_strain: Mapping[str, float] | None = None,
 ) -> list[ElasticAnnulus | ElasticHelicalRing]:
     """Translate every layer or raise; no silent geometrical homogenisation."""
+    stiff = [x.name for x in cable.layers if layer_stiffness(x) is not None]
+    if stiff:
+        raise CableSchemaError(
+            f"{stiff[0]}: a stiffness-defined layer has no radial constitutive law; "
+            "the coupled radial models ('qp', 'solved') need a material; use the "
+            "bounded contact model"
+        )
     result: list[ElasticAnnulus | ElasticHelicalRing] = []
     for layer in cable.layers:
         if isinstance(layer, CylindricalOffsetLayer) and (

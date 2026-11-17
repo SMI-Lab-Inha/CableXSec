@@ -16,7 +16,9 @@ symmetric axial-twist matrix ``[[K_ee, K_et],[K_et, K_tt]]``:
     K_et += s n_w E_w A_w r_h cos^2(alpha) sin(alpha)      (axial-twist coupling)
     K_tt += n_w E_w A_w r_h^2 cos(alpha) sin^2(alpha)      (twist)
 
-(cylindrical layers add ``E A`` to ``K_ee`` only). With both ends rotationally
+(cylindrical layers add ``E A`` to ``K_ee`` only; a stiffness-defined layer
+adds its datasheet ``E A`` to ``K_ee`` and its ``G J`` to ``K_tt``, the
+measured torsion of that component). With both ends rotationally
 fixed the twist is constrained, so ``EA_fixed = K_ee``; with one end free the
 twist relaxes and the Schur complement applies,
 ``EA_free = K_ee - K_et^2 / K_tt`` ([WitzTan1992a]).
@@ -51,6 +53,7 @@ from cablexsec.cables.schema import (
     CylindricalShellLayer,
     HelicalLayer,
     is_serving,
+    layer_stiffness,
 )
 from cablexsec.exceptions import CableInputError
 from cablexsec.materials import library
@@ -191,6 +194,9 @@ def axial_torsional_matrix(
             base = lyr.n_wires * e_w * a_w
             k_et += s * base * r * math.cos(a) ** 2 * math.sin(a)
             k_tt += base * r**2 * math.cos(a) * math.sin(a) ** 2
+        block = layer_stiffness(lyr)
+        if block is not None and lyr.name in axial:
+            k_tt += block.GJ_Nm2
     return AxialTorsional(K_ee=k_ee, K_et=k_et, K_tt=k_tt)
 
 
@@ -229,6 +235,9 @@ def _axial_EA_contribution(
     """
     if is_serving(layer):
         return 0.0
+    block = layer_stiffness(layer)
+    if block is not None:
+        return block.EA_N
     if not layer.structural:
         if isinstance(layer, CylindricalLayer):  # interstitial filler
             area = (
@@ -346,12 +355,16 @@ def _individual_bending_by_layer(
                 ei += lyr.n_cores * _layer_bending_modulus(lyr) * i_core
             ei *= bending_factor(core_angle(cable, lyr))
         elif isinstance(lyr, CylindricalLayer):
-            if not _has_modulus(lyr.material):
+            block = layer_stiffness(lyr)
+            if block is not None:
+                ei = block.EI_Nm2
+            elif not _has_modulus(lyr.material):
                 continue
-            ro = lyr.r_outer_m or 0.0
-            ri = lyr.r_inner_m or 0.0
-            i_ann = math.pi * (ro**4 - ri**4) / 4.0
-            ei += _layer_bending_modulus(lyr) * i_ann
+            else:
+                ro = lyr.r_outer_m or 0.0
+                ri = lyr.r_inner_m or 0.0
+                i_ann = math.pi * (ro**4 - ri**4) / 4.0
+                ei += _layer_bending_modulus(lyr) * i_ann
         elif isinstance(lyr, CylindricalShellLayer):
             # Use the same effective thin-wall law as shell stress recovery.
             # The corrugation SCF amplifies local stress, not section rigidity.
