@@ -206,6 +206,7 @@ The section state minimises the small-strain elastic energy per axial metre with
   - `filler="solid"`: meshed in the outer interstices with unilateral contact.
   - `"void"`: flooded or loose yarn.
   - `"auto"`: as declared. The central interstice is void.
+- Saint-Venant twist rigidity: the bonded ring layers twist about the cable axis and each core about its own centre (both exact for annuli). The filler lobes touch cores and ring through frictionless contacts that carry no axial shear, so they twist as separate bodies with their own warping (`saint_venant_rigidity`, validation row TQ-SV), not with their polar moment about the cable axis. The filler then adds 0.17 kN m² to the Chae, Nam and Shim (2023) cable instead of 7.9 kN m², and 0.14 kN m² instead of 3.6 kN m² to the Su et al. (2026) 35 kV cable.
 - Stranded conductors whose metal area differs from the envelope, nested strands and corrugated shells are rejected, as in A3. The 220 kV template and CIGRE TB 880 are therefore unsupported.
 
 ### 3.5 Limits
@@ -248,7 +249,7 @@ The section state minimises the small-strain elastic energy per axial metre with
 | Knapp (1979) coupling | k12 / k21 (non-symmetric) | Lies between k12 and k21 | — |
 | Su et al. (2026) 35 kV, EA tension (twist fixed, 500 kN secant) | FE 615.4 MN; test 631.7 MN | 608.7 MN | −1.1 % FE; −3.6 % test (no-interaction bound about +30 %) |
 | Su et al. (2026) 35 kV, EA compression | FE 329.7 MN | 298.4 MN | −9.5 % |
-| Su et al. (2026) 35 kV, GJ (axial strain fixed) | FE 209.5 / 201.2 kN m² | 203.0 / 180.5 | −3.1 % / −10.3 % |
+| Su et al. (2026) 35 kV, GJ (axial strain fixed) | FE 209.5 / 201.2 kN m²; test 209.8 / 201.3 kN m² | 199.5 / 177.0 | −4.8 % / −12.0 % FE (the filler bonded to the ring without warping gave 203.0 / 180.5) |
 | Su et al. (2026) 35 kV, interfaces at 100 kN | Source analytical model, Table 10 (kPa): 432.8, 283.9, 173.3, 176.4, 74.5; separation at armour 4 | 365.0, 255.6, 158.7, 161.9, 76.7; same separation | −16 % to +3 % |
 | Ménard and Cartraud (2023), P = 0.3 MPa | 46 kN/m inner sheath | 26.6 (void interstices) to 72.0 (fully filled) kN/m | Bracket only |
 

@@ -797,19 +797,8 @@ def _torque_rows() -> list[Row]:
     v = tq.verification_checks()
     p = tq.published_checks()
     w = sv.verification_checks()
+    # The first two rows are tier 1 and are reported with the analytical rows.
     return [
-        Row(
-            "1",
-            "TQ-SV",
-            "Saint-Venant twist rigidity with free warping (trefoil filler lobes): "
-            "2 x 1 rectangle vs series solution; bonded annulus as a mirrored "
-            "60 deg sector vs polar moment",
-            "< 3e-4 relative; < 1e-6 relative",
-            f"{w['rectangle']:.1e}; {w['annulus']:.1e}",
-            "PASS"
-            if abs(w["rectangle"]) < 3e-4 and abs(w["annulus"]) < 1e-6
-            else "FAIL",
-        ),
         Row(
             "1",
             "TQ",
@@ -823,6 +812,18 @@ def _torque_rows() -> list[Row]:
             if abs(v["feyrer_error"]) < 2e-3
             and abs(v["knapp_error"]) < 1e-4
             and v["mirror"] < 1e-9
+            else "FAIL",
+        ),
+        Row(
+            "1",
+            "TQ-SV",
+            "Saint-Venant twist rigidity with free warping (trefoil filler lobes): "
+            "2 x 1 rectangle vs series solution; bonded annulus as a mirrored "
+            "60 deg sector vs polar moment",
+            "< 3e-4 relative; < 1e-6 relative",
+            f"{w['rectangle']:.1e}; {w['annulus']:.1e}",
+            "PASS"
+            if abs(w["rectangle"]) < 3e-4 and abs(w["annulus"]) < 1e-6
             else "FAIL",
         ),
         Row(
@@ -1230,7 +1231,7 @@ def _rows() -> list[Row]:
     )
 
     torque_rows = _torque_rows()
-    rows.extend(torque_rows[:1])
+    rows.extend(torque_rows[:2])
 
     # A11 energy closure on a synthetic dense layer (loop area vs closed form).
     from cablexsec.mechanics.mkappa import HelicalLayerSpec  # noqa: PLC0415
@@ -1720,7 +1721,7 @@ def _rows() -> list[Row]:
             ("OST12-in", "OST12-out", "OST12-sum"),
         )
     )
-    rows.extend(torque_rows[1:])
+    rows.extend(torque_rows[2:])
     ei_min = ei_min_slip(menard)
     rows.append(
         Row(
