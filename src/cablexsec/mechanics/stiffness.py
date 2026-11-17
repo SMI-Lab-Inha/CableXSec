@@ -50,6 +50,7 @@ from cablexsec.cables.schema import (
     CylindricalOffsetLayer,
     CylindricalShellLayer,
     HelicalLayer,
+    is_serving,
 )
 from cablexsec.exceptions import CableInputError
 from cablexsec.materials import library
@@ -222,10 +223,12 @@ def _axial_EA_contribution(
     """Axial stiffness contribution ``E A`` of a (offset) cylindrical layer [N].
 
     Loose-layer treatment: a non-structural *offset* layer (loose helical tape
-    screen) carries no axial load; a non-structural *cylindrical* layer
-    (interstitial filler) carries axial load over its true area (cores
+    screen) and a serving carry no axial load; a non-structural *cylindrical*
+    layer (interstitial filler) carries axial load over its true area (cores
     excluded). Structural layers use the full annulus area.
     """
+    if is_serving(layer):
+        return 0.0
     if not layer.structural:
         if isinstance(layer, CylindricalLayer):  # interstitial filler
             area = (

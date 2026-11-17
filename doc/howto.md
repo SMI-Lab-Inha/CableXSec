@@ -185,14 +185,14 @@ cable coiled into a static tank with one twist per turn.
 
 <!-- howto-output: howto_05_coiling.py -->
 ```text
-D = 14.4 m: kappa = twist = 0.1389 1/m, torque 14.79 kN m
-  armour wire centre  -244.0 to -205.4 MPa, surface  -299.8 to -150.6 MPa
-  bird-caging capacity 231.7 MPa, buckling 1.053, yield 0.750
-  governing: armour (radial), utilisation 1.053, elastic True
-D =  8.0 m: kappa = twist = 0.2500 1/m, torque 26.62 kN m
-  armour wire centre  -439.1 to -369.7 MPa, surface  -539.7 to -271.1 MPa
-  bird-caging capacity 231.7 MPa, buckling 1.895, yield 1.349
-  governing: armour (radial), utilisation 1.895, elastic False
+D = 14.4 m: kappa = twist = 0.1389 1/m, torque 12.43 kN m
+  armour wire centre  -223.6 to -188.3 MPa, surface  -280.5 to -132.7 MPa
+  bird-caging capacity 231.7 MPa, buckling 0.965, yield 0.701
+  governing: armour (radial), utilisation 0.965, elastic True
+D =  8.0 m: kappa = twist = 0.2500 1/m, torque 22.37 kN m
+  armour wire centre  -402.6 to -338.9 MPa, surface  -505.0 to -238.9 MPa
+  bird-caging capacity 231.7 MPa, buckling 1.737, yield 1.262
+  governing: armour (radial), utilisation 1.737, elastic False
 ```
 
 The check is elastic. When the wires yield (`elastic False`) the stresses are

@@ -204,6 +204,7 @@ layers:
   - name: pp_yarn_serving
     layer_type: cylindrical
     material: pp_filler
+    construction: serving
     r_inner_m: 0.0570
     r_outer_m: 0.0615
     structural: false

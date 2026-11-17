@@ -23,6 +23,8 @@
 #     of overlap with touching cores);
 #   circular string fillers of the source (Fig. 6) as a non-structural
 #     annulus between the cores;
+#   the two yarn layers as servings (construction: serving): radial and hoop
+#     stiffness of the Table 2 yarn, no axial, bending or torsional stiffness;
 #   straight cores (no core_lay block): the core lay pitch is not given;
 #   zero manufacturing clamping: all tools start from a stress-free state
 #     (Sec. 2.4).
@@ -64,6 +66,7 @@ layers:
   - name: yarn1
     layer_type: cylindrical
     material: yarn_chae2023
+    construction: serving
     r_inner_m: 0.076277
     r_outer_m: 0.0785
     source: "[ChaeNamShim2023] Table 1 1st yarn to 157.0 mm (2.22 mm with touching cores)"
@@ -87,6 +90,7 @@ layers:
   - name: yarn2
     layer_type: cylindrical
     material: yarn_chae2023
+    construction: serving
     r_inner_m: 0.0835
     r_outer_m: 0.0875
     source: "[ChaeNamShim2023] Table 1 2nd yarn 4.0 mm to 175.0 mm"

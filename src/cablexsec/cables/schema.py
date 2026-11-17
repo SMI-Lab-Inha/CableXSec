@@ -937,7 +937,15 @@ class ExtrusionShrinkage(_Frozen):
 
 
 class CylindricalLayer(_LayerBase):
-    """Solid annular layer (bedding, filler, polymer sheath)."""
+    """Solid annular layer (bedding, filler, polymer sheath) or a serving.
+
+    ``construction: serving`` declares a served yarn or a wound tape. The
+    layer keeps its mass, its radial and hoop stiffness (an annulus in plane
+    stress along the cable axis, so it transmits contact pressure) and its
+    shear compliance between the layers it separates, but it carries no axial
+    force, no bending moment and no torque. A serving is non-structural;
+    ``structural: true`` is refused.
+    """
 
     layer_type: Literal["cylindrical"] = "cylindrical"
     r_inner_m: float | None = None
@@ -947,6 +955,26 @@ class CylindricalLayer(_LayerBase):
     strain_life: str = ""
     # Frozen extrusion shrinkage (a manufacturing clamping of the layers inside).
     extrusion_shrinkage: ExtrusionShrinkage | None = None
+    # "" (extruded or solid annulus) or "serving" (yarn or tape serving:
+    # radial and hoop stiffness only).
+    construction: Literal["", "serving"] = ""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _serving_is_not_structural(cls, data: Any) -> Any:
+        """A serving carries no section load, so ``structural`` is false."""
+        if (
+            not isinstance(data, Mapping)
+            or data.get("construction") != "serving"
+            or "structural" in data
+        ):
+            return data
+        return {**data, "structural": False}
+
+    @property
+    def is_serving(self) -> bool:
+        """Whether the layer is a yarn or tape serving (no section stiffness)."""
+        return self.construction == "serving"
 
     @model_validator(mode="after")
     def _annulus_physical_values(self) -> CylindricalLayer:
@@ -960,7 +988,25 @@ class CylindricalLayer(_LayerBase):
             and self.r_outer_m <= self.r_inner_m
         ):
             raise ValueError("r_outer_m must be greater than r_inner_m")
+        if self.is_serving and self.r_inner_m is not None and self.r_inner_m <= 0.0:
+            raise ValueError(
+                "a serving is wound onto the layer beneath it: r_inner_m must be > 0"
+            )
+        if self.is_serving and self.structural:
+            raise ValueError(
+                "a serving (construction: serving) carries no axial, bending or "
+                "torsional load: structural must be false"
+            )
+        if self.is_serving and self.extrusion_shrinkage is not None:
+            raise ValueError(
+                "a serving is wound, not extruded: it has no extrusion_shrinkage"
+            )
         return self
+
+
+def is_serving(layer: object) -> bool:
+    """Whether ``layer`` is a ``cylindrical`` layer declared as a serving."""
+    return isinstance(layer, CylindricalLayer) and layer.is_serving
 
 
 class CoreStrandRing(_Frozen):

@@ -37,7 +37,16 @@ All notable changes to CableXSec are recorded in this file. The format follows
 - `CoreFrictionSpec(central_filler=...)` selects the support of the inward core loads in the
   bounded core contact estimate: the neighbouring cores of a touching trefoil (default) or a
   central filler.
-
+- A serving layer: `construction: serving` on a `cylindrical` layer declares a served yarn or a
+  wound tape. It keeps its mass, its radial and hoop stiffness (an annulus of its material in
+  plane stress along the cable axis, in the concentric and the meshed three-core radial
+  solutions) and its shear compliance under the armour, and carries no axial force, bending
+  moment or torque: no contribution to the axial, bending (stick and slip) or torsional
+  stiffness or to the load sharing; in the component response it is outside the load path, as a
+  loose screen (kinematic upper-bound stress). A serving is non-structural (`structural: true` is refused) and never an interstitial filler. Layers
+  without the key are unchanged. Checked in closed form: at zero Poisson ratio a serving gives
+  the solid annulus's radial response with exactly its `E A` and `G J` removed, and an outer
+  serving under external pressure has the plane-stress thick-cylinder displacements.
 - The armour friction coefficient can depend on the contact pressure:
   `FrictionLaw(pressure_factor=((P, f), ...))`, a piecewise-linear factor `f(P)` on the
   coefficient, clamped at the table ends, evaluated at the local friction-setting pressure
@@ -209,6 +218,14 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Changed
 
+- Templates whose source describes a layer as a yarn serving now declare it as one. The Chae,
+  Nam and Shim (2023) coiling cable's two yarn layers: full-slip EI 47.3 to 30.6 kN·m², stick EI
+  876 to 860 kN·m², fixed-end EA 631 to 626 MN, solved torsional secant under the source's
+  torque at pitch 1.8 m 106.5 to 89.5 kN·m², least armour surface stress under that torque
+  −204.8 to −216.9 MPa. Thies et al. (2016) 30 kV outer PP yarn serving: fixed-end EA 328.3 to
+  325.8 MN, free-end EA 125.7 to 123.2 MN, bending stiffness unchanged (it was already
+  non-structural). Layers the source does not call a serving are unchanged, among them the 66 kV
+  template's PPY beddings (the source's footnote names the material polypyrrole).
 - The validation report's test-taxonomy lines record the passed count only: the deselected
   count is the rest of the suite, so a test added anywhere else marked the committed report
   stale without changing a gate. CI checks the committed report before the coverage run, so a

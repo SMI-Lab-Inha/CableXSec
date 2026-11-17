@@ -93,9 +93,23 @@ them filled.
 | --- | --- | --- |
 | `helical` (armour wires) | `n_wires`, `d_wire_m`, `r_helix_m`, `lay_angle_deg` | `lay_direction` (`right_hand` default, `left_hand`), `manufacturing_clamping`, `bulk_sn`, `fretting_sn`, `transverse_slip_fraction`; flat or profiled wires: `wire_shape` (`round` default, `rectangular`, `profiled`), `wire_width_m`, `wire_thickness_m`, `wire_corner_radius_m`, `wire_area_m2`, `wire_I_normal_m4`, `wire_I_lateral_m4`, `wire_J_m4` |
 | `helical_stranded` (strand within conductor within cable) | `n_conductors`, `r_cable_m`, `lay_angle_cable_deg`, `n_strands`, `r_strand_m`, `d_strand_m`, `lay_angle_strand_deg` | `bulk_sn`, `fretting_sn` |
-| `cylindrical` (polymer annulus, bedding, filler, sheath) | `r_inner_m`, `r_outer_m` | `tape` (helical tape winding), `strain_life`, `extrusion_shrinkage` |
+| `cylindrical` (polymer annulus, bedding, filler, sheath, serving) | `r_inner_m`, `r_outer_m` | `tape` (helical tape winding), `strain_life`, `extrusion_shrinkage`, `construction` (`serving`) |
 | `cylindrical_offset` (core component: conductor, insulation, screen) | `r_offset_m`, `r_inner_m`, `r_outer_m` | `n_cores` (default 3), `conductor_area_mm2`, `strand_layers`, `n_strands`, `strand_diameter_mm`, `strand_lay_angle_deg`, `construction`, `electrical`, `bulk_sn`, `fretting_sn`, `strain_life`, `outer_face_pressure`, `tape` |
 | `cylindrical_shell` (lead or corrugated aluminium sheath) | `r_mid_m`, `t_m` | `f_corrugation` (default 1), `scf` (default 1), `construction` (`bonded_laminate`), `bulk_sn`, `fretting_sn`, `strain_life` |
+
+`construction: serving` on a `cylindrical` layer declares a served yarn or a
+wound tape. The serving keeps its mass, its radial and hoop stiffness (an
+annulus of its material in plane stress along the cable axis, so it transmits
+contact pressure and its thermal expansion acts in the cross-section plane)
+and its shear compliance in the finite-support no-slip coefficient. It carries
+no axial force, no bending moment and no torque: it adds nothing to the axial,
+bending (stick or slip) or torsional stiffness and nothing to the load
+sharing. In the component response it lies outside the load path, like a
+loose screen: it is given the stress of the strain it follows, an upper bound
+marked `kinematic`. A serving is non-structural
+(`structural` defaults to `false`; `true` is refused), needs `r_inner_m > 0`
+and is never an interstitial filler. Without `construction` a `cylindrical`
+layer is a solid annulus, as before.
 
 `lay_angle_deg` lies between −90° and 90°. A rectangular or profiled wire
 fills in `d_wire_m` as the diameter of the round wire of the same area. A

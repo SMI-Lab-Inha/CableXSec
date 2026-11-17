@@ -107,9 +107,9 @@ def is_interstitial_filler(layer: Layer, cable: CableData) -> bool:
     Declared either by the ``pp_filler`` material or, for any filler material,
     as a non-structural annulus starting at the axis (``r_inner_m = 0``) of a
     multi-core cable. Such a disc necessarily encloses the cores, so its full
-    area would count the core envelopes twice.
+    area would count the core envelopes twice. A serving is never a filler.
     """
-    if not isinstance(layer, CylindricalLayer):
+    if not isinstance(layer, CylindricalLayer) or layer.is_serving:
         return False
     if layer.material == "pp_filler":
         return True

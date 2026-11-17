@@ -160,6 +160,8 @@ class TrefoilModel:
     element_poisson: FloatArray
     element_free_strain: FloatArray
     element_axial_map: FloatArray  # (ne, 4): ext, twist, two centre dofs
+    # One for an element that carries axial stress, zero for a serving's.
+    element_axial_weight: FloatArray
     element_layers: tuple[str, ...] = ()
     """Name of the layer of each element (a core layer, ring layer or the
     filler); a radial gap filled with a neighbour's material is that layer's."""
@@ -316,7 +318,7 @@ def build_trefoil_model(bundle: TrefoilBundle) -> TrefoilModel:
     nodes = _NodeTable()
     elements: list[list[int]] = []
     groups: dict[str, list[int]] = {}
-    material: list[tuple[float, float, float, float]] = []
+    material: list[tuple[float, float, float, float, float]] = []
     axial: list[tuple[float, ...]] = []
     owners: list[str] = []
 
@@ -345,12 +347,15 @@ def build_trefoil_model(bundle: TrefoilBundle) -> TrefoilModel:
     def add(group: str, conn: list[int], layer: object, ext: tuple[float, ...]) -> None:
         groups.setdefault(group, []).append(len(elements))
         elements.append(conn)
+        # The fifth entry is one for a layer that carries axial stress and
+        # zero for a serving (plane stress along the axis, no torsion).
         material.append(
             (
                 layer.youngs_modulus_Pa,  # type: ignore[attr-defined]
                 layer.poisson_ratio,  # type: ignore[attr-defined]
                 layer.free_thermal_strain,  # type: ignore[attr-defined]
                 getattr(layer, "free_transverse_strain", 0.0),
+                1.0 if getattr(layer, "carries_axial_load", True) else 0.0,
             )
         )
         axial.append(ext)
@@ -687,6 +692,7 @@ def build_trefoil_model(bundle: TrefoilBundle) -> TrefoilModel:
         props[:, 1].copy(),
         props[:, 2].copy(),
         axial_map,
+        props[:, 4].copy(),
         tuple(owners),
         props[:, 3].copy() if np.any(props[:, 3]) else None,
     )
@@ -749,7 +755,7 @@ def _assemble(
     """Generalised plane-strain T6 stiffness, free-strain load, twist rigidity."""
     ne = len(conn)
     coords = xy[conn]  # (ne, 6, 2)
-    e, nu, e0 = props[:, 0], props[:, 1], props[:, 2]
+    e, nu, e0, carries = props[:, 0], props[:, 1], props[:, 2], props[:, 4]
     lam = e * nu / ((1 + nu) * (1 - 2 * nu))
     mu = e / (2 * (1 + nu))
     d = np.zeros((ne, 4, 4))
@@ -758,6 +764,14 @@ def _assemble(
             d[:, i, j] = lam
         d[:, i, i] += 2 * mu
     d[:, 3, 3] = mu
+    # A serving: plane stress along the axis (no axial row or column), the
+    # in-plane stiffness of the isotropic material.
+    serving = carries == 0.0
+    if np.any(serving):
+        plane = e[serving] / (1 - nu[serving] ** 2)
+        d[serving, :3, :3] = 0.0
+        d[serving, 0, 0] = d[serving, 1, 1] = plane
+        d[serving, 0, 1] = d[serving, 1, 0] = plane * nu[serving]
     ndof_e = 16
     ke = np.zeros((ne, ndof_e, ndof_e))
     fe = np.zeros((ne, ndof_e))
@@ -793,7 +807,7 @@ def _assemble(
             (point[:, 0] - rc) ** 2 + point[:, 1] ** 2,
             point[:, 0] ** 2 + point[:, 1] ** 2,
         )
-        polar += weight * mu * r2
+        polar += weight * mu * r2 * carries
     twist = float(np.sum(np.where(is_core, polar * cb**4, polar)))
     dofs = np.zeros((ne, ndof_e), dtype=np.int64)
     dofs[:, 0:12:2] = 2 + 2 * conn
