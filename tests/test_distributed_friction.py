@@ -34,6 +34,10 @@ PI = math.pi
 compiled = pytest.mark.skipif(
     not dfm.HAVE_NUMBA, reason="long histories need the compiled kernel"
 )
+#: The recorded values hold for the reference and the fast kernel.
+both_kernels = pytest.mark.parametrize(
+    "kernel", ["_distributed_kernel", "_distributed_kernel_fast"]
+)
 
 
 # --------------------------------------------------------------------------- #
@@ -50,12 +54,25 @@ def _rotation(a, revolutions, steps_per_rev, ramp_steps=200):
     return np.concatenate([rx, a * np.cos(th)]), np.concatenate([ry, a * np.sin(th)])
 
 
-def _kernel(ax, ay, khat, lam, nodes, *, rho=None, g=None, phase0=None, newton=True):
-    """Normalised kernel on the stick_check grid (segments at (j + 1/2) h)."""
+def _kernel(
+    ax,
+    ay,
+    khat,
+    lam,
+    nodes,
+    *,
+    rho=None,
+    g=None,
+    phase0=None,
+    newton=True,
+    kernel="_distributed_kernel",
+):
+    """Normalised kernel on the stick_check grid (segments at (j + 1/2) h);
+    ``kernel`` names the reference or the fast kernel."""
     ax = np.ascontiguousarray(ax, dtype=float)
     ay = np.ascontiguousarray(ay, dtype=float)
     h = 2 * PI / nodes
-    out = dfm._distributed_kernel(
+    out = getattr(dfm, kernel)(
         ax,
         ay,
         np.ones(ax.size) if rho is None else np.ascontiguousarray(rho, dtype=float),
@@ -201,6 +218,7 @@ class _Reference:
 # (1) agreement with the reference results                                     #
 # --------------------------------------------------------------------------- #
 @compiled
+@both_kernels
 @pytest.mark.parametrize(
     ("khat", "lutchansky", "d_rev"),
     [
@@ -208,18 +226,18 @@ class _Reference:
         (3.0, 1.0039049199273009e-05, 7.622586096093627),
     ],
 )
-def test_stick_check_verification_cases(khat, lutchansky, d_rev):
+def test_stick_check_verification_cases(khat, lutchansky, d_rev, kernel):
     xi = khat / (1 + khat)
     # Below slip the field is the Lutchansky shear-lag solution a xi cos(phi).
     a = 0.8 / xi
     ax, ay = _ramp((a, 0.0), 50)
-    fld = _kernel(ax, ay, khat, 0.0, 256)[4]
+    fld = _kernel(ax, ay, khat, 0.0, 256, kernel=kernel)[4]
     phi = (np.arange(256) + 0.5) * 2 * PI / 256
     err = np.abs(fld[-1] - a * xi * np.cos(phi)).max()
     assert err == pytest.approx(lutchansky, rel=1e-8)
     # Steady rotation at a_bar = 1.3: dissipation of the 4th revolution.
     ax, ay = _rotation(1.3 / xi, 4, 720)
-    hist = _kernel(ax, ay, khat, 0.0, 256)[1]
+    hist = _kernel(ax, ay, khat, 0.0, 256, kernel=kernel)[1]
     d = hist[:, 1]
     assert d[-1] - d[-721] == pytest.approx(d_rev, rel=1e-10)
     identity = hist[:, 0] - hist[:, 1] - hist[:, 2] - hist[:, 3]
@@ -227,9 +245,10 @@ def test_stick_check_verification_cases(khat, lutchansky, d_rev):
 
 
 @compiled
-def test_stick_check_rigid_limit_and_capstan_cases():
+@both_kernels
+def test_stick_check_rigid_limit_and_capstan_cases(kernel):
     ax, ay = _rotation(2.0 * 1.001, 3, 720)
-    hist = _kernel(ax, ay, 1000.0, 0.0, 256)[1]
+    hist = _kernel(ax, ay, 1000.0, 0.0, 256, kernel=kernel)[1]
     assert hist[-1, 1] - hist[-721, 1] == pytest.approx(30.622844477479035, rel=1e-10)
     # Capstan case, signed bound: the NumPy port of stick_check gives
     # 29.42502785927062 (the former lam |n| bound: 26.579392168691143). The
@@ -246,7 +265,7 @@ def test_stick_check_rigid_limit_and_capstan_cases():
     d_ref = float(np.sum(dissipated[-720:]))
     assert d_ref == pytest.approx(29.42502785927062, rel=1e-10)
     for newton in (True, False):
-        hist = _kernel(ax, ay, 0.33, 0.127, 256, newton=newton)[1]
+        hist = _kernel(ax, ay, 0.33, 0.127, 256, newton=newton, kernel=kernel)[1]
         d_rev = hist[-1, 1] - hist[-721, 1]
         assert d_rev == pytest.approx(d_ref, rel=1e-10)
 

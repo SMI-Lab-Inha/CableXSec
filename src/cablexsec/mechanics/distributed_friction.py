@@ -61,7 +61,11 @@ point on the bound. Both converge to the same equations (tolerance
 ``1e-12 h`` times the largest force term). Sample increments larger than
 ``max_increment`` (in units of ``kappa_on``) are subdivided by linear
 interpolation of curvature and pressure; an increment that fails to converge is
-repeated with twice as many substeps.
+repeated with twice as many substeps. With numba the increments are solved by
+a faster kernel with the same equations, tests and fall-backs: Newton starts
+from the increment of the last substep and the factorisation of its Jacobian
+is kept between solves (section "Fast compiled kernel"); the results agree
+with the reference kernel to round-off.
 
 Full slip: when every node of an increment is on its bound, the equations fix
 the forces, the tractions and ``u - p``, but not a slide ``c`` common to the
@@ -147,6 +151,10 @@ _MAX_HALVINGS = 12
 #: of a full-slip increment (:func:`_full_slip_slide`); the node that takes
 #: the stick row in full slip sits on its bound to round-off.
 _ON_BOUND = 1e-9
+#: Use :func:`_distributed_kernel_fast` (numba active) instead of the
+#: reference :func:`_distributed_kernel`; both solve the same increments and
+#: agree to round-off (tests/test_distributed_fast.py).
+_FAST_KERNEL = HAVE_NUMBA
 
 
 # --------------------------------------------------------------------------- #
@@ -1115,6 +1123,897 @@ def _distributed_kernel(
 
 
 # --------------------------------------------------------------------------- #
+# Fast compiled kernel                                                         #
+# --------------------------------------------------------------------------- #
+# Same increments, equations, convergence tests, fall-backs and substep rule
+# as the reference kernel above; only the way each increment is solved
+# differs, so the results agree with the reference to round-off
+# (tests/test_distributed_fast.py; with a finite healing time of a friction
+# law, the heal and break-away events of a node can move by a substep under a
+# round-off change, in either kernel alone as much as between them):
+#
+# - Newton starts from the increment of the last substep instead of zero
+#   (the substeps of a sample are equal steps), so the first linearisation
+#   usually has the converged stick/slip pattern; an increment is solved again
+#   from zero, as in the reference, if that start fails. Both kernels then
+#   fix the slide of a full-slip increment by the same rule
+#   (:func:`_full_slip_slide`), so the start does not reach the kept fields;
+# - the factorisation of the Newton Jacobian is kept between solves. A row is
+#   a function of its node's stick/slip key and friction factor only, and
+#   the system is eliminated from both ends towards the middle row (twisted
+#   factorisation), so a changed row invalidates only the pivots between it
+#   and the middle; the stick zones move by a node or two per substep;
+# - the residual, bound and pattern of an iterate are formed in one pass, the
+#   converged pass gives the segment forces, the two halves of every sweep
+#   run as independent recurrences, and divisions by ``h``, ``k_hat`` and the
+#   pivots are multiplications by their reciprocals.
+#
+# Rows of the factorisation cache ``mat`` (shape (_M_ROWS, N)); rows below
+# the middle row ``m = N // 2`` hold the top-down elimination, rows above it
+# the bottom-up one.
+_M_LOWER = 0  # coefficient of v_{j-1}
+_M_DIAG = 1  # coefficient of v_j
+_M_UPPER = 2  # coefficient of v_{j+1}
+_M_PC = 3  # eliminated neighbour coefficient over the pivot
+_M_PIV = 4  # 1 / pivot
+_M_OFF = 5  # eliminated coefficient over the pivot
+_M_ZS = 6  # Sherman--Morrison column, elimination sweep
+_M_ZB = 7  # Sherman--Morrison column, solved
+_M_KEY = 8  # key the row was built from (_OVERRIDE: stick row in full slip)
+_M_FAC = 9  # friction factor the row was built with
+_M_ROWS = 10
+#: Row key of the node that takes the stick row in full slip.
+_OVERRIDE = 8.0
+# ``mstate`` = [first stale row of the top half, last stale row of the bottom
+# half, 1 + v.z, beta / gam, 1 / middle pivot, a node of the solution sticks].
+_CLEAN_LO = 1 << 60
+_CLEAN_HI = -1
+
+
+@njit(cache=True)
+def _set_row(
+    j: int,
+    key: float,
+    mj: float,
+    lam: float,
+    ih: float,
+    stick_diag: float,
+    mat: FloatArray,
+) -> None:
+    """Jacobian row ``j`` of :func:`_solve_capstan_newton` for node key
+    ``key`` (``state + 4 sm``) and friction factor ``mj``."""
+    mat[_M_KEY, j] = key
+    mat[_M_FAC, j] = mj
+    if key == 4.0 or key == _OVERRIDE:
+        mat[_M_LOWER, j] = -ih
+        mat[_M_DIAG, j] = stick_diag
+        mat[_M_UPPER, j] = -ih
+    else:
+        sm = 1.0 if key > 2.0 else 0.0
+        state = key - 4.0 * sm
+        q = 0.5 * (lam * mj) * state * sm
+        mat[_M_LOWER, j] = -(ih + q)
+        mat[_M_DIAG, j] = 2.0 * ih
+        mat[_M_UPPER, j] = -(ih - q)
+
+
+@njit(cache=True)
+def _twisted_refactor(n: int, mat: FloatArray, mstate: FloatArray) -> bool:
+    """Update the stale pivots of the twisted factorisation of ``mat``.
+
+    The cyclic system is the tridiagonal one with modified corners plus a
+    Sherman--Morrison correction, as in :func:`_cyclic_solve_general`. Top
+    rows ``i < m`` are eliminated downwards, bottom rows ``i > m`` upwards;
+    rows ``mstate[0] .. m - 1`` and ``m + 1 .. mstate[1]`` are recomputed.
+    False for a (numerically) singular system.
+    """
+    lo = mat[_M_LOWER]
+    dg = mat[_M_DIAG]
+    up = mat[_M_UPPER]
+    pc = mat[_M_PC]
+    piv = mat[_M_PIV]
+    off = mat[_M_OFF]
+    zs = mat[_M_ZS]
+    zb = mat[_M_ZB]
+    m = n // 2
+    s = int(min(mstate[0], m))
+    e = int(max(mstate[1], m))
+    if s == 0:
+        e = n - 1  # row 0 sets the corners of the last row
+    beta = lo[0]
+    alpha = up[n - 1]
+    gam = -dg[0]
+    if s == 0:
+        bet = dg[0] - gam
+        if bet == 0.0:
+            return False
+        pc[0] = up[0] / bet
+        r = 1.0 / bet
+        piv[0] = r
+        off[0] = 0.0
+        zs[0] = gam * r
+        s = 1
+    if e == n - 1:
+        g = dg[n - 1] - alpha * beta / gam
+        if g == 0.0:
+            return False
+        pc[n - 1] = lo[n - 1] / g
+        r = 1.0 / g
+        piv[n - 1] = r
+        off[n - 1] = 0.0
+        zs[n - 1] = alpha * r
+        e = n - 2
+    top = m - s if m > s else 0
+    bottom = e - m if e > m else 0
+    both = min(top, bottom)
+    pct = pc[s - 1] if s > 0 else 0.0
+    zt = zs[s - 1] if s > 0 else 0.0
+    pcb = pc[e + 1] if e + 1 < n else 0.0
+    zbt = zs[e + 1] if e + 1 < n else 0.0
+    for k in range(both):
+        i = s + k
+        a = lo[i]
+        bet = dg[i] - a * pct
+        i2 = e - k
+        c = up[i2]
+        g = dg[i2] - c * pcb
+        if bet == 0.0 or g == 0.0:
+            return False
+        pct = up[i] / bet
+        pcb = lo[i2] / g
+        r = 1.0 / bet
+        r2 = 1.0 / g
+        o = a * r
+        o2 = c * r2
+        zt = -o * zt
+        zbt = -o2 * zbt
+        pc[i] = pct
+        piv[i] = r
+        off[i] = o
+        zs[i] = zt
+        pc[i2] = pcb
+        piv[i2] = r2
+        off[i2] = o2
+        zs[i2] = zbt
+    for k in range(both, top):
+        i = s + k
+        a = lo[i]
+        bet = dg[i] - a * pct
+        if bet == 0.0:
+            return False
+        pct = up[i] / bet
+        r = 1.0 / bet
+        o = a * r
+        zt = -o * zt
+        pc[i] = pct
+        piv[i] = r
+        off[i] = o
+        zs[i] = zt
+    for k in range(both, bottom):
+        i2 = e - k
+        c = up[i2]
+        g = dg[i2] - c * pcb
+        if g == 0.0:
+            return False
+        pcb = lo[i2] / g
+        r2 = 1.0 / g
+        o2 = c * r2
+        zbt = -o2 * zbt
+        pc[i2] = pcb
+        piv[i2] = r2
+        off[i2] = o2
+        zs[i2] = zbt
+    gm = dg[m] - lo[m] * pc[m - 1] - up[m] * pc[m + 1]
+    if gm == 0.0:
+        return False
+    rgm = 1.0 / gm
+    zt = (-(lo[m] * zs[m - 1]) - up[m] * zs[m + 1]) * rgm
+    zb[m] = zt
+    zbt = zt
+    left = m
+    right = n - 1 - m
+    both = min(left, right)
+    for k in range(1, both + 1):
+        zt = zs[m - k] - pc[m - k] * zt
+        zbt = zs[m + k] - pc[m + k] * zbt
+        zb[m - k] = zt
+        zb[m + k] = zbt
+    for k in range(both + 1, left + 1):
+        zt = zs[m - k] - pc[m - k] * zt
+        zb[m - k] = zt
+    for k in range(both + 1, right + 1):
+        zbt = zs[m + k] - pc[m + k] * zbt
+        zb[m + k] = zbt
+    bg = beta / gam
+    den = 1.0 + (zb[0] + bg * zb[n - 1])
+    if den == 0.0 or not math.isfinite(den):
+        return False
+    mstate[0] = _CLEAN_LO
+    mstate[1] = _CLEAN_HI
+    mstate[2] = den
+    mstate[3] = bg
+    mstate[4] = rgm
+    return True
+
+
+@njit(cache=True)
+def _twisted_solve(
+    rhs: FloatArray, v: FloatArray, wy: FloatArray, mat: FloatArray, mstate: FloatArray
+) -> bool:
+    """``v += A^-1 rhs`` for the cyclic tridiagonal Jacobian held in ``mat``
+    (stale pivots are updated first); False for a singular system."""
+    n = rhs.size
+    stale = mstate[0] < n or mstate[1] >= 0
+    if stale and not _twisted_refactor(n, mat, mstate):
+        mstate[0] = 0.0
+        mstate[1] = n - 1
+        return False
+    lo = mat[_M_LOWER]
+    up = mat[_M_UPPER]
+    pc = mat[_M_PC]
+    piv = mat[_M_PIV]
+    off = mat[_M_OFF]
+    zb = mat[_M_ZB]
+    m = n // 2
+    top = m
+    bottom = n - 1 - m
+    both = min(top, bottom)
+    wt = 0.0
+    wb = 0.0
+    for k in range(both):
+        i2 = n - 1 - k
+        wt = rhs[k] * piv[k] - off[k] * wt
+        wb = rhs[i2] * piv[i2] - off[i2] * wb
+        wy[k] = wt
+        wy[i2] = wb
+    for k in range(both, top):
+        wt = rhs[k] * piv[k] - off[k] * wt
+        wy[k] = wt
+    for k in range(both, bottom):
+        i2 = n - 1 - k
+        wb = rhs[i2] * piv[i2] - off[i2] * wb
+        wy[i2] = wb
+    xm = (rhs[m] - lo[m] * wy[m - 1] - up[m] * wy[m + 1]) * mstate[4]
+    wy[m] = xm
+    wt = xm
+    wb = xm
+    for k in range(1, both + 1):
+        wt = wy[m - k] - pc[m - k] * wt
+        wb = wy[m + k] - pc[m + k] * wb
+        wy[m - k] = wt
+        wy[m + k] = wb
+    for k in range(both + 1, top + 1):
+        wt = wy[m - k] - pc[m - k] * wt
+        wy[m - k] = wt
+    for k in range(both + 1, bottom + 1):
+        wb = wy[m + k] - pc[m + k] * wb
+        wy[m + k] = wb
+    fac = (wy[0] + mstate[3] * wy[n - 1]) / mstate[2]
+    for i in range(n):
+        v[i] += wy[i] - fac * zb[i]
+    return True
+
+
+@njit(cache=True)
+def _capstan_newton_fast(
+    y: FloatArray,
+    z0: FloatArray,
+    rho: float,
+    gnode: FloatArray,
+    khat: float,
+    lam: float,
+    h: float,
+    tol: float,
+    v: FloatArray,
+    b: FloatArray,
+    nn: FloatArray,
+    rhs: FloatArray,
+    wy: FloatArray,
+    prev: FloatArray,
+    mfac: FloatArray,
+    mat: FloatArray,
+    mstate: FloatArray,
+) -> int:
+    """:func:`_solve_capstan_newton` with the kept twisted factorisation.
+
+    On return ``nn`` and ``b`` hold the segment forces and bounds of the
+    returned ``v``, and ``mstate[5]`` is one if a node sticks clear of its
+    bound there (by the margin of :func:`_full_slip_slide`, which then leaves
+    the increment as it is). Returns iterations, or -1 (caller falls back to
+    the fixed point).
+    """
+    n = y.size
+    ih = 1.0 / h
+    stick_diag = 2.0 * ih + h * khat
+    rk = mat[_M_KEY]
+    rm = mat[_M_FAC]
+    last_res = math.inf
+    for it in range(_MAX_NEWTON):
+        lo_s = mstate[0]
+        hi_s = mstate[1]
+        res = 0.0
+        any_elastic = False
+        same = it > 0
+        firm = False
+        nearest = 0
+        gap = math.inf
+        n_prev = y[n - 1] + (v[0] - v[n - 1]) * ih
+        for j in range(n):
+            vj = v[j]
+            nj = y[j] + ((v[j + 1] if j + 1 < n else v[0]) - vj) * ih
+            nn[j] = nj
+            mj = mfac[j]
+            bj = mj * (rho * gnode[j] + lam * 0.5 * (nj + n_prev))
+            if bj < 0.0:
+                bj = 0.0
+            b[j] = bj
+            r = z0[j] + vj
+            kr = khat * r
+            excess = abs(kr) - bj
+            if excess < gap:
+                gap = excess
+                nearest = j
+            if excess < 0.0:
+                key = 4.0
+                t = kr
+                any_elastic = True
+                if abs(kr) < bj * (1.0 - _ON_BOUND):
+                    firm = True
+            else:
+                key = 5.0 if r > 0.0 else 3.0
+                t = bj if r > 0.0 else -bj
+            if not bj > 0.0:
+                key -= 4.0
+            if key != prev[j]:
+                same = False
+            prev[j] = key
+            if key != rk[j] or ((key == 5.0 or key == 3.0) and mj != rm[j]):
+                _set_row(j, key, mj, lam, ih, stick_diag, mat)
+                if j < lo_s:
+                    lo_s = j
+                if j > hi_s:
+                    hi_s = j
+            g = nj - n_prev - h * t
+            rhs[j] = g
+            if abs(g) > res:
+                res = abs(g)
+            n_prev = nj
+        mstate[0] = lo_s
+        mstate[1] = hi_s
+        if res <= tol or (same and any_elastic and res <= 1e6 * tol):
+            mstate[5] = 1.0 if firm else 0.0
+            return it
+        if not math.isfinite(res):
+            return -1
+        if it > 3 and res > last_res:
+            return -1
+        last_res = res
+        if gap >= 0.0:
+            # Full slip: the node nearest to sticking takes the stick row so
+            # that the tractions can balance.
+            _set_row(nearest, _OVERRIDE, mfac[nearest], lam, ih, stick_diag, mat)
+            if nearest < mstate[0]:
+                mstate[0] = nearest
+            if nearest > mstate[1]:
+                mstate[1] = nearest
+        if not _twisted_solve(rhs, v, wy, mat, mstate):
+            return -1
+    return -1
+
+
+@njit(cache=True)
+def _advance_fast(
+    ax: float,
+    ay: float,
+    rho: float,
+    cs: FloatArray,
+    sn: FloatArray,
+    gnode: FloatArray,
+    khat: float,
+    lam: float,
+    h: float,
+    u: FloatArray,
+    p: FloatArray,
+    nf: FloatArray,
+    tau: FloatArray,
+    e: FloatArray,
+    energy: FloatArray,
+    work: FloatArray,
+    stats: NDArray[np.int64],
+    capstan_newton: bool,
+    mfac: FloatArray,
+    law: FloatArray,
+    lstate: FloatArray,
+    ptab: FloatArray,
+    p_ref: float,
+    vlast: FloatArray,
+    mat: FloatArray,
+    mstate: FloatArray,
+) -> bool:
+    """:func:`_advance` started from ``vlast``, the increment of the last
+    substep, with the kept Newton factorisation; ``vlast`` receives the
+    increment of this one."""
+    n = u.size
+    ih = 1.0 / h
+    ik = 1.0 / khat
+    y = work[0]
+    z0 = work[1]
+    b = work[2]
+    v = work[3]
+    vn = work[4]
+    vt = work[5]
+    dv = work[6]
+    d = work[7]
+    rhs = work[8]
+    cp = work[9]
+    wy = work[10]
+    wz = work[11]
+    ncur = work[12]
+    enew = work[13]
+    nn = work[14]
+    prev = work[17]
+    broke = work[18]
+    bend = work[19]
+    pfac = work[21]
+    has_table = ptab.shape[1] > 0
+    law_on = law[0] != 0.0 and law[1] != law[2]
+    newton = lam > 0.0 and capstan_newton
+    # Without a pressure table the node factors are the law factors.
+    meff = work[20] if has_table else mfac
+    if has_table:
+        for j in range(n):
+            pfac[j] = _pressure_factor(p_ref * rho * gnode[j], ptab)
+            meff[j] = mfac[j] * pfac[j]
+    if law_on:
+        for j in range(n):
+            broke[j] = 0.0
+    scale = 1.0
+    for j in range(n):
+        ej = ax * cs[j] + ay * sn[j]
+        enew[j] = ej
+        yj = ej + ((u[j + 1] if j + 1 < n else u[0]) - u[j]) * ih
+        y[j] = yj
+        z0[j] = u[j] - p[j]
+        v[j] = vlast[j]
+        if abs(yj) > scale:
+            scale = abs(yj)
+        if abs(ej) > scale:
+            scale = abs(ej)
+    if rho > scale:
+        scale = rho
+    tol = 1e-12 * h * scale
+    # The segment forces of the solution: those of the converged Newton pass,
+    # or of the fixed point.
+    nsol = nn
+    sticks = False
+    for attempt in range(n + 1):
+        if attempt > 0:
+            for j in range(n):
+                v[j] = 0.0
+        # Started from the prediction; solved again from zero (the start of
+        # the reference) if that fails.
+        predicted = attempt == 0
+        while True:
+            converged = False
+            if newton:
+                iters = _capstan_newton_fast(
+                    y,
+                    z0,
+                    rho,
+                    gnode,
+                    khat,
+                    lam,
+                    h,
+                    tol,
+                    v,
+                    b,
+                    nn,
+                    rhs,
+                    wy,
+                    prev,
+                    meff,
+                    mat,
+                    mstate,
+                )
+                if iters >= 0:
+                    if iters > stats[1]:
+                        stats[1] = iters
+                    stats[4] += iters
+                    nsol = nn
+                    converged = True
+                    sticks = mstate[5] != 0.0
+                elif predicted:
+                    predicted = False
+                    for j in range(n):
+                        v[j] = 0.0
+                    continue
+                else:
+                    stats[6] += 1
+                    for j in range(n):
+                        v[j] = 0.0
+            if not converged:
+                for j in range(n):
+                    ncur[j] = nf[j]
+                if not _fixed_point(
+                    y,
+                    z0,
+                    rho,
+                    gnode,
+                    khat,
+                    lam,
+                    h,
+                    tol,
+                    v,
+                    b,
+                    d,
+                    rhs,
+                    dv,
+                    cp,
+                    wy,
+                    wz,
+                    vn,
+                    vt,
+                    ncur,
+                    stats,
+                    meff,
+                ):
+                    if not predicted:
+                        return False
+                    predicted = False
+                    for j in range(n):
+                        v[j] = 0.0
+                    continue
+                nsol = ncur
+                sticks = False
+            break
+        if not law_on:
+            break
+        changed = False
+        for j in range(n):
+            if lstate[0, j] != 0.0:
+                jm = j - 1 if j > 0 else n - 1
+                bj = meff[j] * (rho * gnode[j] + lam * 0.5 * (nsol[j] + nsol[jm]))
+                if bj < 0.0:
+                    bj = 0.0
+                if abs(khat * (z0[j] + v[j])) > bj:
+                    mfac[j] = law[2]
+                    if has_table:
+                        meff[j] = mfac[j] * pfac[j]
+                    lstate[0, j] = 0.0
+                    broke[j] = 1.0
+                    changed = True
+        if not changed:
+            break
+    if not sticks:
+        # A node that sticks fixes the slide; the Newton pass has found one.
+        _full_slip_slide(z0, v, nsol, meff, rho, gnode, khat, lam)
+    w_be = 0.0
+    diss = 0.0
+    rem = 0.0
+    n_prev = nsol[n - 1]
+    for j in range(n):
+        nj = nsol[j]
+        bj = meff[j] * (rho * gnode[j] + lam * 0.5 * (nj + n_prev))
+        if bj < 0.0:
+            bj = 0.0
+        bend[j] = bj
+        vj = v[j]
+        t = khat * (z0[j] + vj)
+        slipped = False
+        if t > bj:
+            t = bj
+            slipped = True
+        elif t < -bj:
+            t = -bj
+            slipped = True
+        unew = u[j] + vj
+        dp = (unew - t * ik) - p[j]
+        diss += h * t * dp
+        ej = enew[j]
+        w_be += h * nj * (ej - e[j])
+        dn = nj - nf[j]
+        dt = t - tau[j]
+        rem += 0.5 * h * dn * dn + 0.5 * h * dt * dt * ik
+        u[j] = unew
+        p[j] += dp
+        tau[j] = t
+        nf[j] = nj
+        e[j] = ej
+        vlast[j] = vj
+        n_prev = nj
+        if law_on:
+            if slipped or broke[j] != 0.0:
+                lstate[0, j] = 0.0
+                lstate[1, j] = 0.0
+                mfac[j] = law[2]
+            elif lstate[0, j] == 0.0:
+                lstate[1, j] += law[4]
+                if lstate[1, j] >= law[3]:
+                    lstate[0, j] = 1.0
+                    mfac[j] = law[1]
+    energy[0] += w_be
+    energy[1] += diss
+    energy[2] += rem
+    return True
+
+
+@njit(cache=True)
+def _fixed_point(
+    y: FloatArray,
+    z0: FloatArray,
+    rho: float,
+    gnode: FloatArray,
+    khat: float,
+    lam: float,
+    h: float,
+    tol: float,
+    v: FloatArray,
+    b: FloatArray,
+    d: FloatArray,
+    rhs: FloatArray,
+    dv: FloatArray,
+    cp: FloatArray,
+    wy: FloatArray,
+    wz: FloatArray,
+    vn: FloatArray,
+    vt: FloatArray,
+    ncur: FloatArray,
+    stats: NDArray[np.int64],
+    mfac: FloatArray,
+) -> bool:
+    """Fixed point on the bound of :func:`_solve_increment` (the reference
+    scheme; used for ``lam = 0``, ``capstan_newton=False`` and fall-backs)."""
+    n = y.size
+    for it in range(_MAX_FIXED_POINT):
+        for j in range(n):
+            jm = j - 1 if j > 0 else n - 1
+            b[j] = mfac[j] * (rho * gnode[j] + lam * 0.5 * (ncur[j] + ncur[jm]))
+            if b[j] < 0.0:
+                b[j] = 0.0
+        iters = _solve_fixed_bound(
+            y, z0, b, khat, h, tol, v, vn, vt, dv, d, rhs, cp, wy, wz
+        )
+        if iters < 0:
+            return False
+        if iters > stats[1]:
+            stats[1] = iters
+        stats[4] += iters
+        diff = 0.0
+        big = 1.0
+        for j in range(n):
+            jp = j + 1 if j + 1 < n else 0
+            n_new = y[j] + (v[jp] - v[j]) / h
+            if abs(n_new - ncur[j]) > diff:
+                diff = abs(n_new - ncur[j])
+            if abs(n_new) > big:
+                big = abs(n_new)
+            ncur[j] = n_new
+        if not math.isfinite(diff):
+            return False
+        if lam == 0.0 or diff <= 1e-12 * big:
+            if it + 1 > stats[2]:
+                stats[2] = it + 1
+            stats[5] += it + 1
+            return True
+    return False
+
+
+@njit(cache=True)
+def _distributed_kernel_fast(
+    ax_path: FloatArray,
+    ay_path: FloatArray,
+    rho_path: FloatArray,
+    khat: float,
+    lam: float,
+    gnode: FloatArray,
+    phase0: float,
+    xi: float,
+    max_increment: float,
+    wire_index: NDArray[np.int64],
+    wire_frac: FloatArray,
+    record_field: bool,
+    capstan_newton: bool = True,
+    record_index: NDArray[np.int64] | None = None,
+    kinematics: FloatArray | None = None,
+    law: FloatArray | None = None,
+    dt_path: FloatArray | None = None,
+    ptab: FloatArray | None = None,
+    p_ref: float = 0.0,
+) -> tuple[FloatArray, FloatArray, FloatArray, NDArray[np.int64], FloatArray]:
+    """:func:`_distributed_kernel` with the fast increment solver (same
+    arguments and results, to round-off)."""
+    n = gnode.size
+    if n < 3:
+        return _distributed_kernel(
+            ax_path,
+            ay_path,
+            rho_path,
+            khat,
+            lam,
+            gnode,
+            phase0,
+            xi,
+            max_increment,
+            wire_index,
+            wire_frac,
+            record_field,
+            capstan_newton,
+            record_index,
+            kinematics,
+            law,
+            dt_path,
+            ptab,
+            p_ref,
+        )
+    h = 2.0 * math.pi / n
+    n_t = ax_path.size
+    n_w = wire_index.size
+    cs = np.empty(n)
+    sn = np.empty(n)
+    for j in range(n):
+        cs[j] = math.cos(phase0 + j * h)
+        sn[j] = math.sin(phase0 + j * h)
+    u = np.zeros(n)
+    p = np.zeros(n)
+    nf = np.zeros(n)
+    tau = np.zeros(n)
+    e = np.zeros(n)
+    vlast = np.zeros(n)
+    su = np.empty(n)
+    sp = np.empty(n)
+    snf = np.empty(n)
+    stau = np.empty(n)
+    se = np.empty(n)
+    svlast = np.empty(n)
+    work = np.zeros((22, n))
+    mat = np.full((_M_ROWS, n), np.nan)
+    mstate = np.zeros(6)
+    mstate[1] = n - 1
+    table = np.zeros((2, 0))
+    if ptab is not None:
+        table = ptab
+    mfac = np.ones(n)
+    smfac = np.ones(n)
+    lstate = np.zeros((2, n))
+    slstate = np.zeros((2, n))
+    lparams = np.zeros(5)
+    if law is not None:
+        lparams[0] = 1.0
+        lparams[1] = law[0]
+        lparams[2] = law[1]
+        lparams[3] = law[2]
+        for j in range(n):
+            mfac[j] = law[0]
+            lstate[0, j] = 1.0
+    energy = np.zeros(3)
+    senergy = np.zeros(3)
+    stats = np.zeros(7, dtype=np.int64)
+    out = np.empty((n_w, n_t))
+    hist = np.empty((n_t, 4))
+    slip = np.empty(n_t)
+    fld = np.empty((n_t if record_field else 0, n))
+    ax0 = 0.0
+    ay0 = 0.0
+    rho0 = rho_path[0] if n_t > 0 else 0.0
+    ik = 1.0 / khat
+    for i in range(n_t):
+        ax1 = ax_path[i]
+        ay1 = ay_path[i]
+        rho1 = rho_path[i]
+        step = math.sqrt((ax1 - ax0) ** 2 + (ay1 - ay0) ** 2) * xi
+        nsub = 1
+        if max_increment > 0.0 and step > max_increment:
+            nsub = int(math.ceil(step / max_increment))
+        for j in range(n):
+            su[j] = u[j]
+            sp[j] = p[j]
+            snf[j] = nf[j]
+            stau[j] = tau[j]
+            se[j] = e[j]
+            svlast[j] = vlast[j]
+        for k in range(3):
+            senergy[k] = energy[k]
+        for j in range(n):
+            smfac[j] = mfac[j]
+            slstate[0, j] = lstate[0, j]
+            slstate[1, j] = lstate[1, j]
+        ok = False
+        for _attempt in range(_MAX_HALVINGS + 1):
+            ok = True
+            if dt_path is not None:
+                lparams[4] = dt_path[i] / nsub
+            for s in range(1, nsub + 1):
+                f = s / nsub
+                if not _advance_fast(
+                    ax0 + f * (ax1 - ax0),
+                    ay0 + f * (ay1 - ay0),
+                    rho0 + f * (rho1 - rho0),
+                    cs,
+                    sn,
+                    gnode,
+                    khat,
+                    lam,
+                    h,
+                    u,
+                    p,
+                    nf,
+                    tau,
+                    e,
+                    energy,
+                    work,
+                    stats,
+                    capstan_newton,
+                    mfac,
+                    lparams,
+                    lstate,
+                    table,
+                    p_ref,
+                    vlast,
+                    mat,
+                    mstate,
+                ):
+                    ok = False
+                    break
+            if ok:
+                break
+            for j in range(n):
+                u[j] = su[j]
+                p[j] = sp[j]
+                nf[j] = snf[j]
+                tau[j] = stau[j]
+                e[j] = se[j]
+                vlast[j] = svlast[j]
+            for k in range(3):
+                energy[k] = senergy[k]
+            for j in range(n):
+                mfac[j] = smfac[j]
+                lstate[0, j] = slstate[0, j]
+                lstate[1, j] = slstate[1, j]
+            nsub *= 2
+        if not ok:
+            stats[0] = -(i + 1)
+            return out, hist, slip, stats, fld
+        stats[3] += nsub
+        ax0 = ax1
+        ay0 = ay1
+        rho0 = rho1
+        stored = 0.0
+        n_slip = 0
+        for j in range(n):
+            jm = j - 1 if j > 0 else n - 1
+            stored += 0.5 * h * (nf[j] * nf[j] + tau[j] * tau[j] * ik)
+            if law is None:
+                bj = rho1 * gnode[j] + lam * 0.5 * (nf[j] + nf[jm])
+                if bj < 0.0:
+                    bj = 0.0
+            else:
+                bj = work[19, j]  # bound of the last increment
+            if bj > 0.0 and abs(tau[j]) >= bj * (1.0 - 1e-9):
+                n_slip += 1
+        hist[i, 0] = energy[0]
+        hist[i, 1] = energy[1]
+        hist[i, 2] = stored
+        hist[i, 3] = energy[2]
+        slip[i] = n_slip / n
+        for k in range(n_w):
+            j0 = wire_index[k]
+            j1 = j0 + 1 if j0 + 1 < n else 0
+            out[k, i] = (1.0 - wire_frac[k]) * nf[j0] + wire_frac[k] * nf[j1]
+        if record_field:
+            for j in range(n):
+                fld[i, j] = nf[j]
+        if record_index is not None and kinematics is not None:
+            row = record_index[i]
+            if row >= 0:
+                for j in range(n):
+                    kinematics[row, 0, j] = u[j]
+                    kinematics[row, 1, j] = p[j]
+                    kinematics[row, 2, j] = p[j] - sp[j]
+                    kinematics[row, 3, j] = nf[j]
+    return out, hist, slip, stats, fld
+
+
+# --------------------------------------------------------------------------- #
 # Physical wrapper                                                             #
 # --------------------------------------------------------------------------- #
 @dataclass(frozen=True)
@@ -1376,8 +2275,11 @@ def distributed_friction_history(
             raise CableInputError(
                 "field samples must be increasing indices of the history"
             )
+    # The fast kernel when compiled; the reference kernel otherwise (it is
+    # the faster of the two as Python) and on request (tests).
+    kernel = _distributed_kernel_fast if _FAST_KERNEL else _distributed_kernel
     if kept is None and law is None:
-        out, hist, slip, stats, fld = _distributed_kernel(
+        out, hist, slip, stats, fld = kernel(
             kx / kappa_c,
             ky / kappa_c,
             pressure / p_ref,
@@ -1397,7 +2299,7 @@ def distributed_friction_history(
         index = np.full(count, -1, dtype=np.int64)
         index[kept] = np.arange(kept.size)
         kinematics = np.zeros((kept.size, 4, n_nodes))
-        out, hist, slip, stats, fld = _distributed_kernel(
+        out, hist, slip, stats, fld = kernel(
             kx / kappa_c,
             ky / kappa_c,
             pressure / p_ref,
@@ -1420,7 +2322,7 @@ def distributed_friction_history(
         if kept is not None:
             index[kept] = np.arange(kept.size)
             kinematics = np.zeros((kept.size, 4, n_nodes))
-        out, hist, slip, stats, fld = _distributed_kernel(
+        out, hist, slip, stats, fld = kernel(
             kx / kappa_c,
             ky / kappa_c,
             pressure / p_ref,

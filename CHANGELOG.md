@@ -58,8 +58,9 @@ All notable changes to CableXSec are recorded in this file. The format follows
   against 1.8–2.6 in the distributed model. On planar and flat paths (minor over major axis up
   to about 0.3) its ranges are at or above the distributed ones. The result is unchanged; an
   explicit `friction_model` keeps the chosen law without the warning. Cost of the distributed
-  model on one thread: 1.0–1.5 times the direction-tied time on the shipped fatigue examples,
-  13–16 times on the 66 kV template (substeps of 0.1 `κ_on`); with `"auto"` the largest damage
+  model on one thread: 1.0–1.3 times the direction-tied time on the shipped fatigue examples,
+  about 4 times on the 66 kV template (substeps of 0.1 `κ_on`; see Changed for the faster
+  kernel); with `"auto"` the largest damage
   of the shipped examples changes by at most 0.02 %, on an hour of the 66 kV template at 10 Hz
   it is 0.92 of the direction-tied value. Tests: tests/test_biaxial_friction_default.py.
 - A bound option of the distributed friction model, `distributed_bound` in `compute_fatigue`
@@ -179,6 +180,34 @@ All notable changes to CableXSec are recorded in this file. The format follows
   paths; pass `friction_model` explicitly to keep the current behaviour.
 
 ### Changed
+
+- The distributed helix friction model (`friction_model="distributed"`, and `"auto"` on
+  non-planar paths) runs about three times faster on the 66 kV template. `compute_fatigue` on
+  one thread, warm, an hour of the 66 kV template at 10 Hz (36 001 samples, both armour
+  layers): 43.0 s before, 13.1 s after, against 3.2 s for the direction-tied cap (13.6 times
+  before, 4.1 times after). Shipped fatigue examples: 1.14–1.59 times the direction-tied time
+  before, 1.01–1.28 times after. All of the time was in the compiled increment solver: about
+  1.28 million substeps of 0.1 `κ_on`, each with 3.8 Newton solves on average and several passes
+  over the 556–580 helix nodes per solve. The substep rule, the equations, the convergence
+  tests and the defaults are unchanged; a new compiled kernel solves each increment faster:
+  Newton starts from the increment of the last substep (the substeps of a sample are equal
+  steps, so this usually has the converged stick/slip pattern: 1.2–1.6 solves per substep), the
+  factorisation of its Jacobian is kept between solves and eliminated from both ends towards
+  the middle row, so a row that changes refactors only the rows between it and the middle, and
+  the residual, bound and pattern of an iterate are formed in one pass. An increment is solved
+  again from zero, as before, if that start fails. The previous kernel is
+  kept as the reference: it runs without numba (`CABLEXSEC_DISABLE_NUMBA=1`) and the tests
+  compare the two (tests/test_distributed_fast.py: planar, rotating, one-sided and full-slip
+  paths, both bound forms, contact shape, pressure history, pressure factor and static/dynamic
+  law, kept kinematics; the recorded values of the independent stick_check solver hold for
+  both). Differences are round-off: wire stress at most 3.4e-15 of the largest, damage
+  1.2e-15 (66 kV template) and at most 1.4e-12 relative (shipped examples, damages of order
+  1e-12), energies 1e-15 of the largest, kept displacement and slip fields to round-off (both
+  kernels fix the slide of a full-slip increment by the same rule, see Fixed). With a finite
+  healing time of a friction law a node's heal and break-away events can move by a substep
+  under any round-off change (on a 32-node helix with the uniform bound a relative change of
+  1e-15 in the curvature moves the reference stress by 0.24 %; the kernels differ by 0.24 %
+  there and by 4e-15 with the default nodes).
 
 - The distributed friction model of the fatigue path accepts a constant stick modulus other than
   the layer's (one block of a thermal history, which recomputes `ξ` from its moduli) as the Yun
