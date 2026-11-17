@@ -260,6 +260,32 @@ All notable changes to CableXSec are recorded in this file. The format follows
   points, and warns when a transition is narrower than its step; a law that still misses the
   stick stiffness warns. The exported laws of the validation and benchmark rows (MX-1, MX-2,
   MX-scale) do not change at their printed precision.
+- The sea-state batch takes the default armour friction model of `compute_fatigue`:
+  `SeaStateBatchOptions.friction_model` is `None` by default (was an explicit
+  `"direction_tied"`), so the batch and `cablexsec-batch` follow the planned change of the
+  default and warn with `DirectionTiedFrictionWarning` on non-planar records, which they never
+  did. The default is still `"direction_tied"`: results are unchanged, bit for bit, and the
+  manifest and the assessment digests record the model the default resolves to, so they are
+  unchanged too (new `cablexsec.analysis.fatigue.DEFAULT_FRICTION_MODEL`). Warnings of the
+  worker processes (`workers > 1`) were shown on the workers' standard error only; they are now
+  issued again in the calling process.
+- `friction_model="auto"` warns when it keeps the direction-tied law on a non-planar path
+  (`FrictionModelFallbackWarning`, once per layer, from `compute_fatigue` and
+  `wire_stress_field`): a rate-dependent friction law, a rigid interface (`ξ ≥ 1`) or a stick
+  modulus that changes over the record. Before, only the provenance limitations recorded it.
+- `curvature_path_out_of_plane_ratio` (the planarity test of `friction_model="auto"` and of the
+  default-change notice) judged the out-of-plane distance against the largest curvature, so a
+  static bend hid cycles normal to it: a static 0.05 1/m with ±4e-5 1/m normal cycles was 8e-4
+  out of plane (planar) and `"auto"` took the direction-tied law, whose cap follows the static
+  bending direction. The distance is now judged against the smaller of the largest curvature and
+  the largest distance from the mean curvature, the latter floored at 1e-2 of the largest
+  curvature (so a nearly constant curvature written with six significant digits, each component
+  within 5e-6 of the largest, stays planar at 7.1e-4 or less): that path is 0.08 out of plane,
+  with ±4e-4 1/m cycles 0.8. Paths without a static offset (every bundled check: planar
+  paths, centred ellipses and circles) keep their ratio; a planar path with a static offset in
+  its plane stays planar. Over the 1 203 tests that reach the planarity test and the shipped
+  fatigue examples and tutorials, no path other than the new checks changes its verdict.
+
 - The slip of the distributed friction model over a full-slip increment (every helix node on its
   bound) is now unique. The equations fix the forces, the tractions and `u − p` there, but not a
   slide common to the displacement `u` and the slip `p` of all nodes; the solver left one node

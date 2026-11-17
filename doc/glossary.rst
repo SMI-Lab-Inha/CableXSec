@@ -1325,7 +1325,9 @@ Terms and abbreviations
       Warnings issued when a run succeeds but rests on an assumption or leaves its validated
       range: :term:`ExtrapolationWarning`, :term:`MissingClampingStateWarning`,
       ``UnmodelledPolymerSofteningWarning``, ``UnevaluatedFatigueCurveWarning``,
-      ``UnvalidatedModelWarning`` and ``TransverseMapWarning``; and the ``FutureWarning``
+      ``UnvalidatedModelWarning``, ``TransverseMapWarning`` and ``FrictionModelFallbackWarning``
+      (``friction_model="auto"`` kept the direction-tied law on a non-planar path); and the
+      ``FutureWarning``
       ``DirectionTiedFrictionWarning`` of a default that changes in the next release.
 
    wear

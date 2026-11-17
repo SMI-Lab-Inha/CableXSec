@@ -122,6 +122,7 @@ from cablexsec.mechanics.tendon_section import WireSection
 from cablexsec.mechanics.wire_stress import local_bending_fibre_stress
 from cablexsec.provenance import (
     DirectionTiedFrictionWarning,
+    FrictionModelFallbackWarning,
     Provenance,
     real_array,
 )
@@ -133,11 +134,23 @@ _FAST_RAINFLOW = HAVE_NUMBA
 
 RainflowCounter = Literal["auto", "compiled", "reference"]
 FrictionModel = Literal["auto", "direction_tied", "distributed", "progressive"]
+#: Armour friction model of :func:`compute_fatigue` when ``friction_model`` is
+#: left at ``None`` (the planned change to ``"auto"`` is announced by
+#: :class:`~cablexsec.provenance.DirectionTiedFrictionWarning`).
+DEFAULT_FRICTION_MODEL: FrictionModel = "direction_tied"
 DistributedBound = Literal["signed", "uniform"]
 #: Out-of-plane ratio (:func:`curvature_path_out_of_plane_ratio`) at or below
 #: which ``friction_model="auto"`` treats a curvature path as planar (and above
 #: which the default direction-tied law warns).
 PLANAR_PATH_TOLERANCE = 1e-3
+#: Smallest range about the mean, relative to the largest curvature, against
+#: which :func:`curvature_path_out_of_plane_ratio` judges a path. Six
+#: significant digits put each component within 5e-6 of the largest
+#: curvature (half a unit in the last digit of a mantissa near 1), so a
+#: rounded static curvature is at most 7.1e-6 off its line and 7.1e-4 out of
+#: plane against this floor; cycles normal to a static bend count from 1e-5
+#: of it.
+_PATH_SPREAD_FLOOR = 1e-2
 #: Measured bias of the direction-tied law under rotating curvature, quoted by
 #: :class:`~cablexsec.provenance.DirectionTiedFrictionWarning`.
 DIRECTION_TIED_ROTATION_BIAS = (
@@ -153,6 +166,7 @@ CopperContactModel = Literal["slip_cycle", "legacy_gross_sliding"]
 COPPER_CONTACT_MODELS: tuple[str, ...] = ("slip_cycle", "legacy_gross_sliding")
 
 __all__ = [
+    "DEFAULT_FRICTION_MODEL",
     "PLANAR_PATH_TOLERANCE",
     "FatigueLayer",
     "FatigueResult",
@@ -170,16 +184,24 @@ FloatArray = NDArray[np.float64]
 def curvature_path_out_of_plane_ratio(
     kappa_x: FloatArray, kappa_y: FloatArray
 ) -> float:
-    """Out-of-plane extent of a curvature path, relative to its largest curvature.
+    """Out-of-plane extent of a curvature path, relative to its curvature range.
 
     A planar history keeps one bending plane: every sample ``(kappa_x,
     kappa_y)`` lies on one line through the origin. The line is the principal
     axis of the second moment ``sum k k^T`` of the samples about the origin
     (not about their mean: the bending plane passes through the straight
     cable). The ratio is the largest distance of a sample from that line over
-    the largest curvature magnitude: zero for a planar path in any plane, one
-    for a circle, ``b/a`` for an ellipse of semi-axes ``a >= b`` centred on
-    the origin. A zero history returns zero.
+    the smaller of the largest curvature magnitude and the largest distance
+    of a sample from the mean curvature: zero for a planar path in any plane,
+    a static offset in the plane included, one for a circle, ``b/a`` for an
+    ellipse of semi-axes ``a >= b`` centred on the origin. The second scale
+    keeps a static bend from hiding the cycles about it: a static curvature
+    with small cycles normal to its plane is as far from planar as the cycles
+    are large, not as small as they are against the static bend. A range
+    below ``1e-2`` of the largest curvature is judged against that floor, so
+    that the rounding of a nearly constant curvature in output files (six
+    significant digits: at most ``7.1e-4``) stays planar; cycles normal to a
+    static bend then count from ``1e-5`` of it. A zero history returns zero.
     """
     kx = np.asarray(kappa_x, dtype=np.float64)
     ky = np.asarray(kappa_y, dtype=np.float64)
@@ -192,8 +214,11 @@ def curvature_path_out_of_plane_ratio(
     x, y = kx / peak, ky / peak
     sxx, syy, sxy = float(x @ x), float(y @ y), float(x @ y)
     angle = 0.5 * math.atan2(2.0 * sxy, sxx - syy)
-    distance = np.abs(y * math.cos(angle) - x * math.sin(angle))
-    return float(np.max(distance))
+    distance = float(np.max(np.abs(y * math.cos(angle) - x * math.sin(angle))))
+    # The range about the mean (in units of the peak): a static bend with
+    # cycles normal to its plane is judged against the cycles.
+    spread = float(np.max(np.hypot(x - np.mean(x), y - np.mean(y))))
+    return distance / min(1.0, max(spread, _PATH_SPREAD_FLOOR))
 
 
 def _distributed_spec(
@@ -244,6 +269,18 @@ def _resolve_friction_model(
     if usable is None:
         return "direction_tied", reason
     return "distributed", ""
+
+
+def _warn_auto_fallback(name: str, reason: str, stacklevel: int) -> None:
+    """Warn that ``friction_model="auto"`` kept the direction-tied law."""
+    warnings.warn(
+        f"friction_model='auto' kept the direction-tied model for {name} on a "
+        f"non-planar curvature path because {reason}; the distributed model does "
+        "not cover that case, and the direction-tied cap turns with the bending "
+        f"direction: {DIRECTION_TIED_ROTATION_BIAS}",
+        FrictionModelFallbackWarning,
+        stacklevel=stacklevel + 1,
+    )
 
 
 def _warn_default_direction_tied(out_of_plane: float, stacklevel: int) -> None:
@@ -1014,13 +1051,15 @@ def wire_stress_field(
     kx, ky = real_array(kappa_x, "kappa_x"), real_array(kappa_y, "kappa_y")
     _check_distributed_bound(distributed_bound)
     if friction_model == "auto":
-        friction_model, _reason = _resolve_friction_model(  # type: ignore[assignment]
+        friction_model, reason = _resolve_friction_model(  # type: ignore[assignment]
             friction_model,
             layer.spec,
             curvature_path_out_of_plane_ratio(kx, ky),
             stick_modulus_Pa,
             friction_law,
         )
+        if reason:
+            _warn_auto_fallback(layer.name, reason, stacklevel=2)
     if (
         active_friction_law(friction_law) is not None
         and isinstance(termination, TerminationSpec)
@@ -1467,7 +1506,7 @@ def compute_fatigue(
     compiled = _use_compiled_counter(rainflow_counter)
     default_model = friction_model is None
     if friction_model is None:
-        friction_model = "direction_tied"
+        friction_model = DEFAULT_FRICTION_MODEL
     _check_friction_model(friction_model)
     _check_distributed_bound(distributed_bound)
     if copper_contact_model not in COPPER_CONTACT_MODELS:
@@ -1636,6 +1675,7 @@ def compute_fatigue(
         chosen_model[name] = model
         if reason:
             fallback_reason[name] = reason
+            _warn_auto_fallback(name, reason, stacklevel=2)
         layer_termination = (
             termination
             if termination is None or isinstance(termination, TerminationSpec)

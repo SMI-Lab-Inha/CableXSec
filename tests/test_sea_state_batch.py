@@ -8,6 +8,7 @@ import hashlib
 import json
 import math
 import os
+import warnings
 from dataclasses import replace
 
 import numpy as np
@@ -163,6 +164,39 @@ def test_worker_count_does_not_change_results(tmp_path, cable, stiffness):
             atol=0.0,
         )
     assert one.manifest["inputs_sha256"] == two.manifest["inputs_sha256"]
+
+
+def test_batch_friction_model_follows_the_library_default(tmp_path, cable, stiffness):
+    # The default is the library's: its notice on a non-planar path reaches
+    # the caller (from the worker processes too), the results are those of
+    # the model it resolves to and the manifest records that model.
+    assert SeaStateBatchOptions().friction_model is None
+    runs = _runs(tmp_path, stiffness)
+    sections = [SectionRequest("a", 2.0)]
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", cx.DirectionTiedFrictionWarning)
+        explicit = run_sea_state_batch(
+            cable,
+            runs,
+            sections,
+            options=SeaStateBatchOptions(friction_model="direction_tied"),
+        )
+    for workers in (1, 2):
+        with pytest.warns(cx.DirectionTiedFrictionWarning, match="'auto'"):
+            default = run_sea_state_batch(
+                cable, runs, sections, options=SeaStateBatchOptions(workers=workers)
+            )
+        a, b = default.sections["a"].long_term, explicit.sections["a"].long_term
+        for layer in a.annual_damage_per_fibre:
+            np.testing.assert_allclose(
+                a.annual_damage_per_fibre[layer],
+                b.annual_damage_per_fibre[layer],
+                rtol=0.0 if workers == 1 else 1e-10,
+                atol=0.0,
+            )
+        assert default.manifest["options"]["friction_model"] == "direction_tied"
+        assert default.manifest["inputs_sha256"] == explicit.manifest["inputs_sha256"]
+        assert a.assessment_id == b.assessment_id
 
 
 def test_in_process_batch_leaves_thread_settings_alone(

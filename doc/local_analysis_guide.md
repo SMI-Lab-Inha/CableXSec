@@ -1502,19 +1502,29 @@ run uncompiled.
   (`DirectionTiedFrictionWarning`, a `FutureWarning`, with the measured bias
   below); the result of this release is unchanged. Pass `friction_model`
   explicitly to keep the current behaviour (`"direction_tied"`) or to take the
-  coming one (`"auto"`) without the warning. The sea-state batch passes its
-  option explicitly and does not warn.
+  coming one (`"auto"`) without the warning. The sea-state batch takes the
+  same default (`SeaStateBatchOptions.friction_model=None`) and warns the same
+  way, from its worker processes too; its manifest records the model the
+  default resolves to.
 - `"auto"` (opt-in): the direction-tied law for a planar curvature path and
   the distributed law for any other. The path is planar when its out-of-plane ratio
   (`curvature_path_out_of_plane_ratio`: the largest distance of a sample
-  `(κ_x, κ_y)` from the principal line through the origin, over the largest
-  curvature) is at most `PLANAR_PATH_TOLERANCE = 1e-3`. A planar path in any
-  plane gives round-off, the same path written with six significant digits
-  less than `1e-5`, an ellipse its axis ratio. A layer the distributed law
-  does not cover (rigid interface `ξ ≥ 1`, a stick modulus that changes over
-  the record, a rate-dependent friction law) keeps the direction-tied law. The
-  provenance records the ratio, the model of every layer and the reason for a
-  fallback. `wire_stress_field` takes `"auto"` too.
+  `(κ_x, κ_y)` from the principal line through the origin, over the smaller of
+  the largest curvature and the largest distance of a sample from the mean
+  curvature, the latter not below `1e-2` of the largest curvature) is at most
+  `PLANAR_PATH_TOLERANCE = 1e-3`. A planar path in any plane gives round-off,
+  a static offset in that plane included, the same path written with six
+  significant digits less than `1e-5`, an ellipse its axis ratio. The second
+  scale keeps a static bend from hiding cycles normal to it: a static
+  curvature of 0.05 1/m with cycles of 4e-5 1/m normal to it is 8e-4 out of
+  plane against the largest curvature, but 0.08 against the floor of its range
+  (cycles of 4e-4 1/m: 0.8). The floor keeps a nearly constant curvature
+  written with six significant digits planar (at most 7.1e-4).
+  A layer the distributed law does not cover (rigid interface `ξ ≥ 1`, a
+  stick modulus that changes over the record, a rate-dependent friction law)
+  keeps the direction-tied law and warns (`FrictionModelFallbackWarning`, once
+  per layer). The provenance records the ratio, the model of every layer and
+  the reason for a fallback. `wire_stress_field` takes `"auto"` too.
 - `"distributed"`: the friction force is solved along one pitch of the helix
   with interface shear stiffness `k̂ = ξ/(1 − ξ)` and the capstan bound
   `λ n` on the signed wire force, for any biaxial curvature history and the
