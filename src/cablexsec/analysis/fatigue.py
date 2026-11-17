@@ -59,7 +59,7 @@ from __future__ import annotations
 import dataclasses
 import math
 import warnings
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -176,9 +176,60 @@ __all__ = [
     "curvature_path_out_of_plane_ratio",
     "miner_damage",
     "rainflow_cycles",
+    "select_wires",
 ]
 
 FloatArray = NDArray[np.float64]
+IntArray = NDArray[np.int64]
+
+#: Wires to evaluate: ``N`` equally spaced positions per layer, explicit
+#: azimuths [deg], or one of these per layer name.
+WirePositions = int | Sequence[float] | Mapping[str, int | Sequence[float]]
+
+
+def select_wires(n_wires: int, positions: int | Sequence[float]) -> IntArray:
+    """Indices of the wires at the selected positions of a layer, ascending.
+
+    Wire ``k`` lies at the azimuth ``360 k / n_wires`` degrees (the azimuth of
+    ``phi_critical_deg``). An integer ``N`` (1 to ``n_wires``) takes the wires
+    nearest to ``N`` equally spaced azimuths from zero; a sequence takes the
+    wire nearest to each azimuth [deg]. A wire named twice is evaluated once.
+    """
+    n = int(n_wires)
+    pitch = 360.0 / n
+    if isinstance(positions, (bool, np.bool_)):
+        raise CableInputError("wire positions must be a count or azimuths in degrees")
+    if isinstance(positions, (int, np.integer)):
+        if not 1 <= positions <= n:
+            raise CableInputError(
+                f"the number of wire positions must lie between 1 and {n}"
+            )
+        angles = np.arange(int(positions)) * (360.0 / int(positions))
+    else:
+        try:
+            angles = np.asarray(positions, dtype=np.float64)
+        except (TypeError, ValueError) as error:
+            raise CableInputError(
+                "wire positions must be a count or azimuths in degrees"
+            ) from error
+        if angles.ndim != 1 or angles.size == 0 or not np.isfinite(angles).all():
+            raise CableInputError(
+                "wire azimuths must be a non-empty sequence of finite degrees"
+            )
+    index = np.floor(np.mod(angles, 360.0) / pitch + 0.5).astype(np.int64) % n
+    return np.asarray(np.unique(index), dtype=np.int64)
+
+
+def _layer_wires(
+    positions: WirePositions | None, layer: FatigueLayer
+) -> IntArray | None:
+    """The evaluated wires of ``layer`` (``None``: every wire)."""
+    if positions is None:
+        return None
+    if isinstance(positions, Mapping):
+        positions = positions[layer.name]
+    wires = select_wires(layer.spec.n_wires, positions)
+    return None if wires.size == layer.spec.n_wires else wires
 
 
 def curvature_path_out_of_plane_ratio(
@@ -634,6 +685,12 @@ class FatigueResult:
     boundary layer, reach, bending directions and principal variance
     fraction). The corrected friction stress is already in every bulk damage
     field; it is empty when no termination was requested.
+
+    ``wire_index`` names, per layer, the wires a selected-position evaluation
+    (``wire_positions``) assessed: row ``i`` of that layer's per-wire arrays
+    is wire ``wire_index[layer][i]``, at the azimuth ``wire_azimuth_deg``
+    (``360 k / n_wires`` degrees). A layer absent from them was assessed at
+    every wire.
     """
 
     D_bulk_per_wire: dict[str, FloatArray]
@@ -659,6 +716,8 @@ class FatigueResult:
     clamp_correction: dict[str, dict[str, float | bool | str]] = field(
         default_factory=dict
     )
+    wire_index: dict[str, IntArray] = field(default_factory=dict)
+    wire_azimuth_deg: dict[str, FloatArray] = field(default_factory=dict)
 
 
 # --------------------------------------------------------------------------- #
@@ -686,8 +745,13 @@ def _wire_stress_series(
     friction_law: FrictionLaw | None = None,
     time_s: FloatArray | None = None,
     distributed_bound: DistributedBound = "signed",
+    wires: IntArray | None = None,
 ) -> FloatArray:
     """Build ``sigma_total(phi_k, t)`` for every wire of one layer [Pa].
+
+    ``wires`` (indices) builds those rows only, in that order, equal to the
+    same rows of the full field: the direction-tied kernel evaluates only
+    them; the other friction models solve the layer and keep their rows.
 
     ``friction_out``, when given, receives the friction stress ``sigma_f``
     (for the component stress concentration factors). ``friction_law`` and
@@ -735,6 +799,8 @@ def _wire_stress_series(
             )
     _validate_tension(tension_N, EA_full_N, kappa_x.shape)
     phi = spec.phi_wires  # (n_wires,)
+    if wires is not None:
+        phi = phi[wires]
     n_steps = kappa_x.size
     a = spec.lay_angle_rad
 
@@ -774,6 +840,7 @@ def _wire_stress_series(
             "a friction law acts on the single spring-slider per wire; the "
             "progressive law is not implemented with it"
         )
+    wires_done = False
     if friction_model == "progressive":
         # Progressive (Iwan) split of the direction-tied cap (gap G8).
         if stick_modulus_Pa is None and _FAST_SLIP:
@@ -822,7 +889,9 @@ def _wire_stress_series(
             direction_hold_fraction=direction_hold_fraction,
             friction_law=law,
             time_s=time_s,
+            wires=wires,
         )
+        wires_done = True
     else:
         sigma_f_kt = wire_slip_history(
             spec,
@@ -835,8 +904,10 @@ def _wire_stress_series(
             time_s=time_s,
         ).stress_Pa
 
+    if wires is not None and not wires_done:
+        sigma_f_kt = np.ascontiguousarray(sigma_f_kt[wires])
     # sigma_A (tension) — [Nasution2014b] Eq. 5: sigma_A = E cos^2 a * N / EA_full.
-    sigma_A_kt = np.zeros((spec.n_wires, n_steps), dtype=np.float64)
+    sigma_A_kt = np.zeros((phi.size, n_steps), dtype=np.float64)
     if normal_stress_Pa is not None:
         sigma_A_kt += np.asarray(normal_stress_Pa)[None, :]
     if axial_strain is not None:
@@ -848,7 +919,7 @@ def _wire_stress_series(
         sigma_A_t = e_ax * math.cos(a) ** 2 * np.asarray(tension_N) / EA_full_N
         sigma_A_kt += sigma_A_t[None, :]
 
-    sigma_T_kt = np.zeros((spec.n_wires, n_steps), dtype=np.float64)
+    sigma_T_kt = np.zeros((phi.size, n_steps), dtype=np.float64)
     if thermal_stress_Pa is not None:
         sigma_T_kt += np.asarray(thermal_stress_Pa, dtype=np.float64)[None, :]
 
@@ -994,8 +1065,16 @@ def wire_stress_field(
     friction_law: FrictionLaw | None = None,
     time_s: FloatArray | None = None,
     distributed_bound: DistributedBound = "signed",
+    wires: IntArray | None = None,
 ) -> WireStressField:
     """Recover the shared stress field once, retaining all preceding slip history.
+
+    ``wires`` (indices into the layer's wires, as from :func:`select_wires`)
+    recovers the field of those wires only, rows in that order. Each row
+    equals the same row of the full field: the direction-tied kernel solves
+    only the selected wires, the other friction models and the termination
+    increment solve the layer and keep the selected rows. Not combined with
+    ``transverse``, whose slip couples neighbouring wires.
 
     ``keep_friction=True`` also stores the friction stress in
     ``friction_Pa`` (component stress concentration factors); the field is
@@ -1070,6 +1149,22 @@ def wire_stress_field(
             "combined with a non-neutral friction law"
         )
     friction_law_time_steps(friction_law, time_s, kx.size)  # checks the time base
+    if wires is not None:
+        wires = np.asarray(wires, dtype=np.int64)
+        if (
+            wires.ndim != 1
+            or wires.size == 0
+            or np.any(wires < 0)
+            or np.any(wires >= layer.spec.n_wires)
+            or np.any(np.diff(wires) <= 0)
+        ):
+            raise CableInputError(
+                "wires must be ascending, distinct indices of the layer's wires"
+            )
+        if transverse is not None:
+            raise CableInputError(
+                "transverse slip couples neighbouring wires; evaluate every wire"
+            )
     unrelieved_spec = layer.spec
     gradient = None
     if curvature_gradient is not None:
@@ -1119,6 +1214,7 @@ def wire_stress_field(
         friction_law=friction_law,
         time_s=time_s,
         distributed_bound=distributed_bound,
+        wires=wires,
     )
     spec = layer.spec
     increment = None
@@ -1133,6 +1229,10 @@ def wire_stress_field(
             lay_hand=layer.lay_hand,
             contact_pressure_Pa=contact_pressure_Pa,
         )
+        if wires is not None:
+            increment = dataclasses.replace(
+                increment, stress_Pa=np.ascontiguousarray(increment.stress_Pa[wires])
+            )
         if increment.applied:
             outward = outward + increment.stress_Pa
             if friction_parts:
@@ -1145,10 +1245,11 @@ def wire_stress_field(
     else:
         depth = 2 * spec.section.half_thickness_m
         width = 2 * spec.section.half_width_m
+    phi_eval = spec.phi_wires if wires is None else spec.phi_wires[wires]
     radial = local_bending_fibre_stress(
         kx,
         ky,
-        spec.phi_wires[:, None],
+        phi_eval[:, None],
         modulus,
         depth,
         spec.lay_angle_rad,
@@ -1156,7 +1257,7 @@ def wire_stress_field(
     tangential = local_bending_fibre_stress(
         kx,
         ky,
-        spec.phi_wires[:, None],
+        phi_eval[:, None],
         modulus,
         width,
         spec.lay_angle_rad,
@@ -1195,18 +1296,25 @@ def _fretting_amplitudes_um(
     kappa_x: FloatArray,
     kappa_y: FloatArray,
     contact_force_N: FloatArray | None,
+    wires: IntArray | None = None,
 ) -> FloatArray:
     """Per-wire fretting slip amplitude ``delta*`` [um] from the Mindlin model.
 
-    Zero everywhere if the layer has no fretting stiffness/curve.
+    Zero everywhere if the layer has no fretting stiffness/curve. ``wires``
+    evaluates those wires only (one independent contact per wire).
     """
     spec = layer.spec
-    n_w = spec.n_wires
+    rows = np.arange(spec.n_wires) if wires is None else wires
+    n_w = rows.size
     if layer.K_t_contact_N_per_m <= 0.0 or layer.sn_fretting is None:
         return np.zeros(n_w, dtype=np.float64)
     c_geo = geometric_slip_factor(spec.r_helix_m, spec.lay_angle_rad)
-    g = np.ones(n_w) if layer.contact_shape_g is None else layer.contact_shape_g
-    phi = spec.phi_wires
+    g = (
+        np.ones(spec.n_wires)
+        if layer.contact_shape_g is None
+        else layer.contact_shape_g
+    )[rows]
+    phi = spec.phi_wires[rows]
     delta_star = np.zeros(n_w, dtype=np.float64)
     kx, ky = np.asarray(kappa_x), np.asarray(kappa_y)
     for k in range(n_w):
@@ -1252,17 +1360,20 @@ def _contact_force_histories(
     kappa_x: FloatArray,
     kappa_y: FloatArray,
     contact_force_N: FloatArray | None,
+    wires: IntArray | None = None,
 ) -> tuple[FloatArray, NDArray[np.bool_], FloatArray]:
     """Tangential force, slip flags and normal force at each wire's crossing.
 
     The same kinematic slip family and Coulomb return map with Mindlin initial
-    stiffness as :func:`_fretting_amplitudes_um` are advanced for every wire.
+    stiffness as :func:`_fretting_amplitudes_um` are advanced for every wire
+    (or for the ``wires`` given, rows in that order).
     Returns the signed tangential force along the principal direction of its
     trajectory ``(n_wires, n_steps)`` [N], the slip flag of each increment and
     the constant normal force per crossing ``(n_wires,)`` [N].
     """
     spec = layer.spec
-    n_w = spec.n_wires
+    rows = np.arange(spec.n_wires) if wires is None else wires
+    n_w = rows.size
     kx, ky = np.asarray(kappa_x), np.asarray(kappa_y)
     n_t = kx.size
     if layer.K_t_contact_N_per_m <= 0.0 or layer.crossing_density_per_m <= 0.0:
@@ -1281,8 +1392,12 @@ def _contact_force_histories(
     else:
         line_load = float(contact_force_N[0])
     c_geo = geometric_slip_factor(spec.r_helix_m, spec.lay_angle_rad)
-    g = np.ones(n_w) if layer.contact_shape_g is None else layer.contact_shape_g
-    phi = spec.phi_wires
+    g = (
+        np.ones(spec.n_wires)
+        if layer.contact_shape_g is None
+        else layer.contact_shape_g
+    )[rows]
+    phi = spec.phi_wires[rows]
     force = np.zeros((n_w, n_t), dtype=np.float64)
     slipping = np.zeros((n_w, n_t), dtype=np.bool_)
     normal = line_load * np.asarray(g, dtype=np.float64) / layer.crossing_density_per_m
@@ -1349,6 +1464,7 @@ def compute_fatigue(
     count_from_sample: int = 0,
     friction_law: FrictionLaw | None = None,
     time_s: FloatArray | None = None,
+    wire_positions: WirePositions | None = None,
 ) -> FatigueResult:
     """Run the per-wire fatigue pipeline over a curvature/tension history.
 
@@ -1374,6 +1490,14 @@ def compute_fatigue(
         wire (default 32). Increase this count to check angular convergence.
         Stress is counted separately at each fibre; the largest accumulated
         bulk damage is returned for the wire.
+    wire_positions : int, sequence of float or mapping, optional
+        Wires to evaluate instead of every wire (:func:`select_wires`): ``N``
+        equally spaced positions per layer, explicit azimuths [deg] (the
+        nearest wire to each), or a mapping from every analysed layer name to
+        either. The per-wire arrays then hold the selected wires in ascending
+        order, ``wire_index`` names them, and each value equals the value of
+        the same wire in the full evaluation (bit for bit). Sums and the
+        critical wire are over the selected wires.
     rainflow_counter : {"auto", "compiled", "reference"}, optional
         Counter for the bulk Miner sums. ``"compiled"`` uses
         :func:`cablexsec.analysis.fast_rainflow.miner_rows`, which reproduces
@@ -1559,6 +1683,9 @@ def compute_fatigue(
     layer_names = {layer.name for layer in layers}
     if len(layer_names) != len(layers):
         raise CableInputError("fatigue layer names must be unique")
+    if isinstance(wire_positions, Mapping) and set(wire_positions) != layer_names:
+        raise CableInputError("wire_positions must cover exactly the analysed layers")
+    selected = {layer.name: _layer_wires(wire_positions, layer) for layer in layers}
     if (
         isinstance(distributed_nodes_per_pitch, Mapping)
         and set(distributed_nodes_per_pitch) != layer_names
@@ -1706,12 +1833,16 @@ def compute_fatigue(
             and not layer.component_scf.is_identity,
             friction_law=friction_law,
             time_s=time_s,
+            wires=selected[name],
         )
         if field.termination is not None and layer_termination is not None:
             clamp_summary[name] = _clamp_summary(layer_termination, field.termination)
 
+        wires = selected[name]
+        rows = np.arange(spec.n_wires, dtype=np.int64) if wires is None else wires
+        n_eval = rows.size
         sigma_kt = field.at_fibre(0.0)
-        fibre_damage = np.empty((spec.n_wires, n_fibres))
+        fibre_damage = np.empty((n_eval, n_fibres))
         amplified_damage = np.empty_like(fibre_damage)
         corrected = needs_correction(
             layer.sn_bulk, layer.mean_stress, layer.component_scf
@@ -1767,11 +1898,11 @@ def compute_fatigue(
                 else fibre_damage[:, j]
             )
         critical_indices = np.argmax(fibre_damage, axis=1)
-        db = fibre_damage[np.arange(spec.n_wires), critical_indices]
+        db = fibre_damage[np.arange(n_eval), critical_indices]
         d_fibre[name] = fibre_damage
         critical_fibre[name] = np.degrees(fibre_angles[critical_indices])
         adjusted_indices = np.argmax(amplified_damage, axis=1)
-        adjusted_db = amplified_damage[np.arange(spec.n_wires), adjusted_indices]
+        adjusted_db = amplified_damage[np.arange(n_eval), adjusted_indices]
         d_adjusted_fibre[name] = amplified_damage
         critical_adjusted_fibre[name] = np.degrees(fibre_angles[adjusted_indices])
         # Subtract the unamplified maximum only for decomposition. Form total
@@ -1792,14 +1923,15 @@ def compute_fatigue(
                 kx,
                 ky,
                 None if contact_force_N is None else contact_force_N.get(name),
+                wires,
             )
             g = (
                 np.ones(spec.n_wires)
                 if layer.contact_shape_g is None
                 else layer.contact_shape_g
-            )
+            )[rows]
             e_w = layer.E_eff_axial_Pa or spec.E_wire_Pa
-            for k in range(spec.n_wires):
+            for k in range(n_eval):
                 if g[k] == 0:
                     continue
                 df[k] = swt_slip_cycle_damage(
@@ -1820,9 +1952,9 @@ def compute_fatigue(
                 np.ones(spec.n_wires)
                 if layer.contact_shape_g is None
                 else layer.contact_shape_g
-            )
+            )[rows]
             e_w = layer.E_eff_axial_Pa or spec.E_wire_Pa
-            for k in range(spec.n_wires):
+            for k in range(n_eval):
                 if g[k] == 0:
                     continue
                 p0_k = layer.contact_p0_Pa * float(g[k]) ** (1.0 / 3.0)  # Hertz scaling
@@ -1840,8 +1972,9 @@ def compute_fatigue(
                 kx,
                 ky,
                 None if contact_force_N is None else contact_force_N.get(name),
+                wires,
             )
-            for k in range(spec.n_wires):
+            for k in range(n_eval):
                 n_f = layer.sn_fretting.cycles_to_failure(float(delta_star_um[k]))
                 if math.isfinite(n_f) and n_f > 0.0:
                     df[k] = float(n_cycles[k]) / n_f
@@ -1864,11 +1997,13 @@ def compute_fatigue(
     if crit_layer:
         critical = next(lyr for lyr in layers if lyr.name == crit_layer)
         spec = critical.spec
-        phi_crit = math.degrees(2.0 * math.pi * crit_k / spec.n_wires)
+        crit_wires = selected[crit_layer]
+        crit_wire = crit_k if crit_wires is None else int(crit_wires[crit_k])
+        phi_crit = math.degrees(2.0 * math.pi * crit_wire / spec.n_wires)
         above_core = (
             None
             if critical.above_core_mask is None
-            else bool(critical.above_core_mask[crit_k])
+            else bool(critical.above_core_mask[crit_wire])
         )
         parts = {
             "bulk": float(d_bulk[crit_layer][crit_k]),
@@ -2042,6 +2177,14 @@ def compute_fatigue(
         D_bulk_with_termination_per_fibre=d_adjusted_fibre,
         termination_fibre_critical_deg_per_wire=critical_adjusted_fibre,
         clamp_correction=clamp_summary,
+        wire_index={
+            name: wires.copy() for name, wires in selected.items() if wires is not None
+        },
+        wire_azimuth_deg={
+            lyr.name: np.asarray(360.0 * wires / lyr.spec.n_wires, dtype=np.float64)
+            for lyr in layers
+            if (wires := selected[lyr.name]) is not None
+        },
     )
 
 

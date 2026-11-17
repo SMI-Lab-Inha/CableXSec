@@ -68,7 +68,11 @@ def plot_damage_split(result: FatigueResult) -> Figure:
         name = result.critical_layer or (layers[0] if layers else "")
         if name:
             d = result.D_total_per_wire[name]
-            phi = np.linspace(0, 2 * np.pi, d.size, endpoint=False)
+            phi = (
+                np.radians(result.wire_azimuth_deg[name])
+                if name in result.wire_azimuth_deg
+                else np.linspace(0, 2 * np.pi, d.size, endpoint=False)
+            )
             axb.plot(
                 np.append(phi, phi[0]),
                 np.append(d, d[0]),

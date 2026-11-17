@@ -55,6 +55,24 @@ All notable changes to CableXSec are recorded in this file. The format follows
   without the key are unchanged. Checked in closed form: at zero Poisson ratio a serving gives
   the solid annulus's radial response with exactly its `E A` and `G J` removed, and an outer
   serving under external pressure has the plane-stress thick-cylinder displacements.
+- Selected-position fatigue: `compute_fatigue(..., wire_positions=...)` evaluates chosen wires
+  instead of every wire: `N` equally spaced positions per armour layer, explicit azimuths in
+  degrees (the nearest wire to each) or a mapping per layer. Each selected wire's damage, fibre
+  damage and critical fibre equal those of the evaluation of every wire bit for bit (each wire's
+  friction recursion, stress field and rainflow count are independent of the others), in every
+  friction model, contact-life branch, termination increment, friction law and S-N option.
+  `FatigueResult.wire_index` and `wire_azimuth_deg` name the rows; the critical wire and the
+  sums are over the selected wires. The direction-tied kernel then solves only the selected
+  wires: on the 66 kV template, one hour at 10 Hz (36 000 samples), both armour layers, one
+  thread, 12 positions per layer take 0.11 s instead of 1.24 s (4 fibres) and 0.31 s instead of
+  3.72 s (32 fibres). The distributed model solves the helix of the whole layer, so there only
+  the counting is saved (24.0 s to 23.3 s): its time is all in the compiled increment solver
+  (23.1 of 24.0 s; 2.96 million substeps of 0.1 `κ_on`, 1.1–1.3 Newton solves each, about
+  14 ns per helix node and substep), set by the substep rule at the template's small slip-onset
+  curvature (`κ_on` 5.1e-5 and 1.6e-4 1/m with tension-only contact); no avoidable overhead was
+  found outside it. `SeaStateBatchOptions(wire_positions=...)` passes the selection to every
+  run, and `compute_long_term_fatigue` requires the same wires in every case and reports the
+  critical wire by its number.
 - The armour friction coefficient can depend on the contact pressure:
   `FrictionLaw(pressure_factor=((P, f), ...))`, a piecewise-linear factor `f(P)` on the
   coefficient, clamped at the table ends, evaluated at the local friction-setting pressure

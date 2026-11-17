@@ -539,6 +539,25 @@ rotating bending it can be constant while material points cycle. For direct
 control use `cx.compute_fatigue(cable, kx, ky, ...)` with one of `tension_N`,
 `axial_strain` or `section_states`.
 
+**Selected wire positions.** For long records at many cable locations,
+`cx.compute_fatigue(..., wire_positions=12)` evaluates 12 equally spaced wire
+positions per armour layer instead of every wire. A list of azimuths in degrees
+(`wire_positions=[0, 90, 180, 270]`) takes the wire nearest to each, and a
+mapping gives each layer its own selection. Wire `k` lies at the azimuth
+`360 k / n_wires`, the convention of `phi_critical_deg`. Each selected wire's
+damage equals its value in the evaluation of every wire, bit for bit, because
+the friction recursion, stress field and rainflow count of one wire do not
+depend on the others. The per-wire arrays then hold the selected wires in
+ascending order; `result.wire_index` and `result.wire_azimuth_deg` name them.
+The critical wire and the damage sums are over the selected wires only, so
+choose enough positions to resolve the damage around the circumference: the
+largest damage of a selection is a lower bound of the largest damage of the
+layer. The direction-tied model solves only the selected wires. The
+distributed model solves the helix of the whole layer and keeps the selected
+wires, so there only the rainflow counting is saved. `SeaStateBatchOptions`
+takes the same `wire_positions`, and `compute_long_term_fatigue` requires every
+case to use the same wires.
+
 ### Step 3: discard the slip initialisation, count the retained hour
 
 Friction state must be built up before the counted record. Solve the stress

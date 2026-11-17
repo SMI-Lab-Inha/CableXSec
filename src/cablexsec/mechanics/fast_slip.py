@@ -50,6 +50,7 @@ if TYPE_CHECKING:
 __all__ = ["HAVE_NUMBA", "wire_friction_stress"]
 
 FloatArray = NDArray[np.float64]
+IntArray = NDArray[np.int64]
 
 
 @njit(cache=True)
@@ -98,7 +99,10 @@ def _stress_kernel(
     g: FloatArray,
     angle0: float,
     threshold_coefficient: float,
+    n_total: int,
 ) -> FloatArray:
+    # phi and g hold the evaluated wires; n_total is the layer's wire count,
+    # which sets the tributary width of each wire.
     n_w = phi.size
     n_t = kx.size
     stress = np.empty((n_w, n_t))
@@ -129,12 +133,14 @@ def _stress_kernel(
         else:
             blend = magnitude / threshold
         if not (held == held_angle and p == held_pressure):
-            held_cap = _cap(phi, held, p, r_helix, n_w, area, lay_angle, mu, g)
+            held_cap = _cap(phi, held, p, r_helix, n_total, area, lay_angle, mu, g)
             held_angle = held
             held_pressure = p
         if blend > 0.0:
             if not (current == cur_angle and p == cur_pressure):
-                cur_cap = _cap(phi, current, p, r_helix, n_w, area, lay_angle, mu, g)
+                cur_cap = _cap(
+                    phi, current, p, r_helix, n_total, area, lay_angle, mu, g
+                )
                 cur_angle = current
                 cur_pressure = p
             for s in range(2):
@@ -216,6 +222,7 @@ def _stress_kernel_law(
     v0: float,
     inv_veta: float,
     table: FloatArray,
+    n_total: int,
 ) -> FloatArray:
     n_w = phi.size
     n_t = kx.size
@@ -259,7 +266,7 @@ def _stress_kernel_law(
                 held,
                 p,
                 r_helix,
-                n_w,
+                n_total,
                 area,
                 lay_angle,
                 mu,
@@ -276,7 +283,7 @@ def _stress_kernel_law(
                 current,
                 p,
                 r_helix,
-                n_w,
+                n_total,
                 area,
                 lay_angle,
                 mu,
@@ -336,13 +343,17 @@ def wire_friction_stress(
     direction_hold_fraction: float = DIRECTION_HOLD_FRACTION,
     friction_law: FrictionLaw | None = None,
     time_s: FloatArray | None = None,
+    wires: IntArray | None = None,
 ) -> FloatArray:
     """Friction stress [Pa], shape (wires, samples), for a constant stick stiffness.
 
     ``direction_hold_fraction`` is the fraction ``f`` of the smallest slip-onset
     curvature below which the cap direction is held; ``0`` gives the earlier
     behaviour. ``friction_law`` and ``time_s`` as for
-    :func:`~cablexsec.mechanics.papailiou.wire_slip_history`.
+    :func:`~cablexsec.mechanics.papailiou.wire_slip_history`. ``wires``
+    (indices into the layer's wires) evaluates those wires only, rows in that
+    order; each wire's recursion is independent, so the rows equal the same
+    rows of the full evaluation bit for bit.
     """
     kx = np.ascontiguousarray(kappa_x, dtype=np.float64)
     ky = np.ascontiguousarray(kappa_y, dtype=np.float64)
@@ -356,6 +367,10 @@ def wire_friction_stress(
         if spec.shape_g is None
         else np.ascontiguousarray(spec.shape_g, dtype=np.float64)
     )
+    phi = np.ascontiguousarray(spec.phi_wires, dtype=np.float64)
+    if wires is not None:
+        phi = np.ascontiguousarray(phi[wires])
+        g = np.ascontiguousarray(g[wires])
     law = active_friction_law(friction_law)
     if law is not None:
         steps = friction_law_time_steps(law, time_s, kx.size)
@@ -366,7 +381,7 @@ def wire_friction_stress(
             ky,
             pressure,
             float(spec.k_f),
-            np.ascontiguousarray(spec.phi_wires, dtype=np.float64),
+            phi,
             float(spec.r_helix_m),
             float(spec.A_wire_m2),
             float(spec.lay_angle_rad),
@@ -384,6 +399,7 @@ def wire_friction_stress(
             law.rate_reference_m_per_s,
             law.inverse_viscous_velocity,
             law.pressure_table,
+            int(spec.n_wires),
         )
         if not np.isfinite(stress).all():
             raise CableInputError(
@@ -396,7 +412,7 @@ def wire_friction_stress(
         ky,
         pressure,
         float(spec.k_f),
-        np.ascontiguousarray(spec.phi_wires, dtype=np.float64),
+        phi,
         float(spec.r_helix_m),
         float(spec.A_wire_m2),
         float(spec.lay_angle_rad),
@@ -404,4 +420,5 @@ def wire_friction_stress(
         g,
         float(initial_bending_angle),
         _threshold_coefficient(spec, float(direction_hold_fraction)),
+        int(spec.n_wires),
     )
