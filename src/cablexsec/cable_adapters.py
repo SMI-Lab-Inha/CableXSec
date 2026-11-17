@@ -32,7 +32,7 @@ from cablexsec.cables.schema import (
     HelicalLayer,
     Layer,
 )
-from cablexsec.clamping import warn_if_unclamped
+from cablexsec.clamping import require_radial_shrinkage_route, warn_if_unclamped
 from cablexsec.exceptions import CableSchemaError
 from cablexsec.materials import library
 from cablexsec.materials.sn_curves import (
@@ -133,6 +133,7 @@ def _normal_force_map(
     mech = cable
     p_ext = cable.initial_state.external_pressure_Pa
     if contact_model == "bounded":
+        require_radial_shrinkage_route(cable, "bounded pressure chain")
         return compute_contact_forces(mech, tension_N, p_ext_Pa=p_ext).Fn_per_wire_N
     if contact_model == "qp":
         return solve_contact_qp(cable, tension_N, p_ext_Pa=p_ext).Fn_per_wire_N
@@ -279,6 +280,8 @@ def armour_contact_pressure(
             else None
         )
     )
+    if radial is None:
+        require_radial_shrinkage_route(cable, "bounded pressure chain")
     winding = {
         lyr.name: lyr.winding_stress_Pa
         for lyr in cable.helical_layers
@@ -742,6 +745,8 @@ def armour_crossing_line_loads(
     )
     if contact_model not in {"bounded", "qp"}:
         raise CableSchemaError("contact_model must be 'bounded' or 'qp'")
+    if radial is None:
+        require_radial_shrinkage_route(cable, "bounded pressure chain")
     bounded = (
         section_state.bounded
         if section_state is not None

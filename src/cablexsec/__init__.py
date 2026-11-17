@@ -240,6 +240,7 @@ from cablexsec.api import (
 )
 from cablexsec.cables import chae2023_yaml_path, thies2016_yaml_path
 from cablexsec.cables.schema import (
+    ExtrusionShrinkage,
     FacePressure,
     ManufacturingClamping,
     TapeWinding,
@@ -307,6 +308,7 @@ from cablexsec.mechanics.tendon_bending import (
 from cablexsec.mechanics.tendon_section import WireSection
 from cablexsec.mechanics.thermal_network import ThermalNetwork, thermal_network
 from cablexsec.provenance import (
+    ClampingCalibrationWarning,
     DirectionTiedFrictionWarning,
     FrictionModelFallbackWarning,
     MissingClampingStateWarning,
@@ -376,6 +378,7 @@ __all__ = [
     "CableData",
     # manufacturing clamping state (gap 4.1b)
     "ManufacturingClamping",
+    "ExtrusionShrinkage",
     "ClampingState",
     "LayerClamping",
     "clamping_state",
@@ -572,6 +575,7 @@ __all__ = [
     "Provenance",
     "ValidatedRange",
     "ExtrapolationWarning",
+    "ClampingCalibrationWarning",
     "DirectionTiedFrictionWarning",
     "FrictionModelFallbackWarning",
     "UnevaluatedFatigueCurveWarning",

@@ -10,6 +10,21 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Added
 
+- Frozen extrusion shrinkage of a concentric layer: `extrusion_shrinkage` (`hoop_strain`,
+  `basis`, `source`; `cx.ExtrusionShrinkage`) declares the part of an extruded sheath's or
+  bedding's cooling shrinkage that stays as a shrink fit on the layers inside it. The radial
+  solutions carry it as an in-plane initial strain of the layer: the solved radial state (the
+  ring around a trefoil bundle included, so the laid-core law reads the clamped trefoil) and the
+  concentric `qp` route; `include_manufacturing=False` leaves it out. The bounded pressure chain,
+  which has no displacement compatibility, refuses a non-zero value. A shrinkage outside an
+  armour layer counts as that layer's clamping declaration. Checked against the Lamé shrink fit
+  of a sleeve with an in-plane eigenstrain on a stiff core (both radial solvers, 1e-4).
+- `calibration_scope` (`armour_only` or `all_contacts`) on a calibrated `initial_state` and on a
+  `published_calibration` armour clamping. The laid-core stick-slip law warns
+  (`cx.ClampingCalibrationWarning`) when it is combined with a value fitted with the armour
+  friction alone, which already holds the friction of the other contacts. The Ménard and
+  Cartraud (2023) pressure is tagged `all_contacts` (its source FE has friction on every
+  contact) and the identified Witz (1996) pressures `armour_only`.
 - Laid filler profiles in the core stick-slip law: `CoreFrictionSpec(filler_profiles=True)` (and
   `mu_filler_profile`) turns the interstitial filler annulus into three profiles laid with the
   cores that stick and slip with the same direction-tied cap. Their radius `√(J_f/A_f)` and lay
@@ -199,6 +214,9 @@ All notable changes to CableXSec are recorded in this file. The format follows
   stale without changing a gate. CI checks the committed report before the coverage run, so a
   stale report fails within about 15 minutes instead of after the 45-minute coverage run.
 
+- `MissingClampingStateWarning` now states that at low tension the friction moment and the
+  bending hysteresis tend to zero without a declared clamping state, so a low-tension
+  hysteresis is unreliable, and names the extrusion shrinkage among the declarations.
 - Bounded core contact loads of the laid-core law: the inward resultant of a core (capstan load
   plus its share of the ring line force) is now reacted by its two neighbours, whose contact
   forces sum to the resultant over `sin(π/n)`, besides the ring share on the outer face. The

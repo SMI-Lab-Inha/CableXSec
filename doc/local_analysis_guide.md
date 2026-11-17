@@ -436,7 +436,45 @@ clamping is zero because it is declared `not_published`, it issues
 `cx.MissingClampingStateWarning`. The results are then those of
 tension-induced contact alone: friction stresses and damages sit at their
 low end and ratios that change the clamping (temperature, tension) at their
-high end.
+high end. At low tension the friction moment and the bending hysteresis then
+tend to zero, which a manufactured cable does not show: a low-tension
+hysteresis is unreliable without a declared clamping state.
+
+**Extrusion shrinkage.** An extruded sheath or bedding cools and shrinks onto
+the layers inside it; the part that is not relaxed stays as a shrink fit.
+Declare it on the `cylindrical` layer:
+
+```yaml
+    extrusion_shrinkage:
+      hoop_strain: 0.004          # frozen in-plane shrinkage
+      basis: assumed
+      source: "Assumed frozen hoop shrinkage of the extruded sheath"
+```
+
+The radial solutions carry it as an initial in-plane strain of the layer
+(hoop and radial, no axial part): the solved radial state
+(`contact_model="solved"`, including the ring around a trefoil bundle, so the
+laid-core law reads the clamped trefoil) and the concentric `"qp"` route.
+Contacts then open or close under later loads, and
+`include_manufacturing=False` leaves it out as it does the winding stress.
+The bounded chain has no displacement compatibility to carry an interference
+and refuses a non-zero value. The frozen strain depends on the extrusion and
+cooling history and on the polymer's relaxation, which CableXSec does not
+model: it is an input like the winding stress. A shrinkage of a layer
+outside an armour layer counts as that layer's clamping declaration.
+
+**Calibration scope.** A pressure calibrated on a measured loop holds
+whatever friction the calibrating model had. `initial_state` (for
+`published_calibration` and `identified` values) and `manufacturing_clamping`
+(for `published_calibration`) take `calibration_scope`: `armour_only` or
+`all_contacts`. A value fitted with the armour friction alone was raised
+until the armour matched the measured dissipation, so it already holds the
+friction of the other contacts; the core stick–slip law (Section 6.1) then
+warns (`cx.ClampingCalibrationWarning`), because adding the cores counts that
+friction twice: re-identify the value with the friction model in use. A value
+fitted with friction on every contact is consistent with the core law in
+principle, but it belongs to the calibrating model's contact accounting, so a
+transfer to CableXSec is still a transfer, not a prediction.
 
 Packaged cables:
 
@@ -444,8 +482,8 @@ Packaged cables:
 | --- | --- | --- |
 | 33 kV single and three core | `P0` 2.0 MPa, both armours | representative |
 | 220 kV three-core export | `P0` 3.0 MPa, both armours | representative |
-| Ménard and Cartraud (2023) | `initial_state` 0.3 MPa | published calibration |
-| Witz (1996) 2.5-inch pipe | `initial_state` 1.037 MPa | identified (0-bar loop width, μ = 0.10) |
+| Ménard and Cartraud (2023) | `initial_state` 0.3 MPa | published calibration, all contacts |
+| Witz (1996) 2.5-inch pipe | `initial_state` 1.037 MPa | identified (0-bar loop width, μ = 0.10), armour only |
 | 66 kV IEA Task 49 template | zero | not published (warns) |
 | CIGRE TB 880 export | none declared | missing (warns) |
 

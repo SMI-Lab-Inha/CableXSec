@@ -480,6 +480,11 @@ def core_contact_loads(
             "solved",
             profile,
         )
+    from cablexsec.clamping import require_radial_shrinkage_route  # noqa: PLC0415
+
+    require_radial_shrinkage_route(
+        cable, "bounded core contact estimate", "contact_model='solved'"
+    )
     if section_state is not None:
         section_state.require_cable(cable)
         axi = section_state.bounded
@@ -818,6 +823,11 @@ def build_core_friction(
     if not math.isfinite(tension_N) or tension_N < 0.0:
         raise CableInputError("tension must be finite and non-negative")
     n_cores, r_c, beta, r_core = _core_geometry(cable)
+    from cablexsec.clamping import (  # noqa: PLC0415
+        warn_if_calibrated_with_armour_only,
+    )
+
+    warn_if_calibrated_with_armour_only(cable, stacklevel=2)
     loads = core_contact_loads(
         cable,
         tension_N,

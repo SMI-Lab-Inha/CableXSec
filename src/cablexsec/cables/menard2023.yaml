@@ -47,6 +47,7 @@ core_lay:
 initial_state:
   external_pressure_Pa: 300000.0
   identification: published_calibration
+  calibration_scope: all_contacts   # the source FE has friction on every contact (Section 5)
   source: "[MenardCartraud2023] Sections 5.1-5.3, P = 0.3 MPa"
 
 layers:

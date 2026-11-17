@@ -135,6 +135,8 @@ class _Material:
     modulus: float
     poisson: float
     free_strain: float
+    # In-plane free strain of a frozen extrusion shrinkage (-hoop_strain).
+    transverse_strain: float = 0.0
 
 
 def _layer_state(
@@ -146,6 +148,7 @@ def _layer_state(
     youngs_modulus_Pa: Mapping[str, float] | None,
     flooded_pressure_Pa: float,
     material_source: Mapping[str, str] | None = None,
+    include_shrinkage: bool = True,
 ) -> dict[str, _Material]:
     names = {layer.name for layer in cable.layers}
     sources = dict(material_source or {})
@@ -185,7 +188,9 @@ def _layer_state(
             free += library.get_property(material, "alpha_T_K") * (t - T_ref_C)
         if flooded_pressure_Pa:
             free += flooded_free_strain(modulus, nu, flooded_pressure_Pa)
-        out[layer.name] = _Material(modulus, nu, free)
+        shrink = getattr(layer, "extrusion_shrinkage", None)
+        transverse = -float(shrink.hoop_strain) if include_shrinkage and shrink else 0.0
+        out[layer.name] = _Material(modulus, nu, free, transverse)
     return out
 
 
@@ -275,8 +280,13 @@ def build_radial_section(
     filler: str = "auto",
     angular_cells: int = 48,
     loose_layers: str = "declared",
+    include_shrinkage: bool = True,
 ) -> tuple[RadialSection, tuple[str, ...]]:
-    """Assemble the coupled section of a cable; returns it with notes."""
+    """Assemble the coupled section of a cable; returns it with notes.
+
+    ``include_shrinkage`` carries the declared frozen extrusion shrinkage of
+    concentric layers as their in-plane free strain.
+    """
     if cable.missing_fields():
         raise CableSchemaError("radial solution requires complete geometry")
     if filler not in {"auto", "solid", "void"}:
@@ -294,6 +304,7 @@ def build_radial_section(
         youngs_modulus_Pa=youngs_modulus_Pa,
         flooded_pressure_Pa=flooded_pressure_Pa,
         material_source=sources,
+        include_shrinkage=include_shrinkage,
     )
     notes: list[str] = [
         f"loose layer {name!r} meshed with the material of {source!r}"
@@ -343,6 +354,11 @@ def build_radial_section(
         if fillers:
             concentric_source.remove(fillers[0])
             f = fillers[0]
+            if mats[f.name].transverse_strain:
+                raise CableSchemaError(
+                    f"{f.name}: an interstitial filler cannot declare an "
+                    "extrusion shrinkage"
+                )
             if filler in {"auto", "solid"}:
                 filler_body = ElasticFiller(
                     f.name,
@@ -385,6 +401,7 @@ def build_radial_section(
                     mats[item.name].modulus,
                     mats[item.name].poisson,
                     mats[item.name].free_strain,
+                    free_transverse_strain=mats[item.name].transverse_strain,
                 )
             )
         if not ring:
@@ -441,7 +458,15 @@ def build_radial_section(
         elif isinstance(x, (CylindricalLayer, CylindricalShellLayer)):
             a, b = _annulus_bounds(x)
             layers.append(
-                ElasticAnnulus(x.name, a, b, m.modulus, m.poisson, m.free_strain)
+                ElasticAnnulus(
+                    x.name,
+                    a,
+                    b,
+                    m.modulus,
+                    m.poisson,
+                    m.free_strain,
+                    free_transverse_strain=m.transverse_strain,
+                )
             )
         else:
             raise CableSchemaError(
@@ -679,11 +704,19 @@ def solve_cable_radial_states(
     residual = residual_wire_stress(cable) if include_manufacturing else {}
     reference, notes = _cached_section(
         cable,
-        ("reference", filler, angular_cells, T_ref_C, loose_layers),
+        (
+            "reference",
+            filler,
+            angular_cells,
+            T_ref_C,
+            loose_layers,
+            include_manufacturing,
+        ),
         filler=filler,
         angular_cells=angular_cells,
         T_ref_C=T_ref_C,
         loose_layers=loose_layers,
+        include_shrinkage=include_manufacturing,
     )
     initial = _cached_identification(reference, residual)
     loaded_inputs = (
@@ -702,6 +735,7 @@ def solve_cable_radial_states(
             filler=filler,
             angular_cells=angular_cells,
             loose_layers=loose_layers,
+            include_shrinkage=include_manufacturing,
         )
     else:
         section = reference

@@ -52,7 +52,7 @@ examples with a cited source for every value. Section 4.1 of the
 | `cable` | yes | metadata: `name` (required), `description`, `manufacturer`, `withheld_note`, `source_document`, `voltage_kV`, `design_life_years`, `DFF`, `MBR_installation_m`, `MBR_dynamic_m` |
 | `layers` | yes | list of layers from the centre outwards |
 | `environment` | no | thermal boundary: `ambient_C`, `T4_external_Km_W` (external thermal resistance, K m/W), `frequency_Hz` (default 50), `source` |
-| `initial_state` | no | uniform pressure on the assembled cable before loading: `external_pressure_Pa` (default 0), `identification`, `source`, `bounds_Pa` |
+| `initial_state` | no | uniform pressure on the assembled cable before loading: `external_pressure_Pa` (default 0), `identification`, `source`, `bounds_Pa`, `calibration_scope` |
 | `water_ingress` | no | `design` (`wet` or `dry`), `armour_annulus` (`flooded` or `sealed`), `source` |
 | `core_lay` | no | assembly lay of offset cores: `pitch_m`, `lay_direction`, `source`; omit for cores aligned with the axis |
 | `aggregate_properties` | no | published values for comparison, never inputs: `EA_fixed_MN`, `EI_min_kNm2`, `EI_max_kNm2`, `GJ_kNm2`, `OD_mm`, `mass_kg_m`, `EI_min_tension_kN`, `GJ_tension_kN`, `MBL_kN`, `MBL_basis` |
@@ -64,7 +64,11 @@ inside the layers. A mistyped key is reported, never ignored.
 A non-zero `initial_state.external_pressure_Pa` needs an `identification`
 (`measured`, `manufacturing_specification`, `published_calibration`,
 `identified` or `assumed_bound`) and a `source`. `assumed_bound` also needs
-`bounds_Pa`. A `wet` design may not contain a radial metallic water barrier,
+`bounds_Pa`. A `published_calibration` or `identified` pressure may state
+`calibration_scope`: `armour_only` (fitted with the armour friction alone; the
+value then already holds the friction of the other contacts and the laid-core
+friction law warns with `ClampingCalibrationWarning`) or `all_contacts`
+(fitted with friction on every contact, cores included). A `wet` design may not contain a radial metallic water barrier,
 that is a `cylindrical_shell` or a lead or aluminium sheath. A `dry` design
 must contain one.
 
@@ -89,7 +93,7 @@ them filled.
 | --- | --- | --- |
 | `helical` (armour wires) | `n_wires`, `d_wire_m`, `r_helix_m`, `lay_angle_deg` | `lay_direction` (`right_hand` default, `left_hand`), `manufacturing_clamping`, `bulk_sn`, `fretting_sn`, `transverse_slip_fraction`; flat or profiled wires: `wire_shape` (`round` default, `rectangular`, `profiled`), `wire_width_m`, `wire_thickness_m`, `wire_corner_radius_m`, `wire_area_m2`, `wire_I_normal_m4`, `wire_I_lateral_m4`, `wire_J_m4` |
 | `helical_stranded` (strand within conductor within cable) | `n_conductors`, `r_cable_m`, `lay_angle_cable_deg`, `n_strands`, `r_strand_m`, `d_strand_m`, `lay_angle_strand_deg` | `bulk_sn`, `fretting_sn` |
-| `cylindrical` (polymer annulus, bedding, filler, sheath) | `r_inner_m`, `r_outer_m` | `tape` (helical tape winding), `strain_life` |
+| `cylindrical` (polymer annulus, bedding, filler, sheath) | `r_inner_m`, `r_outer_m` | `tape` (helical tape winding), `strain_life`, `extrusion_shrinkage` |
 | `cylindrical_offset` (core component: conductor, insulation, screen) | `r_offset_m`, `r_inner_m`, `r_outer_m` | `n_cores` (default 3), `conductor_area_mm2`, `strand_layers`, `n_strands`, `strand_diameter_mm`, `strand_lay_angle_deg`, `construction`, `electrical`, `bulk_sn`, `fretting_sn`, `strain_life`, `outer_face_pressure`, `tape` |
 | `cylindrical_shell` (lead or corrugated aluminium sheath) | `r_mid_m`, `t_m` | `f_corrugation` (default 1), `scf` (default 1), `construction` (`bonded_laminate`), `bulk_sn`, `fretting_sn`, `strain_life` |
 
@@ -121,12 +125,35 @@ declared on the layer:
 | `armour_winding_stress_Pa` | residual wire stress from stranding [Pa], converted to a pressure jump |
 | `basis` | `measured`, `manufacturing_specification`, `published_calibration`, `assumed`, `representative` or `not_published` |
 | `source` | required |
+| `calibration_scope` | `armour_only` or `all_contacts`, for a `published_calibration` value (as for `initial_state`) |
 
 Exactly one of the two values is given. `not_published` requires the value
 zero, and analyses that depend on the friction then warn with
 `MissingClampingStateWarning`. The legacy keys `pretension_Pa` and
 `winding_stress_Pa` still load. Section 4.4 of the local analysis guide
 covers the clamping state in full.
+
+An extruded sheath or bedding declares its frozen shrinkage, the part of its
+cooling shrinkage that stays as a shrink fit on the layers inside it:
+
+```yaml
+    extrusion_shrinkage:
+      hoop_strain: 0.004
+      basis: assumed
+      source: "Assumed frozen hoop shrinkage of the extruded outer sheath"
+```
+
+| Key | Meaning |
+| --- | --- |
+| `hoop_strain` | frozen in-plane shrinkage of the layer (hoop and radial; no axial part), 0 to 0.1 |
+| `basis` | `measured`, `manufacturing_specification`, `assumed`, `representative` or `not_published` (which requires zero) |
+| `source` | required |
+
+The radial solutions carry it as an initial strain of the layer
+(`contact_model="solved"`, including the ring around a trefoil bundle, and
+`"qp"`); the bounded pressure chain refuses a non-zero value. An interstitial
+filler cannot declare one. A shrinkage covers the clamping declaration of the
+armour layers inside the layer.
 
 ### Materials with sources
 

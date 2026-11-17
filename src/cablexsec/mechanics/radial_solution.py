@@ -457,9 +457,7 @@ class RadialSection:
                     bmat[1, 1] = 1 / b
                 vw = 2 * math.pi * rr * 0.5 * (b - a) * weight
                 block += vw * bmat.T @ constitutive @ bmat
-                vec_load += (
-                    vw * bmat.T @ constitutive @ np.full(3, layer.free_thermal_strain)
-                )
+                vec_load += vw * bmat.T @ constitutive @ layer.free_strain_vector
             add_dense(ids, block)
             load[ids] += vec_load
             axial_rows.append(
@@ -946,6 +944,11 @@ class RadialSection:
         e = model.element_moduli
         nu = model.element_poisson
         e0 = model.element_free_strain
+        transverse = (
+            np.zeros_like(e0)
+            if model.element_transverse_strain is None
+            else model.element_transverse_strain
+        )
         lam = e * nu / ((1 + nu) * (1 - 2 * nu))
         mu = e / (2 * (1 + nu))
         ux = u[2 + 2 * conn]
@@ -969,7 +972,9 @@ class RadialSection:
             dn = np.einsum("ka,eia->eki", dshape, inv)
             exx = np.einsum("ek,ek->e", dn[:, :, 0], ux)
             eyy = np.einsum("ek,ek->e", dn[:, :, 1], uy)
-            szz = lam * (exx + eyy + ezz - 3 * e0) + 2 * mu * (ezz - e0)
+            szz = lam * (exx + eyy + ezz - 3 * e0 - 2 * transverse) + 2 * mu * (
+                ezz - e0
+            )
             force += w * det * szz
         return np.asarray(SYMMETRY_FACTOR * force * amap[:, 0], dtype=np.float64)
 
@@ -1013,6 +1018,11 @@ class RadialSection:
         e = model.element_moduli[idx]
         nu = model.element_poisson[idx]
         e0 = model.element_free_strain[idx]
+        transverse = (
+            np.zeros_like(e0)
+            if model.element_transverse_strain is None
+            else model.element_transverse_strain[idx]
+        )
         lam = e * nu / ((1 + nu) * (1 - 2 * nu))
         mu = e / (2 * (1 + nu))
         ux = u[2 + 2 * conn]
@@ -1036,7 +1046,9 @@ class RadialSection:
             dn = np.einsum("ka,eia->eki", dshape, inv)
             exx = np.einsum("ek,ek->e", dn[:, :, 0], ux)
             eyy = np.einsum("ek,ek->e", dn[:, :, 1], uy)
-            szz = lam * (exx + eyy + ezz - 3 * e0) + 2 * mu * (ezz - e0)
+            szz = lam * (exx + eyy + ezz - 3 * e0 - 2 * transverse) + 2 * mu * (
+                ezz - e0
+            )
             force += float(np.sum(w * det * szz))
         # The sector holds half a core. The cable-plane integral F_zz equals
         # the rod force divided by cos(beta); its axial projection is

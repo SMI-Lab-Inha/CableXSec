@@ -163,6 +163,9 @@ class TrefoilModel:
     element_layers: tuple[str, ...] = ()
     """Name of the layer of each element (a core layer, ring layer or the
     filler); a radial gap filled with a neighbour's material is that layer's."""
+    element_transverse_strain: FloatArray | None = None
+    """In-plane free strain of each element added to its isotropic one (a
+    ring layer's frozen extrusion shrinkage); ``None`` is zero."""
 
     @property
     def size(self) -> int:
@@ -313,7 +316,7 @@ def build_trefoil_model(bundle: TrefoilBundle) -> TrefoilModel:
     nodes = _NodeTable()
     elements: list[list[int]] = []
     groups: dict[str, list[int]] = {}
-    material: list[tuple[float, float, float]] = []
+    material: list[tuple[float, float, float, float]] = []
     axial: list[tuple[float, ...]] = []
     owners: list[str] = []
 
@@ -343,7 +346,12 @@ def build_trefoil_model(bundle: TrefoilBundle) -> TrefoilModel:
         groups.setdefault(group, []).append(len(elements))
         elements.append(conn)
         material.append(
-            (layer.youngs_modulus_Pa, layer.poisson_ratio, layer.free_thermal_strain)  # type: ignore[attr-defined]
+            (
+                layer.youngs_modulus_Pa,  # type: ignore[attr-defined]
+                layer.poisson_ratio,  # type: ignore[attr-defined]
+                layer.free_thermal_strain,  # type: ignore[attr-defined]
+                getattr(layer, "free_transverse_strain", 0.0),
+            )
         )
         axial.append(ext)
         owners.append(str(layer.name))  # type: ignore[attr-defined]
@@ -680,6 +688,7 @@ def build_trefoil_model(bundle: TrefoilBundle) -> TrefoilModel:
         props[:, 2].copy(),
         axial_map,
         tuple(owners),
+        props[:, 3].copy() if np.any(props[:, 3]) else None,
     )
 
 
@@ -776,6 +785,7 @@ def _assemble(
         ke += np.einsum("e,eai,eab,ebj->eij", weight, b, d, b)
         e0v = np.zeros((ne, 4))
         e0v[:, :3] = e0[:, None]
+        e0v[:, :2] += props[:, 3, None]
         fe += np.einsum("e,eai,eab,eb->ei", weight, b, d, e0v)
         point = np.einsum("k,eki->ei", shape, coords)
         r2 = np.where(

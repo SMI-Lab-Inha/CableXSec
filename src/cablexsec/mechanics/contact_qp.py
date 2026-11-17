@@ -224,9 +224,15 @@ def _concentric_layers(
             raise CableSchemaError(f"{layer.name}: unsupported concentric layer type")
         if a is None or b is None:
             raise CableSchemaError(f"{layer.name}: incomplete annulus geometry")
+        shrink = getattr(layer, "extrusion_shrinkage", None)
         result.append(
             ElasticAnnulus(
-                layer.name, a, b, e, library.get_property(layer.material, "nu")
+                layer.name,
+                a,
+                b,
+                e,
+                library.get_property(layer.material, "nu"),
+                free_transverse_strain=-float(shrink.hoop_strain) if shrink else 0.0,
             )
         )
     result.sort(key=lambda layer: layer.inner_radius_m)
