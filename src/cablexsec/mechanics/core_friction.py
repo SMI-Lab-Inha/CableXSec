@@ -674,6 +674,13 @@ def _filler_profiles(
             f"the cores (found {len(fillers)})"
         )
     layer = fillers[0]
+    if layer.structural:
+        # A structural filler annulus already bends in EI_min; the profiles
+        # would add the same material a second time.
+        raise CableSchemaError(
+            f"filler profiles need a non-structural filler annulus; "
+            f"{layer.name!r} is structural (declare structural: false)"
+        )
     r_in, r_out = float(layer.r_inner_m or 0.0), float(layer.r_outer_m or 0.0)
     area, polar = _filler_region(r_in, r_out, n_cores, r_c, r_core)
     if not (area > 0.0 and polar > 0.0):

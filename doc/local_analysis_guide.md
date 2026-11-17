@@ -898,7 +898,8 @@ print(core.loads, core.xi, core.mu_effective, core.stick_EI_Nm2)
   core support of the solved radial state. The loads are held fixed during
   bending.
 - Filler profiles (`CoreFrictionSpec(filler_profiles=True)`,
-  `mu_filler_profile`): the interstitial filler annulus becomes three laid
+  `mu_filler_profile`): the non-structural interstitial filler annulus (a
+  structural one is refused: it already bends in `EI_min`) becomes three laid
   profiles (the cores' pitch) that stick and slip like the cores. Their
   effective radius `r_f = √(J_f/A_f)` comes from the area and polar moment of
   the annulus less the core circles, so that the stuck profiles add

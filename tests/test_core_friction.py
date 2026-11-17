@@ -654,6 +654,21 @@ def test_filler_profiles_work_and_inputs(cable):
     menard = cx.load_cable(cx.menard2023_yaml_path(), geometry_override=None)
     with pytest.raises(CableSchemaError, match="interstitial filler"):
         build_core_friction(menard, PROFILES, T)
+    # A structural pp_filler annulus already bends in EI_min: refused.
+    three = cx.load_cable(cx.inter_array_three_core_yaml_path(), geometry_override=None)
+    structural = three.model_copy(
+        update={
+            "layers": tuple(
+                x.model_copy(update={"structural": True})
+                if x.name == "pp_filler"
+                else x
+                for x in three.layers
+            )
+        }
+    )
+    with pytest.raises(CableSchemaError, match="non-structural filler"):
+        build_core_friction(structural, PROFILES, T)
+    assert build_core_friction(three, PROFILES, T).fillers is not None
     for bad in (
         {"central_filler": 1},
         {"filler_profiles": "yes"},
