@@ -59,6 +59,8 @@ def test_free_warping_reproduces_the_rectangle_series(
     # Displacement FE is an upper bound that converges from above.
     assert value >= _rectangle_series(a, 1.0)
     assert value == pytest.approx(_rectangle_series(a, 1.0), rel=3e-4)
+    # A region without shear stiffness (a serving) carries no torque.
+    assert saint_venant_rigidity(xy, conn, np.zeros(len(conn))) == 0.0
 
 
 @pytest.mark.analytical_sanity

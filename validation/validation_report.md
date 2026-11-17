@@ -22,6 +22,7 @@ Every row is computed from published data or closed-form references in this repo
 | 1 | CFW | Laid-core contact statics (wedged trefoil, central filler) and laid filler profiles: mu = 0 armour-only loop; full-slip profile moment vs closed form; stick tangent vs EI_max + E J_f cos^3 / 2 | < 1e-12 relative; 0 N m; < 5e-3; < 1e-9 | 9.5e-17; 0.0e+00 N m; 1.0e-04; 7.8e-16 | PASS |
 | 1 | FR | Fretting regime: Mindlin energy vs numerical Masing loop; Fouvry A/D/B at transition; Cattaneo strip I(0) = pi/16; mu = inf stick energy; planar-path rotation | < 1e-9; < 1e-12; < 1e-12; 0 J; < 1e-12 relative | 7.8e-12; 4.4e-16; 1.6e-15; 0.0e+00 J; 4.4e-16 | PASS |
 | 1 | TQ | Torque balance: Feyrer Ex. 2.8 torque constant c_1S (fixed radius); coupled section vs Knapp (1981) core factor, theta = 2 nu; mirror lay reverses torque and twist | 0.0345 +/- 0.2%; < 1e-4 relative; < 1e-9 relative | 0.03446 (-0.11%); -1.3e-06; 0.0e+00 | PASS |
+| 1 | TQ-SV | Saint-Venant twist rigidity with free warping (trefoil filler lobes): 2 x 1 rectangle vs series solution; bonded annulus as a mirrored 60 deg sector vs polar moment | < 3e-4 relative; < 1e-6 relative | 1.0e-04; -1.5e-08 | PASS |
 | 1 | A11 | M-κ energy closure (loop area vs closed form) | < 0.1% | 0.082% | PASS |
 | 1 | σ_B | Radial-fibre bending vs Ménard Eq. 14 (φ=0 from extension side) | < 1e-6% | 0.00e+00% | PASS |
 | 1 | M-rec | Assembled per-wire moment vs compute_mkappa (cross-engine, single-core) | < 2% | 0.000% | PASS |
@@ -69,7 +70,7 @@ Every row is computed from published data or closed-form references in this repo
 
 ## Test taxonomy (full gate suite)
 
-- analytical_sanity: `1183 passed`
+- analytical_sanity: `1190 passed`
 - independent_method: `76 passed`
 - full_scale: `32 passed`
 

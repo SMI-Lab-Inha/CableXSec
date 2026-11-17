@@ -769,7 +769,9 @@ def saint_venant_rigidity(
     value per element.
     """
     conn = np.asarray(conn, dtype=np.int64)
-    if conn.size == 0:
+    shear_modulus = np.asarray(shear_modulus, dtype=np.float64)
+    if conn.size == 0 or not np.any(shear_modulus > 0.0):
+        # No region, or one without shear stiffness (a serving): no torsion.
         return 0.0
     nodes, inverse = np.unique(conn, return_inverse=True)
     local = inverse.reshape(conn.shape)
@@ -895,9 +897,7 @@ def _assemble(
     twist = float(np.sum(np.where(is_core, polar * cb**4, 0.0)))
     twist += float(np.sum(polar[~is_core & ~is_filler]))
     if np.any(is_filler):
-        twist += saint_venant_rigidity(
-            xy, conn[is_filler], (mu * carries)[is_filler]
-        )
+        twist += saint_venant_rigidity(xy, conn[is_filler], (mu * carries)[is_filler])
     dofs = np.zeros((ne, ndof_e), dtype=np.int64)
     dofs[:, 0:12:2] = 2 + 2 * conn
     dofs[:, 1:12:2] = 3 + 2 * conn
