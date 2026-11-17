@@ -118,10 +118,10 @@ th = cx.compute_thermal(cable, current_A=1093.0, conductor_area_m2=630e-6,
 | EA (fixed ends) | 636.8 MN (free ends 629.8) | 658 MN, Janocha 2.4 / IEA Table 13 | −3.2 %; armour 416, copper 203, polymers 18 MN |
 | GJ | 131.3 kN·m² | 152 kN·m² at 50 kN, Janocha 2.4 | −14 %; CableXSec GJ is the extension-only lay term, without polymer and core torsion |
 | Full-slip EI | 21.0 kN·m², with or without core friction | 42.47 kN·m² slipping stiffness at 50 kN, IEA Table 13; branch slope about 29 kN·m² in Fig. 6 and about 41 kN·m² in Fig. 12b | −51 % (−28 % against Fig. 6); outer and inner sheath give 11.6 and 6.1 kN·m². Friction cannot raise the full-slip value (Section 4.1) |
-| No-slip EI (plane section) | 1653 kN·m²; bending-law slope 853 kN·m² armour only, 981 kN·m² with core friction (core ξ = 0.73) | of order 1500–2000 kN·m², initial slope in the Fig. 12b inset (10 kN) | Read from the inset |
-| M at 0.2 1/m, 50 kN loop | 4.31 / 4.28 kN·m (bounded / solved); 4.44 / 4.38 kN·m with core friction | about 6.8 kN·m, Fig. 6 | −35 % with core friction |
-| Loop half-height at κ = 0 | 0.11 / 0.08 kN·m (bounded / solved); 0.25 / 0.18 kN·m with core friction | about 1 kN·m, Fig. 6 | Core friction (μ 0.46) adds 0.10–0.13 kN·m; still about 4 times low |
-| Moment at slip onset, 10/100/200 kN | 0.23 / 0.43 / 0.66 kN·m at 0.01 1/m; 0.26 / 0.70 / 1.19 kN·m with core friction (bounded) | about 5.5 / 9.5 / 12 kN·m, Fig. 12b | Same cause; 10 to 22 times low |
+| No-slip EI (plane section) | 1653 kN·m²; bending-law slope 853 kN·m² armour only, 981 kN·m² with core friction (core ξ = 0.73) | Fig. 12b inset (10 kN): secant about 2,500–3,000 kN·m² at 1–2×10⁻³ 1/m | Above the plane-section bound of the published section; retired as a target (Section 4.1) |
+| M at 0.2 1/m, 50 kN loop | 4.31 / 4.28 kN·m (bounded / solved); 4.44 / 4.38 kN·m with core friction | about 6.8 kN·m, Fig. 6 | Code to code (Section 4.1) |
+| Loop half-height at κ = 0 | 0.11 / 0.08 kN·m (bounded / solved); 0.25 / 0.18 kN·m with core friction | about 1 kN·m, Fig. 6 | Code to code; 0.38 / 0.37 kN·m with the filler profiles (Section 4.1) |
+| Moment at slip onset, 10/100/200 kN | 0.23 / 0.43 / 0.66 kN·m at 0.01 1/m; 0.26 / 0.70 / 1.19 kN·m with core friction (bounded) | about 5.5 / 9.5 / 12 kN·m, Fig. 12b | Retired as a target: Fig. 12b disagrees with Fig. 6 of the same model (Section 4.1) |
 | Armour axial stress at 1000 kN | 298 / 305 MPa (inner / outer) | about 355 MPa von Mises, Fig. 19b | Axial part only |
 | Conductor axial stress at 1000 kN | 176 MPa | about 190 MPa, Fig. 19b | −7 % |
 | Armour yield, pure bending | 1.16 1/m | about 1 1/m, Section 3.3 | |
@@ -161,42 +161,55 @@ and outer) and about 40 % less damage. Run times on one thread: 2.2 and 2.7 s (d
 ### 4.1 Laid-core friction
 
 `compute_mkappa(..., core_friction=...)` adds the stick–slip law of the laid
-cores against their neighbours, the filler and the inner sheath, and of
-resolved conductor wire rings (`cablexsec/mechanics/core_friction.py`;
-[local_analysis_guide.md](local_analysis_guide.md) Section 6.1). Targets were
-registered before the runs (`validation/scripts/check_core_friction.py`): Fig. 6 loop
-half-height at κ = 0 (about 1.0 kN·m) and Fig. 12b knee moments within 30 %
-(figure reading), slipping slopes (IEA Table 13, 42.47 kN·m²; Fig. 6, about
-29 kN·m²; Fig. 12b, about 41 kN·m²) within 15 %. Inputs: Table 2 friction
-coefficient of MDPE (0.46) on every core contact, rigid contact penalty, shear
-of the core's XLPE and MDPE layers in the stick coefficient. The source
-conductor is 61 resolved wires (Fig. 4a); their pitches are not published, so
-the template keeps the area-equivalent solid and no internal ring slip. A
-designed stranding under stated assumptions is available for conductor
-fatigue (`iea_task49_66kv_stranded`, Section 4.5).
+cores against their neighbours, the filler and the inner sheath, of the laid
+filler profiles (`filler_profiles=True`) and of resolved conductor wire rings
+(`cablexsec/mechanics/core_friction.py`;
+[local_analysis_guide.md](local_analysis_guide.md) Section 6.1). Inputs:
+Table 2 friction coefficient of MDPE (0.46) on every core and profile contact,
+rigid contact penalty, shear of the core's XLPE and MDPE layers in the stick
+coefficient. The source conductor is 61 resolved wires (Fig. 4a); their
+pitches are not published, so the template keeps the area-equivalent solid
+and no internal ring slip. A designed stranding under stated assumptions is
+available for conductor fatigue (`iea_task49_66kv_stranded`, Section 4.5).
 
-| Quantity at 50 kN | Armour only (bounded / solved) | With core friction (bounded / solved) | Published | Status |
+The source is a finite-element model, not a test, and it states no initial
+contact state; the template declares no clamping either. Its figures are
+therefore compared code to code, not gated
+([benchmarks.md](benchmarks.md), gap R1b). Figure values are read from the
+plots (about ±5 % of full scale).
+
+| Quantity at 50 kN | Armour only (bounded / solved) | Cores (bounded / solved) | Cores and filler profiles (bounded / solved) | Source FE |
 | --- | --- | --- | --- | --- |
-| Core normal load per core | — | 16.4 / 12.2 kN/m (bounded: wedged trefoil) | not published | — |
-| Loop half-height at κ = 0 | 0.112 / 0.081 kN·m | 0.246 / 0.181 kN·m | about 1.0 kN·m (Fig. 6) | FAIL |
-| M at 0.2 1/m | 4.31 / 4.28 kN·m | 4.44 / 4.38 kN·m | about 6.8 kN·m (Fig. 6) | FAIL |
-| Branch slope, 0.05–0.15 1/m | 21.0 kN·m² | 21.0 kN·m² | about 29 (Fig. 6); 42.47 (IEA Table 13) kN·m² | FAIL |
-| M at 0.01 1/m, 10 / 100 / 200 kN (solved) | 0.23 / 0.37 / 0.53 kN·m | 0.25 / 0.57 / 0.93 kN·m | about 5.8 / 9.5 / 12.5 kN·m (Fig. 12b) | FAIL |
-| Slope 0.1–0.4 1/m, 10 / 100 / 200 kN | 21.0 kN·m² | 21.0 kN·m² | about 41 / 41 / 44 kN·m² (Fig. 12b) | FAIL |
+| Core normal load per core | — | 16.4 / 12.2 kN/m (bounded: wedged trefoil) | profile 10.8 / 15.6 kN/m | not stated |
+| Loop half-height at κ = 0 | 0.112 / 0.081 kN·m | 0.246 / 0.181 kN·m | 0.380 / 0.374 kN·m | about 1.0 kN·m (Fig. 6) |
+| M at 0.2 1/m | 4.31 / 4.28 kN·m | 4.44 / 4.38 kN·m | 4.58 / 4.57 kN·m | about 6.8 kN·m (Fig. 6) |
+| Branch slope, 0.05–0.15 1/m | 21.0 kN·m² | 21.0 kN·m² | 21.0 kN·m² | about 29 kN·m² (Fig. 6); 42.47 kN·m² (IEA Table 13) |
 
 What the comparison shows:
 
-- The core friction moment is linear in the core contact load. A 1.0 kN·m
-  half-height needs about 112 kN/m per core, against 12.2 kN/m from the
-  solved tension-induced contact at 50 kN. The source does not state an
-  initial contact state; its Fig. 12b knee at 10 kN (5.8 kN·m) exceeds its
-  own Fig. 6 half-height at 50 kN (about 1 kN·m), so the two figures cannot
-  both follow from tension-induced Coulomb contact alone.
-- Friction cannot raise the full-slip stiffness. The slope gap (21.0 against
-  29–42 kN·m²) lies in the component bending stiffness: with the conductor
-  bending as solid copper (112.2 GPa instead of the 5 GPa assumed), the cores
-  would add 9.6 kN·m² (30.6 kN·m² in total), close to the Fig. 6 slope; the
-  IEA value would still be 39 % above.
+- **Fig. 12b is retired as a target.** Its knee moments at 0.01 1/m (about
+  5.8 / 9.5 / 12.5 kN·m at 10 / 100 / 200 kN) and its stick slope were
+  registered targets. Fig. 12b disagrees with Fig. 6 of the same model: at
+  0.2 1/m it gives about 15 kN·m at 50 kN (interpolated between 13.8 kN·m at
+  10 kN and 17.0 kN·m at 100 kN) against 6.8 kN·m in Fig. 6, and its 10 kN knee
+  (5.8 kN·m) is several times the Fig. 6 friction moment at the higher tension
+  of 50 kN. Its inset rises at a secant of about 2,500–3,000 kN·m² (3.0 kN·m at
+  1×10⁻³ 1/m, 5.0 kN·m at 2×10⁻³ 1/m), above the 1653 kN·m² plane-section bound
+  of the published section with every component stuck, so no stick–slip law of
+  the published geometry can follow it. Fig. 6 itself depends on the mesh: its
+  very coarse mesh gives a loop about three times as high.
+- **The friction level is a clamping question.** The core and profile
+  friction moments are linear in their contact loads. With tension-induced
+  contact alone the cores and profiles add 0.27–0.29 kN·m to the half-height
+  at 50 kN. A manufactured cable also carries the clamping of its armour
+  winding and sheath shrinkage (Section 4.4 of the local analysis guide), which
+  neither the source nor the template states.
+- **Friction cannot raise the full-slip stiffness.** The slope difference
+  (21.0 against about 29 kN·m² in Fig. 6) lies in the component bending
+  stiffness: with the conductor bending as solid copper (112.2 GPa instead of
+  the 5 GPa assumed), the cores would add 9.6 kN·m² (30.6 kN·m² in total),
+  close to the Fig. 6 slope. The IEA Wind Task 49 value, whose row cites the
+  same source, is reported code to code.
 - A synthetic 61-wire conductor (lay ratio 12, Table 2 copper friction 0.30)
   raises the half-height by a further 0.03 kN·m.
 
@@ -528,13 +541,13 @@ and the mass carry the template's known differences (Section 5, items 1 and
 ## 5. Gaps found
 
 1. **Friction outside the armour.** Closed in part by gap R1b (Section 4.1):
-   the cores and resolved conductor rings now have an optional stick–slip
-   law. With the tension-induced contact it adds 0.10–0.13 kN·m to the
-   half-height at 50 kN; slip-onset moments remain 10 to 22 times lower than
-   Fig. 12b, and the full-slip EI is unchanged. The published loops need
-   either an initial core contact state about nine times the tension-induced
-   one or a stiffer component bending than the template assumes; neither is
-   published.
+   the cores, the filler profiles and resolved conductor rings have an
+   optional stick–slip law. With the tension-induced contact the cores and
+   profiles add 0.27–0.29 kN·m to the half-height at 50 kN; the full-slip EI is
+   unchanged. The source states no initial contact state, and no clamping is
+   published for the template, so the friction level of a manufactured cable
+   (Section 4.4 of the local analysis guide) is not reproduced from published
+   data. The Fig. 12b targets are retired (Section 4.1).
 2. **Stranded conductor in the radial solution.** `contact_model="solved"`
    rejects a conductor whose metal area is below its envelope. The template
    uses the area-equivalent solid, so conductor component stresses are

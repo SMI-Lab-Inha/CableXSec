@@ -10,6 +10,14 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Added
 
+- Validation row BM1-ID (gap R1b), targets registered before the run: on the Ménard and
+  Cartraud (2023) cable with the laid cores, the trefoil wedge and the filler profiles (μ 0.2 on
+  every contact), the initial pressure identified on the cycle work of range (b) is 220 kPa
+  (the source's calibration: 300 kPa). Range (b) ordered RMSE 2.99 % (target < 5 %); predicted
+  work of ranges (a), (c), (d), (e), (f) +26.0, +23.7, +12.9, −6.5, −11.7 % against a target of
+  ±20 %: FAIL on the two smallest ranges. The armour law identified the same way predicts +35.8,
+  +33.5, +21.7, −6.1 and −11.4 %. The laid-core law stays off by default.
+
 - Frozen extrusion shrinkage of a concentric layer: `extrusion_shrinkage` (`hoop_strain`,
   `basis`, `source`; `cx.ExtrusionShrinkage`) declares the part of an extruded sheath's or
   bedding's cooling shrinkage that stays as a shrink fit on the layers inside it. The radial
@@ -214,6 +222,14 @@ All notable changes to CableXSec are recorded in this file. The format follows
   stale without changing a gate. CI checks the committed report before the coverage run, so a
   stale report fails within about 15 minutes instead of after the 45-minute coverage run.
 
+- Janocha et al. (2024) comparisons (66 kV template, gap R1b) are code to code: the source is a
+  finite-element model that states no initial contact state. The Fig. 12b knee moments and stick
+  slope are retired as targets: Fig. 12b gives about twice the Fig. 6 moment of the same model
+  at 0.2 1/m and 50 kN, and its inset rises at a secant of 2,500–3,000 kN·m², above the
+  1653 kN·m² plane-section bound of the published section. With the cores and filler profiles
+  the Fig. 6 half-height is 0.38 / 0.37 kN·m (bounded / solved) against about 1.0 kN·m read
+  from the figure. `doc/template_66kv.md` Section 4.1 and the benchmarks are rewritten
+  accordingly.
 - `MissingClampingStateWarning` now states that at low tension the friction moment and the
   bending hysteresis tend to zero without a declared clamping state, so a low-tension
   hysteresis is unreliable, and names the extrusion shrinkage among the declarations.

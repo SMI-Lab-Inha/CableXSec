@@ -7,8 +7,9 @@ The radial contact pressure that the armour carries at zero applied tension
 CableXSec: it is an input. It governs every friction-dependent result: the
 bending hysteresis, the armour friction stress and its fatigue, the fretting
 contact loads and the change of all of these with temperature. Two public
-cases show its size: the published 66 kV loops need an initial pressure of
-about 0.48 MPa that the source never states, and the cold-to-rated damage
+cases show its size: the measured Ménard and Cartraud (2023) loops need an
+initial pressure of 0.2-0.3 MPa (0.22 MPa identified with the full core and
+filler accounting, 0.3 MPa calibrated by the source), and the cold-to-rated damage
 factor of the 66 kV template falls from 115 to about 20 and 2 with 40 and
 100 MPa armour winding stress (doc/template_66kv.md Section 4.2).
 
