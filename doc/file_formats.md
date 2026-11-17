@@ -107,7 +107,7 @@ bending (stick or slip) or torsional stiffness and nothing to the load
 sharing. In the component response it lies outside the load path, like a
 loose screen: it is given the stress of the strain it follows, an upper bound
 marked `kinematic`. A serving is non-structural
-(`structural` defaults to `false`; `true` is refused), needs `r_inner_m > 0`
+(`structural` defaults to `false`; `true` is refused), needs `r_inner_m > 0`, has no `extrusion_shrinkage`
 and is never an interstitial filler. Without `construction` a `cylindrical`
 layer is a solid annulus, as before.
 
