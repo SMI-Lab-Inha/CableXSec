@@ -375,7 +375,14 @@ class CoreSlip:
     """Curvature from which every core slips."""
     stick_bending_stiffness_Nm2: float
     """Stick term of the cores ``xi 1/2 sum EA r_c² cos³ beta`` (and of
-    resolved internal wire rings) in the law [N m²]."""
+    resolved internal wire rings and filler profiles) in the law [N m²]."""
+    filler_line_load_N_per_m: float | None = None
+    """Normal load on both faces of one filler profile [N per m of cable];
+    ``None`` without ``CoreFrictionSpec(filler_profiles=True)``."""
+    filler_onset_curvature_1_m: float | None = None
+    """Neutral-axis limit of the filler-profile slip onset."""
+    filler_full_slip_curvature_1_m: float | None = None
+    """Curvature from which every filler profile slips."""
 
 
 @dataclass(frozen=True)
@@ -1060,6 +1067,9 @@ def _spec_settings(spec: CoreFrictionSpec) -> dict[str, Any]:
         "interface_stiffness_Pa_per_m": stiffness if math.isfinite(stiffness) else None,
         "core_shear": spec.core_shear,
         "strand_slip": spec.strand_slip,
+        "central_filler": spec.central_filler,
+        "filler_profiles": spec.filler_profiles,
+        "mu_filler_profile": spec.filler_mu if spec.filler_profiles else None,
     }
 
 
@@ -1094,6 +1104,7 @@ def _core_slip(
             f"the core lay stage needs one family of laid cores ({exc})"
         ) from exc
     population = model.population
+    fillers = model.fillers
     return CoreSlip(
         model.loads.total_N_per_m,
         model.loads.source,
@@ -1102,6 +1113,9 @@ def _core_slip(
         slip_onset_curvature(population),
         full_slip_curvature(population),
         model.stick_EI_Nm2,
+        None if fillers is None else fillers.line_load_N_per_m,
+        None if fillers is None else slip_onset_curvature(fillers.population),
+        None if fillers is None else full_slip_curvature(fillers.population),
     )
 
 
@@ -1295,6 +1309,16 @@ def compute_section_properties(
         for entry in prepared
         for slip in (*entry["armour"], *[c for c in (entry["cores"],) if c])
         for value in (slip.onset_curvature_1_m, slip.full_slip_curvature_1_m)
+    ]
+    nodes += [
+        value
+        for entry in prepared
+        if entry["cores"] is not None
+        for value in (
+            entry["cores"].filler_onset_curvature_1_m,
+            entry["cores"].filler_full_slip_curvature_1_m,
+        )
+        if value is not None
     ]
     kappa = _curvature_grid(kappa_max_1_m, n_points, nodes)
 

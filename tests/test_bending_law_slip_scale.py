@@ -23,6 +23,7 @@ import cablexsec.mechanics.papailiou as papailiou
 from cablexsec._project_codec import pack, unpack
 from cablexsec.analysis.bending_law import (
     CORE_GROUP,
+    FILLER_GROUP,
     SlipScaleTable,
     export_bending_law,
 )
@@ -105,6 +106,10 @@ def test_section_law_is_homogeneous_in_the_friction_bound(iea66):
     [
         (cx.menard2023_yaml_path(), None),
         (cx.inter_array_three_core_yaml_path(), True),
+        (
+            cx.inter_array_three_core_yaml_path(),
+            cx.CoreFrictionSpec(filler_profiles=True),
+        ),
     ],
 )
 def test_group_yield_curvatures_scale_exactly(path, core):
@@ -114,6 +119,10 @@ def test_group_yield_curvatures_scale_exactly(path, core):
     cable = _cable(path)
     kappa = _grid(0.3, 200)
     reference = _table(cable, kappa, 1.0e4, [1.0e4, 6.0e4], core_friction=core)
+    if isinstance(core, cx.CoreFrictionSpec):
+        assert reference.group_names[-2:] == (CORE_GROUP, FILLER_GROUP)
+        kinds = [group["kind"] for group in reference.record()["groups"]]
+        assert kinds[-2:] == [CORE_GROUP, FILLER_GROUP]
     rho = reference.group_scale[:, 1, 0]
     assert np.ptp(rho) > 1e-3  # the groups do scale differently
     for g, name in enumerate(reference.group_names):

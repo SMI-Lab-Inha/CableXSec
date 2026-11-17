@@ -220,20 +220,88 @@ def test_contact_loads(cable):
         loads.core_filler_N_per_m + loads.core_sheath_N_per_m
     )
     assert loads.mu_effective(mixed) == pytest.approx(weighted)
+    # Solved: one profile per interstice shares the filler--ring force of the
+    # ring and the filler--core forces of all cores.
+    assert loads.filler_profile_N_per_m == pytest.approx(
+        (bundle.filler_ring_force_N_per_m + 3 * bundle.filler_core_force_N_per_m) / 3,
+        rel=1e-12,
+    )
     bounded = core_contact_loads(cable, T)
-    assert bounded.source == "bounded" and bounded.core_core_N_per_m == 0.0
+    assert bounded.source == "bounded" and bounded.core_core_N_per_m > 0.0
     assert core_contact_loads(cable, 0.0).total_N_per_m == 0.0
     assert core_contact_loads(cable, 0.0).mu_effective(mixed) == 0.4
-    # Without a filler the capstan load bears on the neighbouring cores.
+    # Without a filler the ring share bears on the sheath.
     menard = cx.load_cable(cx.menard2023_yaml_path(), geometry_override=None)
     split = core_contact_loads(menard, T)
     assert split.core_core_N_per_m > 0.0 and split.core_sheath_N_per_m > 0.0
+    assert split.core_filler_N_per_m == 0.0 and split.filler_profile_N_per_m == 0.0
     section = cx.solve_section_state(cable, tension_N=T, contact_model="bounded")
     assert core_contact_loads(cable, section_state=section) == bounded
     with pytest.raises(CableSchemaError):
         core_contact_loads(cable, T, radial_state=state, section_state=section)
     with pytest.raises(CableSchemaError):
         core_contact_loads(cable, T, contact_model="other")
+    # The solved state sets its own core support.
+    with pytest.raises(CableInputError, match="central_filler"):
+        core_contact_loads(cable, T, radial_state=state, central_filler=False)
+    with pytest.raises(CableInputError, match="central_filler"):
+        build_core_friction(
+            cable, CoreFrictionSpec(central_filler=True), T, contact_model="solved"
+        )
+
+
+def _bounded_parts(cable, tension):
+    """Capstan load C and ring share R/n of one core in the bounded chain."""
+    from cablexsec.mechanics.axisymmetric import compute_contact_forces
+    from cablexsec.mechanics.core_friction import _core_geometry, _core_layers
+
+    n_cores, r_c, beta, _ = _core_geometry(cable)
+    axi = compute_contact_forces(
+        cable, tension, p_ext_Pa=cable.initial_state.external_pressure_Pa
+    )
+    names = {x.name for x in _core_layers(cable)}
+    share = sum(v for k, v in axi.layer_tension_N.items() if k in names) / n_cores
+    capstan = share * math.tan(beta) ** 2 / r_c
+    ring = (
+        2 * math.pi * axi.interface_radii_m[0] * axi.interface_pressure_Pa[0] / n_cores
+    )
+    return n_cores, capstan, ring
+
+
+@pytest.mark.parametrize("path", ["iea", "menard"])
+@pytest.mark.parametrize("central", [None, False, True])
+def test_bounded_core_load_statics(cable, path, central):
+    """Radial equilibrium of one core in the bounded estimate.
+
+    Inward capstan C and ring share R/n on the outer face; the inward
+    resultant is reacted by the two neighbour contacts at pi/2 - pi/n off the
+    radial direction (wedged trefoil), or radially by a central filler.
+    """
+    target = (
+        cable
+        if path == "iea"
+        else cx.load_cable(cx.menard2023_yaml_path(), geometry_override=None)
+    )
+    n, capstan, ring = _bounded_parts(target, T)
+    assert capstan > 0.0 and ring > 0.0
+    loads = core_contact_loads(target, T, central_filler=central)
+    filled = path == "iea"
+    outer = loads.core_filler_N_per_m if filled else loads.core_sheath_N_per_m
+    if central:
+        assert loads.core_core_N_per_m == 0.0
+        if filled:
+            assert outer == pytest.approx(2 * ring + capstan, rel=1e-12)
+        else:
+            assert loads.core_filler_N_per_m == pytest.approx(ring + capstan, rel=1e-12)
+            assert loads.core_sheath_N_per_m == pytest.approx(ring, rel=1e-12)
+    else:
+        assert outer == pytest.approx(ring, rel=1e-12)
+        # The radial components of the two neighbour contacts balance C + R/n.
+        radial = loads.core_core_N_per_m * math.cos(math.pi / 2 - math.pi / n)
+        assert radial == pytest.approx(capstan + ring, rel=1e-12)
+    assert loads.filler_profile_N_per_m == (
+        pytest.approx(2 * ring, rel=1e-12) if filled else 0.0
+    )
 
 
 def test_bounded_capstan_load_and_trefoil_contacts():
@@ -249,13 +317,19 @@ def test_bounded_capstan_load_and_trefoil_contacts():
     names = {x.name for x in _core_layers(menard)}
     share = sum(v for k, v in axi.layer_tension_N.items() if k in names) / n_cores
     capstan = share * math.tan(beta) ** 2 / r_c
+    ring = (
+        2 * math.pi * axi.interface_radii_m[0] * axi.interface_pressure_Pa[0] / n_cores
+    )
     loads = core_contact_loads(menard, T)
     assert n_cores == 3
-    # The two neighbour contacts lie 30 deg off the radial direction.
+    # The two neighbour contacts lie 30 deg off the radial direction and
+    # carry the capstan load and the ring share of the core.
     assert loads.core_core_N_per_m == pytest.approx(
-        capstan / math.sin(math.pi / 3), rel=1e-12
+        (capstan + ring) / math.sin(math.pi / 3), rel=1e-12
     )
-    assert loads.core_core_N_per_m * math.cos(math.pi / 6) == pytest.approx(capstan)
+    assert loads.core_core_N_per_m * math.cos(math.pi / 6) == pytest.approx(
+        capstan + ring
+    )
 
 
 def test_bounded_loads_include_armour_winding_stress(cable):
@@ -276,7 +350,9 @@ def test_bounded_loads_include_armour_winding_stress(cable):
         2 * math.pi * inner.r_helix_m * (p12["inner_armour"] - p12["outer_armour"])
     )
     assert loads.core_filler_N_per_m == pytest.approx(expected / 3, rel=1e-12)
-    assert loads.core_core_N_per_m == 0.0
+    assert loads.core_core_N_per_m == pytest.approx(
+        expected / 3 / math.sin(math.pi / 3), rel=1e-12
+    )
 
 
 def test_section_state_path(cable):
@@ -429,3 +505,160 @@ def test_janocha_template_regression(cable):
     # 180.6 N m with the signed capstan bound (187.1 with the former cap).
     assert -_descending_zero(k, res.moment_Nm) == pytest.approx(180.6, rel=1e-2)
     assert res.EI_min_Nm2 == pytest.approx(21.0e3, rel=1e-2)
+
+
+PROFILES = CoreFrictionSpec(
+    mu_core_filler=0.46, mu_core_core=0.46, mu_core_sheath=0.46, filler_profiles=True
+)
+
+
+def test_filler_region_area_and_polar_moment():
+    from cablexsec.mechanics.core_friction import _filler_region
+
+    # Cores wholly inside the annulus: closed form.
+    r_out, n, r_c, r_core = 0.08, 3, 0.04, 0.03
+    area, polar = _filler_region(0.0, r_out, n, r_c, r_core)
+    exact_a = math.pi * r_out**2 - n * math.pi * r_core**2
+    exact_j = math.pi * r_out**4 / 2 - n * (
+        math.pi * r_core**4 / 2 + math.pi * r_core**2 * r_c**2
+    )
+    assert area == pytest.approx(exact_a, rel=1e-9)
+    assert polar == pytest.approx(exact_j, rel=1e-9)
+    # Cores crossing the outer radius (the 66 kV template): a fine grid.
+    r_out, r_c, r_core = 0.0759, 0.04081, 0.0352
+    area, polar = _filler_region(0.0, r_out, 3, r_c, r_core)
+    h = r_out / 1500
+    x = np.arange(-r_out + h / 2, r_out, h)
+    xx, yy = np.meshgrid(x, x)
+    rr = np.hypot(xx, yy)
+    inside = rr < r_out
+    for k in range(3):
+        cx_, cy_ = (
+            r_c * math.cos(2 * math.pi * k / 3),
+            r_c * math.sin(2 * math.pi * k / 3),
+        )
+        inside &= np.hypot(xx - cx_, yy - cy_) >= r_core
+    assert area == pytest.approx(np.count_nonzero(inside) * h * h, rel=2e-3)
+    assert polar == pytest.approx(np.sum(rr[inside] ** 2) * h * h, rel=2e-3)
+
+
+@pytest.mark.parametrize("model", ["bounded", "solved"])
+def test_filler_profile_full_slip_moment_matches_closed_form(cable, model):
+    """Same signed-capstan closed form as the cores, with the profile radius,
+    lay angle, both-face load and friction coefficient."""
+    core = build_core_friction(cable, PROFILES, T, contact_model=model)
+    f = core.fillers
+    assert f is not None and f.n_profiles == 3
+    assert f.line_load_N_per_m == core.loads.filler_profile_N_per_m > 0.0
+    beta, r, q = f.lay_angle_rad, f.r_effective_m, f.line_load_N_per_m
+    # Same pitch as the cores.
+    assert math.tan(beta) / r == pytest.approx(
+        math.tan(core.lay_angle_rad) / core.r_offset_m, rel=1e-12
+    )
+    a = f.mu * math.sin(beta)
+    closed = (
+        2.0 / math.pi * 3 * q * r * r * math.cos(beta) ** 2 / math.sin(beta) ** 2
+    ) * (a * math.cosh(a * math.pi / 2) / (1.0 + a * a))
+    k = _loop(0.2, n=4001)
+    hist = core_friction_history(core, k, np.zeros_like(k))
+    m = hist.filler_moment_Nm[:, 0]
+    assert -_descending_zero(k, m) == pytest.approx(closed, rel=5e-3)
+    assert m.max() == pytest.approx(closed, rel=5e-3)
+    assert np.array_equal(
+        hist.moment_Nm,
+        hist.core_moment_Nm + hist.strand_moment_Nm + hist.filler_moment_Nm,
+    )
+
+
+@pytest.mark.parametrize("model", ["bounded", "solved"])
+def test_zero_friction_with_filler_profiles_recovers_armour_only_law(cable, model):
+    k = _loop(0.2)
+    base = cx.compute_mkappa(cable, k, tension_N=T, contact_model=model)
+    zero = CoreFrictionSpec(
+        mu_core_filler=0.0,
+        mu_core_core=0.0,
+        mu_core_sheath=0.0,
+        filler_profiles=True,
+    )
+    res = cx.compute_mkappa(
+        cable, k, tension_N=T, contact_model=model, core_friction=zero
+    )
+    assert np.array_equal(res.moment_Nm, base.moment_Nm)
+    assert res.W_diss_J_per_m == base.W_diss_J_per_m
+    # A profile coefficient of its own: zero there too.
+    other = CoreFrictionSpec(
+        mu_core_filler=0.0,
+        mu_core_core=0.0,
+        mu_core_sheath=0.0,
+        filler_profiles=True,
+        mu_filler_profile=0.0,
+    )
+    res = cx.compute_mkappa(
+        cable, k, tension_N=T, contact_model=model, core_friction=other
+    )
+    assert np.array_equal(res.moment_Nm, base.moment_Nm)
+
+
+def test_filler_profiles_stick_limit(cable):
+    """Large friction, rigid contact, no shear: the profiles add E J_f cos^3 / 2."""
+    from cablexsec.materials import library
+
+    rigid = CoreFrictionSpec(
+        mu_core_filler=1.0e3,
+        mu_core_core=1.0e3,
+        mu_core_sheath=1.0e3,
+        core_shear=False,
+        filler_profiles=True,
+    )
+    k = _loop(1.0e-6, n=201, cycles=1)
+    res = cx.compute_mkappa(cable, k, tension_N=T, mu=1.0e3, core_friction=rigid)
+    f = res.core_friction.model.fillers
+    assert f.xi == 1.0
+    filler = next(x for x in cable.layers if x.name == f.layer_name)
+    e = library.get_property(filler.material, "E_Pa")
+    polar = f.area_m2 * f.r_effective_m**2
+    assert f.stick_EI_Nm2 == pytest.approx(
+        0.5 * e * polar * math.cos(f.lay_angle_rad) ** 3, rel=1e-12
+    )
+    expected = cx.compute_stiffness(cable).ei_max_Nm2 + f.stick_EI_Nm2
+    assert res.EI_max_Nm2 == pytest.approx(expected, rel=1e-12)
+    finite = np.abs(k[1:]) > 1e-9
+    tangent = res.moment_Nm[1:] / k[1:]
+    assert np.allclose(tangent[finite], expected, rtol=1e-9)
+    # The default shear of half the filler depth lowers the profile xi.
+    sheared = build_core_friction(cable, PROFILES, T)
+    assert 0.0 < sheared.fillers.xi < 1.0
+
+
+def test_filler_profiles_work_and_inputs(cable):
+    rng = np.random.default_rng(5)
+    kx = np.cumsum(rng.normal(scale=0.01, size=500))
+    ky = np.cumsum(rng.normal(scale=0.01, size=500))
+    core = build_core_friction(cable, PROFILES, T)
+    hist = core_friction_history(core, kx, ky)
+    plain = core_friction_history(build_core_friction(cable, SPEC, T), kx, ky)
+    friction = hist.work.friction_J_per_m
+    assert friction[-1] > plain.work.friction_J_per_m[-1] > 0.0
+    assert np.all(np.diff(friction) >= -1e-12 * friction[-1])
+    assert np.max(np.abs(hist.work.balance_residual_J_per_m)) < 1e-9 * friction[-1]
+    assert plain.filler_moment_Nm is None
+    assert core.stick_EI_Nm2 == pytest.approx(
+        core.core_stick_EI_Nm2 + core.fillers.stick_EI_Nm2, rel=1e-15
+    )
+    assert core.populations == (core.population, core.fillers.population)
+    # The profile coefficient defaults to the core--filler one.
+    own = build_core_friction(
+        cable, CoreFrictionSpec(filler_profiles=True, mu_filler_profile=0.3), T
+    )
+    assert own.fillers.mu == 0.3 and core.fillers.mu == 0.46
+    menard = cx.load_cable(cx.menard2023_yaml_path(), geometry_override=None)
+    with pytest.raises(CableSchemaError, match="interstitial filler"):
+        build_core_friction(menard, PROFILES, T)
+    for bad in (
+        {"central_filler": 1},
+        {"filler_profiles": "yes"},
+        {"mu_filler_profile": -0.1},
+        {"mu_filler_profile": math.nan},
+    ):
+        with pytest.raises(CableInputError):
+            CoreFrictionSpec(**bad)  # type: ignore[arg-type]

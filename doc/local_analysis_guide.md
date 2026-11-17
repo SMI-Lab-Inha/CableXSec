@@ -889,9 +889,24 @@ print(core.loads, core.xi, core.mu_effective, core.stick_EI_Nm2)
   wires, so biaxial histories work
   (`cablexsec.mechanics.core_friction.core_friction_history`).
 - Normal loads: the solved trefoil contact forces (`contact_model="solved"`)
-  or a bounded estimate (core capstan plus one third of the line force inside
-  the innermost armour, winding stress included). They are held fixed during
+  or a bounded estimate. In the estimate each core carries its capstan load
+  `C` and one third of the line force `R` inside the innermost armour (winding
+  stress included) on its outer face; the inward resultant `C + R/3` is
+  reacted by the two neighbouring cores of a touching trefoil, whose contact
+  forces sum to `(C + R/3)/sin 60°` (default), or radially by a central
+  filler (`CoreFrictionSpec(central_filler=True)`). The solved model reads the
+  core support of the solved radial state. The loads are held fixed during
   bending.
+- Filler profiles (`CoreFrictionSpec(filler_profiles=True)`,
+  `mu_filler_profile`): the interstitial filler annulus becomes three laid
+  profiles (the cores' pitch) that stick and slip like the cores. Their
+  effective radius `r_f = √(J_f/A_f)` comes from the area and polar moment of
+  the annulus less the core circles, so that the stuck profiles add
+  `ξ_f E J_f cos³β_f / 2`; each carries the ring force `R/3` on both faces
+  (`2R/3`; solved: the filler–ring and filler–core forces shared among the
+  profiles) and has its own Yun `ξ_f` (contact penalty and shear of half the
+  mean filler depth). They carry no share of the tension. The exported
+  bending law gives them their own slip-scale group, `filler_profiles`.
 - Stick coefficient ξ (Yun form): contact penalty `interface_stiffness_Pa_per_m`
   (default rigid) in series with the shear of the polymer layers inside the
   core (`core_shear=True`). With μ → ∞ and a rigid contact the tangent is

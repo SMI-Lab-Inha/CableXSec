@@ -1169,6 +1169,27 @@ def _rows() -> list[Row]:
             else "FAIL",
         )
     )
+    from check_core_friction import wedge_filler_checks  # noqa: PLC0415
+
+    cfw = wedge_filler_checks()
+    rows.append(
+        Row(
+            "1",
+            "CFW",
+            "Laid-core contact statics (wedged trefoil, central filler) and laid "
+            "filler profiles: mu = 0 armour-only loop; full-slip profile moment "
+            "vs closed form; stick tangent vs EI_max + E J_f cos^3 / 2",
+            "< 1e-12 relative; 0 N m; < 5e-3; < 1e-9",
+            f"{cfw['statics']:.1e}; {cfw['mu0']:.1e} N m; {cfw['closed']:.1e}; "
+            f"{cfw['stick']:.1e}",
+            "PASS"
+            if cfw["statics"] < 1e-12
+            and cfw["mu0"] == 0.0
+            and cfw["closed"] < 5e-3
+            and cfw["stick"] < 1e-9
+            else "FAIL",
+        )
+    )
 
     # Fretting regime and wear (gap 3.1); scripts/check_fretting_regime.py.
     import check_fretting_regime as fret  # noqa: PLC0415

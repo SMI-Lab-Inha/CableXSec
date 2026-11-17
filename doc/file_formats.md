@@ -590,7 +590,7 @@ scale is still written as version 1, byte for byte as before. The object holds:
 | `scale` | single scale `s`, one row per tension, one column per pressure (one column without a pressure axis) |
 | `dscale_dtension_1_per_N` | `∂s/∂T` [1/N], same shape |
 | `dscale_dexternal_pressure_1_per_Pa` | `∂s/∂p_e` [1/Pa], same shape (pressure axis only) |
-| `groups` | one object per friction group: `name` (the armour layer, or `laid_cores`), `kind` (`armour_layer` or `laid_cores`), `reference_cap_Nm`, the group's `stiffness_Nm2` and reference `yield_curvature_1_m`, its `scale` `ρ_g` and the derivatives `dscale_dtension_1_per_N` and `dscale_dexternal_pressure_1_per_Pa` |
+| `groups` | one object per friction group: `name` (the armour layer, `laid_cores` or `filler_profiles`), `kind` (`armour_layer`, `laid_cores` or `filler_profiles`), `reference_cap_Nm`, the group's `stiffness_Nm2` and reference `yield_curvature_1_m`, its `scale` `ρ_g` and the derivatives `dscale_dtension_1_per_N` and `dscale_dexternal_pressure_1_per_Pa` |
 
 At a state with group scales `ρ_g` the law is `M = ei_slip_Nm2 κ + Σ k_i e_i`
 over all group elements, with every element of group `g` updated by

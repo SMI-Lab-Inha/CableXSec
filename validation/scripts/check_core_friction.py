@@ -123,6 +123,122 @@ def verification_checks() -> dict[str, float]:
     }
 
 
+def wedge_filler_checks() -> dict[str, float]:
+    """Scorecard gate CFW (66 kV template, 50 kN): core load statics and the
+    laid filler profiles.
+
+    ``statics``: largest relative residual of the radial equilibrium of one
+    core in the bounded estimate, wedged trefoil and central filler, with and
+    without a filler (66 kV template and Menard cable): the two neighbour
+    contacts times ``sin(pi/n)`` (or the central reaction) against the
+    capstan load plus the ring share, and the outer face against the ring
+    share. ``mu0``: largest moment difference to the armour-only loop with
+    the profiles on and every coefficient zero (bitwise: 0). ``closed``:
+    relative error of the full-slip profile moment against the cores' closed
+    form with the profile radius, lay angle, both-face load and coefficient
+    (solved and bounded, the larger). ``stick``: relative error of the
+    small-curvature tangent against ``EI_max`` plus ``E J_f cos^3 beta_f / 2``
+    at large friction, rigid contact and no shear.
+    """
+    from cablexsec.materials import library  # noqa: PLC0415
+    from cablexsec.mechanics.axisymmetric import (  # noqa: PLC0415
+        compute_contact_forces,
+    )
+    from cablexsec.mechanics.core_friction import (  # noqa: PLC0415
+        _core_geometry,
+        _core_layers,
+        build_core_friction,
+        core_contact_loads,
+        core_friction_history,
+    )
+
+    cable = cx.load_cable(cx.iea_task49_66kv_yaml_path(), geometry_override=None)
+    menard_cable = cx.load_cable(cx.menard2023_yaml_path(), geometry_override=None)
+    tension = 50e3
+    statics = 0.0
+    for target, filled in ((cable, True), (menard_cable, False)):
+        n, r_c, beta, _ = _core_geometry(target)
+        axi = compute_contact_forces(
+            target, tension, p_ext_Pa=target.initial_state.external_pressure_Pa
+        )
+        names = {x.name for x in _core_layers(target)}
+        share = sum(v for k, v in axi.layer_tension_N.items() if k in names) / n
+        capstan = share * math.tan(beta) ** 2 / r_c
+        ring = 2 * math.pi * axi.interface_radii_m[0] * axi.interface_pressure_Pa[0] / n
+        for central in (False, True):
+            loads = core_contact_loads(target, tension, central_filler=central)
+            outer = loads.core_filler_N_per_m if filled else loads.core_sheath_N_per_m
+            if central:
+                reaction = loads.core_filler_N_per_m - (ring if filled else 0.0)
+                residuals = (reaction - capstan - ring, loads.core_core_N_per_m)
+                if not filled:
+                    residuals += (loads.core_sheath_N_per_m - ring,)
+            else:
+                residuals = (
+                    loads.core_core_N_per_m * math.sin(math.pi / n) - capstan - ring,
+                    outer - ring,
+                )
+            statics = max(statics, max(abs(r) for r in residuals) / (capstan + ring))
+
+    k = 0.2 * np.sin(np.linspace(0.0, 4.0 * math.pi, 801))
+    base = cx.compute_mkappa(cable, k, tension_N=tension)
+    zero = CoreFrictionSpec(
+        mu_core_filler=0.0, mu_core_core=0.0, mu_core_sheath=0.0, filler_profiles=True
+    )
+    res = cx.compute_mkappa(cable, k, tension_N=tension, core_friction=zero)
+    mu0 = float(np.max(np.abs(res.moment_Nm - base.moment_Nm)))
+
+    spec = CoreFrictionSpec(
+        mu_core_filler=0.46,
+        mu_core_core=0.46,
+        mu_core_sheath=0.46,
+        filler_profiles=True,
+    )
+    long = 0.2 * np.sin(np.linspace(0.0, 4.0 * math.pi, 4001))
+    closed = 0.0
+    for route in ("bounded", "solved"):
+        model = build_core_friction(cable, spec, tension, contact_model=route)
+        f = model.fillers
+        assert f is not None
+        b, r, q = f.lay_angle_rad, f.r_effective_m, f.line_load_N_per_m
+        a = f.mu * math.sin(b)
+        expected = 2 / math.pi * f.n_profiles * q * r * r * math.cos(b) ** 2
+        expected *= a * math.cosh(a * math.pi / 2) / (1 + a * a) / math.sin(b) ** 2
+        hist = core_friction_history(model, long, np.zeros_like(long))
+        assert hist.filler_moment_Nm is not None
+        closed = max(
+            closed,
+            abs(-_descending_zero(long, hist.filler_moment_Nm[:, 0]) / expected - 1),
+        )
+
+    rigid = CoreFrictionSpec(
+        mu_core_filler=1e3,
+        mu_core_core=1e3,
+        mu_core_sheath=1e3,
+        core_shear=False,
+        filler_profiles=True,
+    )
+    tiny = 1e-6 * np.sin(np.linspace(0.0, 2.0 * math.pi, 201))
+    stuck = cx.compute_mkappa(
+        cable, tiny, tension_N=tension, mu=1e3, core_friction=rigid
+    )
+    assert stuck.core_friction is not None
+    fillers = stuck.core_friction.model.fillers
+    assert fillers is not None
+    layer = next(x for x in cable.layers if x.name == fillers.layer_name)
+    filler_ei = (
+        0.5
+        * library.get_property(layer.material, "E_Pa")
+        * fillers.area_m2
+        * fillers.r_effective_m**2
+        * math.cos(fillers.lay_angle_rad) ** 3
+    )
+    reference = cx.compute_stiffness(cable).ei_max_Nm2 + filler_ei
+    mask = np.abs(tiny) > 1e-9
+    stick = float(np.max(np.abs(stuck.moment_Nm[mask] / tiny[mask] / reference - 1)))
+    return {"statics": statics, "mu0": mu0, "closed": closed, "stick": stick}
+
+
 def _branch_slope(k: np.ndarray, m: np.ndarray, lo: float, hi: float) -> float:
     """Slope of the last ascending branch between two curvatures."""
     start = int(np.flatnonzero((k[:-1] < 0) & (k[1:] >= 0))[-1])
@@ -238,13 +354,17 @@ def menard() -> None:
         core_friction=True,
     ).core_friction.model
     print(
-        f"  bounded core load {mod.loads.total_N_per_m / 1e3:.1f} kN/m per core "
-        f"(source FE 16.5 kN/m), xi {mod.xi:.3f}"
+        f"  bounded ring load on a core's outer face "
+        f"{mod.loads.core_sheath_N_per_m / 1e3:.1f} kN/m (source FE: 16.5 kN/m "
+        f"on a core, about a third of its 46 kN/m inner-sheath load); all "
+        f"contacts of a core, wedged trefoil "
+        f"{mod.loads.total_N_per_m / 1e3:.1f} kN/m; xi {mod.xi:.3f}"
     )
 
 
 if __name__ == "__main__":
     warnings.simplefilter("ignore")
     print("Verification (gate CF):", verification_checks())
+    print("Verification (gate CFW):", wedge_filler_checks())
     janocha()
     menard()

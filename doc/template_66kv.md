@@ -119,9 +119,9 @@ th = cx.compute_thermal(cable, current_A=1093.0, conductor_area_m2=630e-6,
 | GJ | 131.3 kN·m² | 152 kN·m² at 50 kN, Janocha 2.4 | −14 %; CableXSec GJ is the extension-only lay term, without polymer and core torsion |
 | Full-slip EI | 21.0 kN·m², with or without core friction | 42.47 kN·m² slipping stiffness at 50 kN, IEA Table 13; branch slope about 29 kN·m² in Fig. 6 and about 41 kN·m² in Fig. 12b | −51 % (−28 % against Fig. 6); outer and inner sheath give 11.6 and 6.1 kN·m². Friction cannot raise the full-slip value (Section 4.1) |
 | No-slip EI (plane section) | 1653 kN·m²; bending-law slope 853 kN·m² armour only, 981 kN·m² with core friction (core ξ = 0.73) | of order 1500–2000 kN·m², initial slope in the Fig. 12b inset (10 kN) | Read from the inset |
-| M at 0.2 1/m, 50 kN loop | 4.31 / 4.28 kN·m (bounded / solved); 4.39 / 4.38 kN·m with core friction | about 6.8 kN·m, Fig. 6 | −35 % with core friction |
-| Loop half-height at κ = 0 | 0.11 / 0.08 kN·m (bounded / solved); 0.19 / 0.18 kN·m with core friction | about 1 kN·m, Fig. 6 | Core friction (μ 0.46) adds 0.08–0.10 kN·m; still about 5 times low |
-| Moment at slip onset, 10/100/200 kN | 0.23 / 0.43 / 0.66 kN·m at 0.01 1/m; 0.25 / 0.59 / 0.97 kN·m with core friction (bounded) | about 5.5 / 9.5 / 12 kN·m, Fig. 12b | Same cause; 12 to 22 times low |
+| M at 0.2 1/m, 50 kN loop | 4.31 / 4.28 kN·m (bounded / solved); 4.44 / 4.38 kN·m with core friction | about 6.8 kN·m, Fig. 6 | −35 % with core friction |
+| Loop half-height at κ = 0 | 0.11 / 0.08 kN·m (bounded / solved); 0.25 / 0.18 kN·m with core friction | about 1 kN·m, Fig. 6 | Core friction (μ 0.46) adds 0.10–0.13 kN·m; still about 4 times low |
+| Moment at slip onset, 10/100/200 kN | 0.23 / 0.43 / 0.66 kN·m at 0.01 1/m; 0.26 / 0.70 / 1.19 kN·m with core friction (bounded) | about 5.5 / 9.5 / 12 kN·m, Fig. 12b | Same cause; 10 to 22 times low |
 | Armour axial stress at 1000 kN | 298 / 305 MPa (inner / outer) | about 355 MPa von Mises, Fig. 19b | Axial part only |
 | Conductor axial stress at 1000 kN | 176 MPa | about 190 MPa, Fig. 19b | −7 % |
 | Armour yield, pure bending | 1.16 1/m | about 1 1/m, Section 3.3 | |
@@ -177,9 +177,9 @@ fatigue (`iea_task49_66kv_stranded`, Section 4.5).
 
 | Quantity at 50 kN | Armour only (bounded / solved) | With core friction (bounded / solved) | Published | Status |
 | --- | --- | --- | --- | --- |
-| Core normal load per core | — | 9.4 / 12.2 kN/m | not published | — |
-| Loop half-height at κ = 0 | 0.112 / 0.081 kN·m | 0.190 / 0.181 kN·m | about 1.0 kN·m (Fig. 6) | FAIL |
-| M at 0.2 1/m | 4.31 / 4.28 kN·m | 4.39 / 4.38 kN·m | about 6.8 kN·m (Fig. 6) | FAIL |
+| Core normal load per core | — | 16.4 / 12.2 kN/m (bounded: wedged trefoil) | not published | — |
+| Loop half-height at κ = 0 | 0.112 / 0.081 kN·m | 0.246 / 0.181 kN·m | about 1.0 kN·m (Fig. 6) | FAIL |
+| M at 0.2 1/m | 4.31 / 4.28 kN·m | 4.44 / 4.38 kN·m | about 6.8 kN·m (Fig. 6) | FAIL |
 | Branch slope, 0.05–0.15 1/m | 21.0 kN·m² | 21.0 kN·m² | about 29 (Fig. 6); 42.47 (IEA Table 13) kN·m² | FAIL |
 | M at 0.01 1/m, 10 / 100 / 200 kN (solved) | 0.23 / 0.37 / 0.53 kN·m | 0.25 / 0.57 / 0.93 kN·m | about 5.8 / 9.5 / 12.5 kN·m (Fig. 12b) | FAIL |
 | Slope 0.1–0.4 1/m, 10 / 100 / 200 kN | 21.0 kN·m² | 21.0 kN·m² | about 41 / 41 / 44 kN·m² (Fig. 12b) | FAIL |
@@ -529,8 +529,8 @@ and the mass carry the template's known differences (Section 5, items 1 and
 
 1. **Friction outside the armour.** Closed in part by gap R1b (Section 4.1):
    the cores and resolved conductor rings now have an optional stick–slip
-   law. With the tension-induced contact it adds 0.08–0.10 kN·m to the
-   half-height at 50 kN; slip-onset moments remain 12 to 22 times lower than
+   law. With the tension-induced contact it adds 0.10–0.13 kN·m to the
+   half-height at 50 kN; slip-onset moments remain 10 to 22 times lower than
    Fig. 12b, and the full-slip EI is unchanged. The published loops need
    either an initial core contact state about nine times the tension-induced
    one or a stiffer component bending than the template assumes; neither is

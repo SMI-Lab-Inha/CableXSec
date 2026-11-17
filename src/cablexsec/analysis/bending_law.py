@@ -112,6 +112,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "CORE_GROUP",
+    "FILLER_GROUP",
     "BendingLawExport",
     "IwanBendingLaw",
     "SlipScaleTable",
@@ -126,6 +127,10 @@ _TANGENT_RISE_TOLERANCE = 1e-6
 
 #: Name of the friction group of the laid-core stage in a :class:`SlipScaleTable`.
 CORE_GROUP = "laid_cores"
+
+#: Name of the friction group of the laid filler profiles in a
+#: :class:`SlipScaleTable` (``CoreFrictionSpec(filler_profiles=True)``).
+FILLER_GROUP = "filler_profiles"
 
 #: Relative step of the central differences of the group caps.
 _DIFFERENCE_STEP = 1e-4
@@ -307,8 +312,9 @@ class SlipScaleTable:
     r"""Slip scaling variable of an exported law over tension and pressure.
 
     The law at the reference state is split into friction groups: one per
-    structural armour layer (named after it) and :data:`CORE_GROUP` for the
-    laid-core stage. ``group_laws[g]`` holds the group's elements (fixed
+    structural armour layer (named after it), :data:`CORE_GROUP` for the
+    laid-core stage and :data:`FILLER_GROUP` for its laid filler profiles.
+    ``group_laws[g]`` holds the group's elements (fixed
     stiffness ``k_i``, reference yield curvature ``kappa_y,i``; no elastic
     part), ``ei_slip_Nm2`` the elastic full-slip stiffness. At a state with
     group caps ``R_g`` the law is the reference law with the yield curvatures
@@ -337,7 +343,8 @@ class SlipScaleTable:
         Table external pressures [Pa], strictly ascending; ``None`` when the
         table runs over tension only (at the reference external pressure).
     group_names : tuple of str
-        Armour layer names, then :data:`CORE_GROUP` when the cores slip.
+        Armour layer names, then :data:`CORE_GROUP` when the cores slip and
+        :data:`FILLER_GROUP` when the filler profiles do.
     group_laws : tuple of IwanBendingLaw
         Elements of every group at the reference state (``ei_slip_Nm2`` 0).
     ei_slip_Nm2 : float
@@ -657,7 +664,7 @@ class SlipScaleTable:
         ):
             item: dict[str, Any] = {
                 "name": name,
-                "kind": "laid_cores" if name == CORE_GROUP else "armour_layer",
+                "kind": name if name in (CORE_GROUP, FILLER_GROUP) else "armour_layer",
                 "reference_cap_Nm": float(self.reference_cap_Nm[g]),
                 "stiffness_Nm2": law.stiffness_Nm2.tolist(),
                 "yield_curvature_1_m": law.yield_curvature_1_m.tolist(),
@@ -1213,7 +1220,7 @@ def _group_caps(law: _MkappaLaw) -> FloatArray:
     """Planar full-slip friction moment of every friction group [N m]."""
     values = [_friction_cap(spec) for spec in law.layers]
     if law.core_model is not None:
-        values.append(_friction_cap(law.core_model.population))
+        values += [_friction_cap(spec) for spec in law.core_model.populations]
     return np.asarray(values, dtype=np.float64)
 
 
@@ -1266,7 +1273,7 @@ def _slip_transitions(
         spread = 1.0 - law.progressive.spread * (1.0 - 1.0 / n)
     specs = [(spec, spread) for spec in law.layers]
     if law.core_model is not None:
-        specs.append((law.core_model.population, 1.0))
+        specs += [(spec, 1.0) for spec in law.core_model.populations]
     out = []
     for spec, factor in specs:
         if friction_law is not None and friction_law.pressure_dependent:
@@ -1410,7 +1417,10 @@ def _slip_scale_table(
             kappa,
             np.zeros_like(kappa),
         )
-        backbones.append(history.moment_Nm[:, 0])
+        backbones.append(history.core_moment_Nm[:, 0])
+        if history.filler_moment_Nm is not None:
+            names.append(FILLER_GROUP)
+            backbones.append(history.filler_moment_Nm[:, 0])
     reference_cap = caps(reference_N, reference_pressure)
     empty = [
         name for name, value in zip(names, reference_cap, strict=True) if value <= 0

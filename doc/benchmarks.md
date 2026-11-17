@@ -88,7 +88,7 @@ model) is the full construction.
 | Sævik and Bruaseth (2005) umbilical axial stiffness | M | NOT VALIDATED |
 | CIGRE TB880 conductor temperature | MM | PARTIAL |
 | Global–local consistency, floating-wind application | I | Full-slip results are upper estimates |
-| Laid-core friction (gap R1b), Ménard and Cartraud (2023) six ranges | M | Moment and work errors increase; range (b) with core friction FAIL (+18.9 %) |
+| Laid-core friction (gap R1b), Ménard and Cartraud (2023) six ranges | M | Moment and work errors increase; range (b) with core friction FAIL (+27.2 %) |
 | Fretting regime and wear (gap 3.1): Mindlin/Cattaneo closed forms, Fouvry ratios, limits, rotation | A | PASS |
 | Fretting transition, Fouvry et al. (1995) Table 4 | MM | PASS with the printed shear moduli; 1.6–1.7 × the measurements with G = E/2(1 + ν) (stated) |
 | Fretting wear volume, crossed steel wires (Poon et al. 2024; Cruzado et al. 2013) | M | PASS (consistency: coefficient identified on the same tests) |
@@ -133,7 +133,8 @@ All rows are verification, not validation. Source: the scorecard
 | OvM-g | A | Geodesic transverse map (η = 1) at μ = 0 vs Out–von Morgen slip vector; vs exact geodesic | < 1e-12 rel.; < 1e-3 rel. at k = 1e-4 | 1.1e-15 (δ*/Eq. 28: 2.7e-15); 2.6e-4 | PASS |
 | Out89 | A | Contact plastic slip vs Out (1989) Δκ − 2κ_s and damage ratios A8, A11 | < 1e-12 rel.; < 1e-4 abs. | 9.6e-16; 5.0e-7 | PASS |
 | FR | A | Fretting regime: Mindlin energy vs numerical Masing loop; Fouvry A/D/B; strip I(0); μ = ∞ stick energy; planar-path rotation | < 1e-9; < 1e-12; < 1e-12; 0 J; < 1e-12 rel. | 7.8e-12; 4.4e-16; 1.6e-15; 0 J; 4.4e-16 | PASS |
-| CF | A | Laid-core friction: μ = 0 gives the armour-only loop; large μ tangent vs EI_max; full-slip core moment vs closed form; dissipation ≥ 0; rotation equivariance | 0 N·m; < 1e-9; < 5e-3; ≥ 0; < 1e-9 rel. | 0; 4.4e-16; 1.0e-4; 5.0e-6; 5.4e-14 | PASS |
+| CF | A | Laid-core friction: μ = 0 gives the armour-only loop; large μ tangent vs EI_max; full-slip core moment vs closed form; dissipation ≥ 0; rotation equivariance | 0 N·m; < 1e-9; < 5e-3; ≥ 0; < 1e-9 rel. | 0; 1.0e-15; 1.0e-4; 5.0e-6; 5.0e-14 | PASS |
+| CFW | A | Laid-core contact statics (wedged trefoil and central filler, with and without a filler): radial equilibrium of one core; filler profiles: μ = 0 gives the armour-only loop; full-slip profile moment vs closed form; stick tangent vs `EI_max + E J_f cos³β_f / 2` | < 1e-12 rel.; 0 N·m; < 5e-3; < 1e-9 | 9.5e-17; 0; 1.0e-4; 7.8e-16 | PASS |
 | A11 | A | Moment–curvature energy closure (loop area vs closed form) | < 0.1% | 0.082% | PASS |
 | σ_B | A | Radial-fibre bending stress vs Ménard Eq. 14 | < 1e-6% | 0 | PASS |
 | M-rec | I | Assembled per-wire moment vs `compute_mkappa`, single core | < 2% | 0.000% | PASS |
@@ -286,8 +287,8 @@ registered before the runs; nothing was refitted.
 | Janocha (2024) 66 kV, 50 kN, Fig. 6 loop half-height at κ = 0 | MM | about 1.0 kN·m ± 30 % | 0.081 kN·m (solved) | 0.181 kN·m (μ 0.46, Table 2) | FAIL |
 | Same, slipping slope; IEA Wind Task 49 Table 13 | MM | 42.47 kN·m² ± 15 % (Fig. 6 about 29) | 21.0 kN·m² | 21.0 kN·m² | FAIL |
 | Same, Fig. 12b moment at 0.01 1/m, 10 / 100 / 200 kN | MM | about 5.8 / 9.5 / 12.5 kN·m ± 30 % | 0.23 / 0.37 / 0.53 kN·m | 0.25 / 0.57 / 0.93 kN·m | FAIL |
-| Ménard (2023) range (b), transferred inputs, core μ 0.2 as in the source FE | M | RMSE < 5 %; work within 10 % (BM1-loop) | 2.71 %; +8.8 % | 3.88 %; +18.9 % | FAIL with the cores |
-| Ménard (2023) ranges (a), (c)–(f), work | M | — | +47.2, +44.7, +32.0, +2.2, −3.6 % | +59.2, +56.5, +42.7, +11.6, +5.3 % | (worse) |
+| Ménard (2023) range (b), transferred inputs, core μ 0.2 as in the source FE | M | RMSE < 5 %; work within 10 % (BM1-loop) | 2.71 %; +8.8 % | 5.15 %; +27.2 % | FAIL with the cores |
+| Ménard (2023) ranges (a), (c)–(f), work | M | — | +47.2, +44.7, +32.0, +2.2, −3.6 % | +63.1, +59.8, +46.2, +19.3, +12.6 % | (worse) |
 
 - **Janocha.** The source's Fig. 12b knee at 10 kN (5.8 kN·m) exceeds its own
   Fig. 6 half-height at 50 kN (about 1 kN·m); tension-induced Coulomb contact
@@ -298,8 +299,11 @@ registered before the runs; nothing was refitted.
 - **Ménard.** The published pressure (0.3 MPa) was calibrated with friction
   on every contact of the source FE, so the armour-only transfer already
   carries the cores' share of the work; adding the cores without
-  recalibration raises the work on every range. The bounded core load is
-  24.8 kN/m per core against 16.5 kN/m reported by the source FE.
+  recalibration raises the work on every range. The bounded ring load on a
+  core's outer face is 24.8 kN/m against the 16.5 kN/m per core that the
+  source FE reports (about a third of its 46 kN/m inner-sheath load); with
+  the neighbour reactions of the wedged trefoil a core carries 53.3 kN/m on
+  all its contacts.
 - **Core lay stage, whole report.** `validation/scripts/run_validation.py
   --core-lay-stage` evaluates every bending law of a cable with laid cores
   with the stage of the Section properties analysis (core friction 0.2, core
