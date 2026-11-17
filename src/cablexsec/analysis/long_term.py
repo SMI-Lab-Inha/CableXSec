@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
 import numpy as np
@@ -50,7 +50,9 @@ class FatigueLoadCase:
 class LongTermFatigueResult:
     """Stationary Miner projection on an explicit longitudinal damage basis.
 
-    Arrays retain (physical wire, material fibre) indexing. Design utilisation
+    Arrays retain (physical wire, material fibre) indexing; for records of a
+    selected-position evaluation ``wire_index`` names the wire of each row
+    (and ``critical_wire_index`` is that wire's number). Design utilisation
     equals maximum annual selected damage times exposure years times the supplied
     design fatigue factor. ``allowable_exposure_years`` is its reciprocal rate;
     Infinity denotes zero computed damage or a reciprocal beyond floating-point
@@ -76,6 +78,7 @@ class LongTermFatigueResult:
     assessment_id: str
     provenance: Provenance
     damage_basis: Literal["bulk", "bulk_with_termination"] = "bulk"
+    wire_index: dict[str, NDArray[np.int64]] = field(default_factory=dict)
 
 
 def _positive(value: float, name: str) -> None:
@@ -85,6 +88,12 @@ def _positive(value: float, name: str) -> None:
 
 def _readonly(values: FloatArray) -> FloatArray:
     result = values.copy()
+    result.flags.writeable = False
+    return result
+
+
+def _readonly_index(values: NDArray[np.int64]) -> NDArray[np.int64]:
+    result = np.array(values, dtype=np.int64)
     result.flags.writeable = False
     return result
 
@@ -169,6 +178,13 @@ def compute_long_term_fatigue(
             )
         if sorted(case.result.D_bulk_per_fibre) != layers:
             raise CableInputError("all cases must contain the same layers")
+        if set(case.result.wire_index) != set(reference.result.wire_index) or any(
+            not np.array_equal(value, reference.result.wire_index[name])
+            for name, value in case.result.wire_index.items()
+        ):
+            raise CableInputError(
+                f"{case.name}: all cases must evaluate the same wires (wire_positions)"
+            )
         if sorted(selected) != layers:
             raise CableInputError(
                 f"{case.name}: {damage_basis} requires fixed-fibre damage "
@@ -214,6 +230,15 @@ def compute_long_term_fatigue(
         np.argmax(annual[critical_layer]), annual[critical_layer].shape
     )
     damage = float(annual[critical_layer][wire, fibre])
+    wire_index = {
+        name: _readonly_index(value)
+        for name, value in reference.result.wire_index.items()
+    }
+    critical_wire = (
+        int(wire_index[critical_layer][wire])
+        if critical_layer in wire_index
+        else int(wire)
+    )
     design_rate = damage * design_fatigue_factor
     utilization = design_rate * exposure_years
     if not math.isfinite(utilization):
@@ -251,7 +276,7 @@ def compute_long_term_fatigue(
         },
         fibre_angles_deg=_readonly(angles),
         critical_layer=critical_layer,
-        critical_wire_index=int(wire),
+        critical_wire_index=critical_wire,
         critical_fibre_index=int(fibre),
         critical_fibre_deg=float(angles[fibre]),
         annual_damage=damage,
@@ -263,6 +288,7 @@ def compute_long_term_fatigue(
         case_contributions_at_critical_per_year=contributions,
         assessment_id=reference.assessment_id,
         damage_basis=damage_basis,
+        wire_index=wire_index,
         provenance=Provenance(
             method=f"Probability-weighted stationary {damage_basis} Miner damage "
             "at fixed material fibres",

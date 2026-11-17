@@ -75,6 +75,7 @@ from cablexsec.analysis.fatigue import (
     DEFAULT_FRICTION_MODEL,
     FatigueResult,
     FrictionModel,
+    WirePositions,
 )
 from cablexsec.analysis.long_term import (
     FatigueLoadCase,
@@ -193,6 +194,9 @@ class SeaStateBatchOptions:
     mu: float | None = None
     contact_model: str | None = None
     friction_model: FrictionModel | None = None
+    #: Wires to evaluate (``compute_fatigue(wire_positions=...)``); ``None``
+    #: evaluates every wire.
+    wire_positions: WirePositions | None = None
     frame: Frame = "arc"
     curvature_source: CurvatureSource = "auto"
     reference_vector: tuple[float, float, float] = (0.0, 0.0, 1.0)
@@ -517,6 +521,7 @@ def _evaluate(task: _Task) -> dict[str, Any]:
             contact_model=opts.contact_model,
             n_fibres=opts.n_fibres,
             friction_model=opts.friction_model,
+            wire_positions=opts.wire_positions,
             termination=section.termination,
             thermal=section.thermal,
             time_s=history.time_s
@@ -919,6 +924,9 @@ def run_sea_state_batch(
         # The model the default resolves to: the digests of existing
         # assessments are unchanged, and follow a change of the default.
         option_record["friction_model"] = DEFAULT_FRICTION_MODEL
+    if opts.wire_positions is None:
+        # Absent when unset, so that the digests of existing assessments stay.
+        option_record.pop("wire_positions")
     results: dict[str, SectionBatchResult] = {}
     histories: dict[str, dict[str, CableDynSectionHistory]] = {}
     for section in sections:

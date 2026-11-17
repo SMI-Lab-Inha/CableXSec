@@ -82,6 +82,7 @@ from cablexsec.analysis.fatigue import (
     FatigueResult,
     FrictionModel,
     RainflowCounter,
+    WirePositions,
     _warn_default_direction_tied,
     curvature_path_out_of_plane_ratio,
     rainflow_cycles,
@@ -1983,6 +1984,7 @@ def compute_fatigue(
     scf: ComponentSCF | Mapping[str, ComponentSCF] | None = None,
     count_from_sample: int = 0,
     friction_law: FrictionLaw | None = None,
+    wire_positions: WirePositions | None = None,
 ) -> FatigueResult:
     r"""Per-wire fatigue of a cable over a biaxial curvature (and tension) history.
 
@@ -2062,6 +2064,15 @@ def compute_fatigue(
         Each fibre is counted separately; per-wire bulk damage is the largest
         accumulated fibre damage. Increase this count to check angular
         convergence. An instantaneous stress envelope is not a fibre history.
+    wire_positions : int, sequence of float or mapping, optional
+        Evaluate selected wires instead of every wire: ``N`` equally spaced
+        positions per armour layer, explicit azimuths in degrees (the nearest
+        wire to each; azimuth ``360 k / n_wires`` is wire ``k``, the
+        convention of ``phi_critical_deg``), or a mapping from every assessed
+        layer name to either. Each wire's damage equals its value in the full
+        evaluation, bit for bit; the direction-tied model then solves only
+        the selected wires. ``FatigueResult.wire_index`` names the rows;
+        totals and the critical wire are over the selected wires only.
     rainflow_counter : {"auto", "compiled", "reference"}, optional
         Rainflow counter for the bulk Miner sums. ``"auto"`` (default) uses the
         compiled counter when numba is active and the reference counter
@@ -2357,6 +2368,7 @@ def compute_fatigue(
             sn_options=(sn_curves, mean_stress, scf),
             friction_law=law,
             time_s=law_time_s,
+            wire_positions=wire_positions,
         )
 
     reference_tension = (
@@ -2445,6 +2457,7 @@ def compute_fatigue(
         count_from_sample=count_from_sample,
         friction_law=law,
         time_s=law_time_s,
+        wire_positions=wire_positions,
     )
     if thermal_notes and result.provenance is not None:
         result = replace(
@@ -2611,6 +2624,7 @@ def _fatigue_from_section_states(
     sn_options: tuple[Any, Any, Any] = (None, None, None),
     friction_law: FrictionLaw | None = None,
     time_s: FloatArray | None = None,
+    wire_positions: WirePositions | None = None,
 ) -> FatigueResult:
     """Use each normal equilibrium for wire stress, stiffness and contact.
 
@@ -2683,6 +2697,7 @@ def _fatigue_from_section_states(
         progressive=progressive,
         friction_law=friction_law,
         time_s=time_s,
+        wire_positions=wire_positions,
     )
     # Called from compute_fatigue: point the warning at that caller.
     return _flag_unevaluated_curves(cable, initial, result, stacklevel=4)
