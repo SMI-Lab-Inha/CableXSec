@@ -2044,6 +2044,39 @@ so the coiling stresses themselves are not benchmarked.
 Request `cablexsec.compute_coiling`, tests `tests/test_coiling.py`. Any coiling
 result depends on the core lay, which must be stated with it.
 
+### Torsional stiffness of the coiling cable (CH-GJ, model-to-model)
+
+The source's Table 5 gives the torsional stiffness of its cable from three
+cross-section tools; none is measured. CH-GJ reports the free torsional
+stiffness of the packaged cable at the source's twist (0.125 rad/m, Table 4;
+the sense that unwinds the armour; zero tension), as a stated comparison
+without a gate:
+
+| Core lay | Armour pitch 1.8 m (kN m²) | Armour pitch 3.0 m (kN m²) |
+| --- | --- | --- |
+| Range of the three tools (Table 5) | 59.6–83.2 | 34.3–44.7 |
+| Straight (packaged) | CH_S18 | CH_S30 |
+| S, assumed pitch 2.5 m | CH_A18 | CH_A30 |
+| S, assumed pitch 3.0 m | CH_B18 | CH_B30 |
+
+- **Core lay.** The source lays the cores S, like the armour (Sec. 2.1.2), but
+  gives no core pitch; the packaged file keeps straight cores. Under an
+  unwinding twist the armour shortens; straight cores resist that shortening
+  at the free end, whereas S-lay cores shorten with it, so straight cores give
+  the larger stiffness. The core pitch is not identified on the tools.
+- **Terms.** With straight cores at 1.8 m: the fixed-radius armour term
+  `K_tt − K_et²/K_ee` is 81.9 kN m², the Saint-Venant terms of the cores about
+  their centres 21.0 kN m² and of the filler lobes 0.3 kN m² (the yarns are
+  servings and carry no torque); the radial response of the unwinding armour
+  lowers the armour part of the solved section to about 60 kN m².
+- **The closed form of the source (Eq. 14).** As printed, the coupling term
+  sits inside the sum over helical layers; for one layer it then cancels the
+  armour term exactly and leaves `Σ G_c J_c`, independent of the pitch.
+  Komperød (2014), which the source cites, assembles the cable matrix first and
+  then takes `k22 − k12²/k11` with the cylinders in `k11`. The published column
+  (69.6–25.1 kN m²) is proportional to `1/P²` within 0.2 % and therefore holds
+  no pitch-independent `G_c J_c` term; it is not used as a reference here.
+
 ## Planned benchmarks
 
 None of these is a completed comparison. Each will be registered under the

@@ -22,9 +22,15 @@ against two closed forms:
 from __future__ import annotations
 
 import math
+import re
+import tempfile
+from pathlib import Path
 
 import numpy as np
 
+import cablexsec as cx
+from cablexsec.cables.schema import CableData
+from cablexsec.mechanics.radial_cable import solve_cable_radial_state
 from cablexsec.mechanics.tendon_section import rectangle_torsion_constant
 from cablexsec.mechanics.trefoil_section import SECTOR, saint_venant_rigidity
 
@@ -85,9 +91,61 @@ def verification_checks() -> dict[str, float]:
     return {"rectangle": rectangle_error(), "annulus": annulus_error()}
 
 
+# Chae, Nam and Shim (2023), Table 5: torsional stiffness [N m^2] of the three
+# cross-section tools of the source, by armour pitch [m]. No measurement.
+CHAE_TABLE5_GJ = {
+    1.8: (83170.0, 59566.0, 69244.0),
+    3.0: (44683.0, 34311.0, 44533.0),
+}
+CHAE_TWIST = 0.125  # [rad/m], Table 4 (global twist)
+CHAE_HELIX_RADIUS = 0.081  # [m], packaged YAML (assumed there)
+
+
+def chae_cable(pitch_m: float, core_pitch_m: float | None = None) -> CableData:
+    """The packaged Chae cable re-pitched; optionally with S-lay cores."""
+    text = Path(cx.chae2023_yaml_path()).read_text(encoding="utf-8")
+    angle = math.degrees(math.atan(2 * math.pi * CHAE_HELIX_RADIUS / pitch_m))
+    text = re.sub(r"lay_angle_deg: [0-9.]+", f"lay_angle_deg: {angle:.6f}", text)
+    if core_pitch_m is not None:
+        # The source lays the cores S, as the armour (Sec. 2.1.2).
+        block = f"\ncore_lay:\n  pitch_m: {core_pitch_m}\n  lay_direction: left_hand\n"
+        text = text.replace("\nlayers:\n", block + "\nlayers:\n", 1)
+    with tempfile.TemporaryDirectory() as folder:
+        path = Path(folder) / "chae.yaml"
+        path.write_text(text, encoding="utf-8")
+        return cx.load_cable(str(path))
+
+
+def chae_free_torsion(pitch_m: float, core_pitch_m: float | None = None) -> float:
+    """Free-end secant torsional stiffness [N m^2] at the source's twist.
+
+    Zero tension, 0.125 rad/m in the sense that unwinds the armour (the
+    coiling sense), solved section with the loose-layer neighbour rule of the
+    coiling request.
+    """
+    cable = chae_cable(pitch_m, core_pitch_m)
+    state = solve_cable_radial_state(
+        cable,
+        0.0,
+        prescribed_twist_per_m=CHAE_TWIST,  # left-hand armour: positive unwinds
+        loose_layers="neighbour",
+    )
+    return abs(float(state.result.torque_Nm)) / CHAE_TWIST
+
+
+def chae_checks() -> dict[str, dict[float, float]]:
+    """CH-GJ: straight cores (packaged) and S-lay cores at 2.5 and 3.0 m."""
+    out: dict[str, dict[float, float]] = {}
+    for label, core in (("straight", None), ("S 2.5 m", 2.5), ("S 3.0 m", 3.0)):
+        out[label] = {p: chae_free_torsion(p, core) for p in CHAE_TABLE5_GJ}
+    return out
+
+
 def main() -> None:
     for name, value in verification_checks().items():
         print(f"{name}: {value:.2e}")
+    for label, values in chae_checks().items():
+        print(label, {p: round(v / 1e3, 1) for p, v in values.items()})
 
 
 if __name__ == "__main__":
