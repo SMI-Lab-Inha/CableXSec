@@ -213,6 +213,17 @@ All notable changes to CableXSec are recorded in this file. The format follows
   times the free-field peak): their FE far field does not slip, and their analytical friction
   field breaks the Coulomb flow rule. The friction regime parameter of Zhu and Tan, not printed,
   follows from their Table 2. No solver change.
+- An umbilical utilisation basis of the capacity envelope:
+  `build_capacity_envelope(..., basis="iso_13628_5")` applies one utilisation factor `k_u` to
+  every element of the section (allowable stress `k_u σ_y` of the armour wires, the conductor's
+  0.2 % proof stress, screens and sheaths; allowable strain `k_u ε_allow` of polymers; the
+  buckling screen), the form of the umbilical capacity curve in Skeie et al. (2012, Sec. 3.1).
+  `ISO_13628_5_UTILISATION_FACTORS` holds the factors MecLim II (Sec. 3.5, p. 19) reports for
+  the practice of API 17E / ISO 13628-5: 0.80 normal operation, 1.00 load-controlled and 0.75
+  displacement-controlled installation, 1.00 abnormal operation; 0.80 is the default. The
+  standard's own text is not reproduced: its element stress definitions and load categories are
+  not in a public source and are not implemented. The envelope records its `basis`; the default
+  `"power_cable"` (DNV-RP-F401 armour factor, MecLim II component factor) is unchanged.
 
 ### Deprecated
 
@@ -292,6 +303,11 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Fixed
 
+- The capacity documentation states the copper plastic-limit mechanism: the conductor's 0.2 %
+  proof stress at its extreme wire fibre, on the strand basis of its bending stiffness, is a
+  component limit of the envelope (the `yielding` mode of the conductor layer), separate from
+  conductor fracture. The 66 kV template page no longer says the envelope lacks it (it governs
+  the template's capacity, Section 4.6).
 - `export_bending_law` keeps the stick stiffness at every tension. Its geometric curvature grid
   started at `1e-4 κ_max` whatever the tension, so a slip onset below that floor (66 kV template,
   `κ_max` 0.4 1/m: outer armour 7.3e-6 1/m and inner 2.3e-5 1/m at 10 kN) was inside the first
