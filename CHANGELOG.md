@@ -352,6 +352,21 @@ All notable changes to CableXSec are recorded in this file. The format follows
   component limit of the envelope (the `yielding` mode of the conductor layer), separate from
   conductor fracture. The 66 kV template page no longer says the envelope lacks it (it governs
   the template's capacity, Section 4.6).
+- The interstitial filler of a trefoil bundle twists as separate lobes with their own warping,
+  not about the cable axis. The solved section added the filler's polar moment about the cable
+  axis to the twist rigidity, as if the filler were bonded to the ring with no warping, although
+  it touches the cores and the ring through frictionless contacts that carry no axial shear and
+  the three outer interstices are disjoint. `saint_venant_rigidity` (in
+  `cablexsec.mechanics.trefoil_section`) solves the warping of the filler lobes on the section
+  mesh; cores (about their centres) and bonded ring layers (about the cable axis) are unchanged.
+  The filler term falls from 7.9 to 0.32 kN m² on the Chae, Nam and Shim (2023) cable, whose free
+  torsional stiffness at the source's twist of 0.125 rad/m (unwinding) falls from 89.5 to
+  81.9 kN m² at an armour pitch of 1.8 m and from 58.1 to 50.5 kN m² at 3.0 m; and from 3.6 to
+  0.14 kN m² on the Su et al. (2026) 35 kV cable, whose torsional stiffness with the ends fixed
+  axially becomes 199.5 / 177.0 kN m² (clockwise / anticlockwise; FE 209.5 / 201.2, test
+  209.8 / 201.3; previously 203.0 / 180.5). The band of that anticlockwise check is widened
+  from 12 to 13 % and stated. New validation row TQ-SV checks the warping solver against the
+  series solution of a rectangle and the polar moment of a mirrored annulus sector.
 - `export_bending_law` keeps the stick stiffness at every tension. Its geometric curvature grid
   started at `1e-4 κ_max` whatever the tension, so a slip onset below that floor (66 kV template,
   `κ_max` 0.4 1/m: outer armour 7.3e-6 1/m and inner 2.3e-5 1/m at 10 kN) was inside the first
