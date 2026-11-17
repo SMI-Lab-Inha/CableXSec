@@ -12,15 +12,20 @@ global model provides them, torsion and external pressure.
 
 What CableDyn writes, and what is derived here
 ----------------------------------------------
-CableDyn reports curvature as a magnitude only (``Curv<L>N<J>``), at nodes. It
-does not write signed curvature components or a material frame. The curvature
-*vector* is therefore reconstructed from the solved geometry:
+CableDyn reports the curvature magnitude ``Curv<L>N<J>`` at nodes; since
+0.4.0 a finite-EI line also writes signed components on section axes
+(``CurvX<L>N<J>``, ``CurvY<L>N<J>``), which
+:mod:`cablexsec.io.cabledyn_components` reads. This reader reconstructs the
+curvature *vector* from the solved geometry and uses ``Curv`` as a check:
 
 * ``curvature_source="tangent"``: node tangents from the ``L<L>N<J>Dec`` and
   ``L<L>N<J>Azi`` channels (written with 8 significant digits of the angle).
-  CableDyn forms these from the chord between the neighbouring nodes, so each
-  value is placed at the mid-arc of that chord (an end node at the mid-arc of
-  its element). A cubic spline through the tangents of a few nodes on either
+  Up to CableDyn 0.4.1 these are the chord between the neighbouring nodes, so
+  each value is placed at the mid-arc of that chord (an end node at the
+  mid-arc of its element). From 0.4.2 a finite-EI line writes the node's own
+  tangent: at an interior node of a uniform mesh the chord mid-arc is the
+  node, but an end tangent is then taken half an element inside the line.
+  A cubic spline through the tangents of a few nodes on either
   side of the section gives :math:`\mathbf{t}` and
   :math:`\boldsymbol{\kappa}=\mathbf{t}\times\mathrm{d}\mathbf{t}/\mathrm{d}s`.
 * ``curvature_source="positions"``: node positions from ``.Line<L>.p.out`` (or
@@ -91,7 +96,7 @@ from __future__ import annotations
 import hashlib
 import math
 import re
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Generator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import MappingProxyType
@@ -285,6 +290,48 @@ def _strip_comment(text: str) -> str:
     return text.strip()
 
 
+#: Keywords of the options the reader uses and their CableDyn aliases.
+_OPTION_ALIASES: dict[str, tuple[str, ...]] = {
+    "g": ("g", "gravity"),
+    "rhoW": ("rhoW", "WtrDnsty", "water_density"),
+    "WtrDpth": ("WtrDpth", "water_depth"),
+    "dtM": ("dtM", "dt"),
+    "TMax": ("TMax",),
+    "adaptive_mesh": ("adaptive_mesh", "adaptivemesh"),
+}
+
+
+def _is_number(token: str) -> bool:
+    try:
+        float(token)
+    except ValueError:
+        return False
+    return True
+
+
+def _option_record(row: Sequence[str]) -> tuple[str, str] | None:
+    """Keyword (case-folded) and value text of one OPTIONS row.
+
+    CableDyn's record forms: ``value keyword [commentary]``; positional
+    records with the model name first and the keyword after the numbers
+    (``uniform 0.5 0 0 current``, ``airy 2.0 8.0 0.0 waves``); and
+    ``dynamic_solver`` with its keyword first. A ``-`` token starts a
+    description. The keyword is the first token after the first one that
+    is not a number; a row without one is not a record.
+    """
+    tokens = list(row)
+    if "-" in tokens:
+        tokens = tokens[: tokens.index("-")]
+    if not tokens:
+        return None
+    if tokens[0].casefold() == "dynamic_solver":
+        return tokens[0].casefold(), " ".join(tokens[1:])
+    for index in range(1, len(tokens)):
+        if not _is_number(tokens[index]):
+            return tokens[index].casefold(), " ".join(tokens[:index])
+    return None
+
+
 def _float(token: str, what: str, path: Path) -> float:
     try:
         value = float(token)
@@ -463,10 +510,15 @@ def read_cabledyn_deck(path: str | Path) -> CableDynDeck:
             reversed_by_parser=swap,
         )
 
+    records = [
+        record
+        for record in (_option_record(row) for row in blocks.get("options", []))
+        if record is not None
+    ]
+    # Records apply in order: the last one of a keyword wins.
     options: dict[str, str] = {}
-    for row in blocks.get("options", []):
-        if len(row) >= 2:
-            options.setdefault(row[1].casefold(), row[0])
+    for key, value in records:
+        options[key] = value
     channels = tuple(
         token
         for row in blocks.get("outputs", [])
@@ -474,16 +526,22 @@ def read_cabledyn_deck(path: str | Path) -> CableDynDeck:
     )
     defaults = []
 
+    def last(name: str) -> str | None:
+        # The last record of the keyword or any of its aliases.
+        names = {alias.casefold() for alias in _OPTION_ALIASES.get(name, (name,))}
+        return next((value for key, value in reversed(records) if key in names), None)
+
     def option(name: str, default: float | None) -> float | None:
-        if name.casefold() in options:
-            return _float(options[name.casefold()], f"option {name}", deck_path)
+        value = last(name)
+        if value is not None:
+            return _float(value, f"option {name}", deck_path)
         if default is not None:
             defaults.append(name)
         return default
 
     g = option("g", _DEFAULT_G)
     rho = option("rhoW", _DEFAULT_RHO_W)
-    adaptive = options.get("adaptive_mesh", options.get("adaptivemesh", "false"))
+    adaptive = last("adaptive_mesh") or "false"
     if adaptive.casefold() not in {
         "true",
         "t",
@@ -608,10 +666,14 @@ def _line_table(path: Path, title_word: str, columns: Sequence[str]) -> _Table:
 
 def _chunks(
     table: _Table, columns: Sequence[int], chunk_rows: int
-) -> Iterator[FloatArray]:
+) -> Generator[FloatArray, None, None]:
+    """Rows of a table in chunks; the file is closed when the generator ends
+    or is closed."""
     import pandas as pd  # noqa: PLC0415
 
-    reader = pd.read_csv(
+    order = {column: i for i, column in enumerate(sorted(set(columns)))}
+    pick = [order[column] for column in columns]
+    with pd.read_csv(
         table.path,
         sep="\t",
         header=None,
@@ -621,16 +683,14 @@ def _chunks(
         engine="c",
         chunksize=chunk_rows,
         skipinitialspace=True,
-    )
-    order = {column: i for i, column in enumerate(sorted(set(columns)))}
-    pick = [order[column] for column in columns]
-    for frame in reader:
-        values = frame.to_numpy(dtype=np.float64)
-        if not np.isfinite(values).all():
-            raise CableSchemaError(
-                f"{table.path.name}: incomplete or non-finite row in the history"
-            )
-        yield values[:, pick]
+    ) as reader:
+        for frame in reader:
+            values = frame.to_numpy(dtype=np.float64)
+            if not np.isfinite(values).all():
+                raise CableSchemaError(
+                    f"{table.path.name}: incomplete or non-finite row in the history"
+                )
+            yield values[:, pick]
 
 
 def _channel_index(table: _Table) -> dict[tuple[str, int, int], int]:
@@ -1325,7 +1385,9 @@ def read_cabledyn_sections(
         for node in tension_check_nodes:
             want("ten", node)
 
-    streams: list[Iterator[FloatArray]] = [_chunks(main, main_cols, chunk_rows)]
+    streams: list[Generator[FloatArray, None, None]] = [
+        _chunks(main, main_cols, chunk_rows)
+    ]
     if positions_table is not None and pos_order:
         pos_cols = [0] + [
             1 + 3 * node + axis for node in pos_order for axis in range(3)
@@ -1372,191 +1434,220 @@ def read_cabledyn_sections(
     def append(plan: _Plan, key: str, values: FloatArray) -> None:
         plan.data.setdefault(key, []).append(values)
 
-    iterator = zip(*streams, strict=False)
-    while True:
-        try:
-            chunk = next(iterator)
-        except StopIteration:
-            break
-        if len({part.shape[0] for part in chunk}) != 1:
-            raise CableSchemaError("CableDyn output files have different row counts")
-        time = chunk[0][:, 0]
-        for part in chunk[1:]:
-            scale = 1e-9 * max(1.0, float(np.max(np.abs(time))))
-            if not np.allclose(part[:, 0], time, rtol=0.0, atol=scale):
+    # Every stream is closed on the way out (its file handle with it), also
+    # when a check below raises or the files end at different rows.
+    try:
+        while True:
+            parts = [next(stream, None) for stream in streams]
+            if all(part is None for part in parts):
+                break
+            if any(part is None for part in parts):
                 raise CableSchemaError(
-                    "time columns of the main and per-line files differ"
+                    "CableDyn output files have different row counts"
                 )
-        values = chunk[0]
-        nt = time.size
-        positions = np.empty((nt, len(pos_order), 3))
-        if positions_table is not None and pos_order:
-            positions = chunk[1][:, 1:].reshape(nt, len(pos_order), 3)
-        elif pos_order:
-            for node in pos_order:
-                for axis, kind in enumerate(("px", "py", "pz")):
-                    positions[:, pos_slot[node], axis] = values[:, slot[(kind, node)]]
-        if tensions_table is not None:
-            elem_t = chunk[-1][:, 1:]
-        if first:
-            if "static" in paths and pos_order:
-                static = _static_profile(paths["static"], line_id)
-                if static.shape[0] != n_nodes:
+            chunk = tuple(part for part in parts if part is not None)
+            if len({part.shape[0] for part in chunk}) != 1:
+                raise CableSchemaError(
+                    "CableDyn output files have different row counts"
+                )
+            time = chunk[0][:, 0]
+            for part in chunk[1:]:
+                time_tol = 1e-9 * max(1.0, float(np.max(np.abs(time))))
+                if not np.allclose(part[:, 0], time, rtol=0.0, atol=time_tol):
                     raise CableSchemaError(
-                        f"{paths['static'].name}: {static.shape[0]} nodes, "
-                        f"expected {n_nodes}"
+                        "time columns of the main and per-line files differ"
                     )
-                max_t0_error = float(np.max(np.abs(static[pos_order] - positions[0])))
-                if max_t0_error > 2e-6 * max(1.0, float(np.max(np.abs(static)))):
-                    raise CableSchemaError(
-                        "first position row differs from the static profile by "
-                        f"{max_t0_error:.3g} m: files from different runs?"
-                    )
-            if len(pos_order) > 1:
-                contiguous = [j for j in pos_order if j + 1 in pos_slot]
-                if contiguous:
-                    chord = np.array(
-                        [
-                            np.linalg.norm(
-                                positions[0, pos_slot[j + 1]]
-                                - positions[0, pos_slot[j]]
-                            )
-                            for j in contiguous
+            values = chunk[0]
+            nt = time.size
+            positions = np.empty((nt, len(pos_order), 3))
+            if positions_table is not None and pos_order:
+                positions = chunk[1][:, 1:].reshape(nt, len(pos_order), 3)
+            elif pos_order:
+                for node in pos_order:
+                    for axis, kind in enumerate(("px", "py", "pz")):
+                        positions[:, pos_slot[node], axis] = values[
+                            :, slot[(kind, node)]
                         ]
-                    )
-                    stretch = chord / reference_l0[contiguous] - 1.0
-                    stretch_range = (float(stretch.min()), float(stretch.max()))
-                    if stretch_range[0] < -0.02 or stretch_range[1] > 0.05:
+            if tensions_table is not None:
+                elem_t = chunk[-1][:, 1:]
+            if first:
+                if "static" in paths and pos_order:
+                    static = _static_profile(paths["static"], line_id)
+                    if static.shape[0] != n_nodes:
                         raise CableSchemaError(
-                            "element chord/reference length - 1 spans "
-                            f"{stretch_range}: "
-                            "the deck sections do not describe the output mesh"
+                            f"{paths['static'].name}: {static.shape[0]} nodes, "
+                            f"expected {n_nodes}"
                         )
-                magnitude = float(np.max(np.abs(positions[0])))
-                position_floor = (
-                    0.5
-                    * 10.0 ** (math.floor(math.log10(max(magnitude, 1e-30))) - 7)
-                    / float(np.min(reference_l0)) ** 2
-                )
-        # Element tension consistency (ordering check).
-        if tensions_table is not None and tension_check_nodes:
-            for node in tension_check_nodes:
-                channel = values[:, slot[("ten", node)]]
-                scale = np.maximum(np.abs(channel), 1.0)
-                for j, label in ((node, "match"), (n_nodes - 1 - node, "mirror")):
-                    left, right = elem_t[:, ten_slot[j - 1]], elem_t[:, ten_slot[j]]
-                    w_left, w_right = reference_l0[j - 1], reference_l0[j]
-                    mean = (w_left * left + w_right * right) / (w_left + w_right)
-                    error = np.abs(channel - mean) / scale
-                    if label == "match":
-                        tension_check = max(tension_check, float(np.max(error)))
-                        tension_match += float(np.sum(error))
-                    else:
-                        tension_mirror += float(np.sum(error))
-        # Frame transport along the arc (all sections share it).
-        arc_e1: dict[int, FloatArray] = {}
-        if frame == "arc":
-            last = max(plan.element for plan in sections_plans)
-            chords = _unit(
-                positions[:, [pos_slot[j + 1] for j in range(last + 1)]]
-                - positions[:, [pos_slot[j] for j in range(last + 1)]],
-                "element chord",
-            )
-            e1_a, state_a = _time_transport(
-                chords[:, 0], state_a, reference, f"line {line_id} End A"
-            )
-            e1 = e1_a
-            arc_e1[0] = e1
-            for k in range(1, last + 1):
-                e1 = _transport(e1, chords[:, k - 1], chords[:, k])
-                arc_e1[k] = e1
-        for plan in plans:
-            if source == "tangent":
-                dec = np.radians(
-                    np.stack([values[:, slot[("dec", j)]] for j in plan.window], axis=1)
-                )
-                azi = np.radians(
-                    np.stack([values[:, slot[("azi", j)]] for j in plan.window], axis=1)
-                )
-                samples = np.stack(
-                    (np.sin(dec) * np.cos(azi), np.sin(dec) * np.sin(azi), np.cos(dec)),
-                    axis=-1,
-                )
-                value, d1, _ = _spline(chord_mid[plan.window], samples, plan.arc)
-                tangent = _unit(value, "section tangent")
-                kappa = np.cross(tangent, d1)
-            else:
-                window = positions[:, [pos_slot[j] for j in plan.window]]
-                value, d1, d2 = _spline(arcs[plan.window], window, plan.arc)
-                speed = np.linalg.norm(d1, axis=-1, keepdims=True)
-                tangent = d1 / speed
-                kappa = np.cross(d1, d2) / speed**3
-            norm = np.linalg.norm(kappa, axis=-1)
-            append(plan, "norm", norm)
-            if plan.probe:
-                node = plan.node
-                append(plan, "channel", values[:, slot[("curv", node)]])
-                continue
-            if frame == "arc":
-                axis1 = _transport(
-                    arc_e1[plan.element], chords[:, plan.element], tangent
-                )
-            else:
-                axis1, state = _time_transport(
-                    tangent,
-                    state_section[plan.name],
-                    reference,
-                    f"section {plan.name!r}",
-                )
-                state_section[plan.name] = state
-            axis2 = np.cross(tangent, axis1)
-            weight = (plan.arc - arcs[plan.element]) / reference_l0[plan.element]
-            if twist_available:
-                twist = np.radians(
-                    (1 - weight) * values[:, slot[("twist", plan.element)]]
-                    + weight * values[:, slot[("twist", plan.element + 1)]]
-                )
-                cos, sin = np.cos(twist)[:, None], np.sin(twist)[:, None]
-                axis1, axis2 = cos * axis1 + sin * axis2, -sin * axis1 + cos * axis2
-                append(plan, "twist", twist)
-            if torque_available:
-                append(
-                    plan,
-                    "torque",
-                    (1 - weight) * values[:, slot[("torq", plan.element)]]
-                    + weight * values[:, slot[("torq", plan.element + 1)]],
-                )
-            append(plan, "kx", np.sum(kappa * axis1, axis=-1))
-            append(plan, "ky", np.sum(kappa * axis2, axis=-1))
-            if pos_order and plan.element in pos_slot and plan.element + 1 in pos_slot:
-                if source == "positions":
-                    z = value[:, 2]
-                else:
-                    z = (1 - weight) * positions[
-                        :, pos_slot[plan.element], 2
-                    ] + weight * positions[:, pos_slot[plan.element + 1], 2]
-                append(plan, "z", z)
-            if use_segments:
-                if plan.arc <= midpoints[0]:
-                    ten = elem_t[:, ten_slot[0]]
-                elif plan.arc >= midpoints[-1]:
-                    ten = elem_t[:, ten_slot[n_nodes - 2]]
-                else:
-                    lower = int(np.searchsorted(midpoints, plan.arc, side="right") - 1)
-                    w = (plan.arc - midpoints[lower]) / (
-                        midpoints[lower + 1] - midpoints[lower]
+                    max_t0_error = float(
+                        np.max(np.abs(static[pos_order] - positions[0]))
                     )
-                    ten = (1 - w) * elem_t[:, ten_slot[lower]] + w * elem_t[
-                        :, ten_slot[lower + 1]
-                    ]
-            else:
-                ten = (1 - weight) * values[
-                    :, slot[("ten", plan.element)]
-                ] + weight * values[:, slot[("ten", plan.element + 1)]]
-            append(plan, "tension", ten)
-        append(plans[0], "time", time)
-        n_rows += nt
-        first = False
+                    if max_t0_error > 2e-6 * max(1.0, float(np.max(np.abs(static)))):
+                        raise CableSchemaError(
+                            "first position row differs from the static profile by "
+                            f"{max_t0_error:.3g} m: files from different runs?"
+                        )
+                if len(pos_order) > 1:
+                    contiguous = [j for j in pos_order if j + 1 in pos_slot]
+                    if contiguous:
+                        chord = np.array(
+                            [
+                                np.linalg.norm(
+                                    positions[0, pos_slot[j + 1]]
+                                    - positions[0, pos_slot[j]]
+                                )
+                                for j in contiguous
+                            ]
+                        )
+                        stretch = chord / reference_l0[contiguous] - 1.0
+                        stretch_range = (float(stretch.min()), float(stretch.max()))
+                        if stretch_range[0] < -0.02 or stretch_range[1] > 0.05:
+                            raise CableSchemaError(
+                                "element chord/reference length - 1 spans "
+                                f"{stretch_range}: "
+                                "the deck sections do not describe the output mesh"
+                            )
+                    magnitude = float(np.max(np.abs(positions[0])))
+                    position_floor = (
+                        0.5
+                        * 10.0 ** (math.floor(math.log10(max(magnitude, 1e-30))) - 7)
+                        / float(np.min(reference_l0)) ** 2
+                    )
+            # Element tension consistency (ordering check).
+            if tensions_table is not None and tension_check_nodes:
+                for node in tension_check_nodes:
+                    channel = values[:, slot[("ten", node)]]
+                    scale = np.maximum(np.abs(channel), 1.0)
+                    for j, label in ((node, "match"), (n_nodes - 1 - node, "mirror")):
+                        left, right = elem_t[:, ten_slot[j - 1]], elem_t[:, ten_slot[j]]
+                        w_left, w_right = reference_l0[j - 1], reference_l0[j]
+                        mean = (w_left * left + w_right * right) / (w_left + w_right)
+                        error = np.abs(channel - mean) / scale
+                        if label == "match":
+                            tension_check = max(tension_check, float(np.max(error)))
+                            tension_match += float(np.sum(error))
+                        else:
+                            tension_mirror += float(np.sum(error))
+            # Frame transport along the arc (all sections share it).
+            arc_e1: dict[int, FloatArray] = {}
+            if frame == "arc":
+                last = max(plan.element for plan in sections_plans)
+                chords = _unit(
+                    positions[:, [pos_slot[j + 1] for j in range(last + 1)]]
+                    - positions[:, [pos_slot[j] for j in range(last + 1)]],
+                    "element chord",
+                )
+                e1_a, state_a = _time_transport(
+                    chords[:, 0], state_a, reference, f"line {line_id} End A"
+                )
+                e1 = e1_a
+                arc_e1[0] = e1
+                for k in range(1, last + 1):
+                    e1 = _transport(e1, chords[:, k - 1], chords[:, k])
+                    arc_e1[k] = e1
+            for plan in plans:
+                if source == "tangent":
+                    dec = np.radians(
+                        np.stack(
+                            [values[:, slot[("dec", j)]] for j in plan.window], axis=1
+                        )
+                    )
+                    azi = np.radians(
+                        np.stack(
+                            [values[:, slot[("azi", j)]] for j in plan.window], axis=1
+                        )
+                    )
+                    samples = np.stack(
+                        (
+                            np.sin(dec) * np.cos(azi),
+                            np.sin(dec) * np.sin(azi),
+                            np.cos(dec),
+                        ),
+                        axis=-1,
+                    )
+                    value, d1, _ = _spline(chord_mid[plan.window], samples, plan.arc)
+                    tangent = _unit(value, "section tangent")
+                    kappa = np.cross(tangent, d1)
+                else:
+                    window = positions[:, [pos_slot[j] for j in plan.window]]
+                    value, d1, d2 = _spline(arcs[plan.window], window, plan.arc)
+                    speed = np.linalg.norm(d1, axis=-1, keepdims=True)
+                    tangent = d1 / speed
+                    kappa = np.cross(d1, d2) / speed**3
+                norm = np.linalg.norm(kappa, axis=-1)
+                append(plan, "norm", norm)
+                if plan.probe:
+                    node = plan.node
+                    append(plan, "channel", values[:, slot[("curv", node)]])
+                    continue
+                if frame == "arc":
+                    axis1 = _transport(
+                        arc_e1[plan.element], chords[:, plan.element], tangent
+                    )
+                else:
+                    axis1, state = _time_transport(
+                        tangent,
+                        state_section[plan.name],
+                        reference,
+                        f"section {plan.name!r}",
+                    )
+                    state_section[plan.name] = state
+                axis2 = np.cross(tangent, axis1)
+                weight = (plan.arc - arcs[plan.element]) / reference_l0[plan.element]
+                if twist_available:
+                    twist = np.radians(
+                        (1 - weight) * values[:, slot[("twist", plan.element)]]
+                        + weight * values[:, slot[("twist", plan.element + 1)]]
+                    )
+                    cos, sin = np.cos(twist)[:, None], np.sin(twist)[:, None]
+                    axis1, axis2 = cos * axis1 + sin * axis2, -sin * axis1 + cos * axis2
+                    append(plan, "twist", twist)
+                if torque_available:
+                    append(
+                        plan,
+                        "torque",
+                        (1 - weight) * values[:, slot[("torq", plan.element)]]
+                        + weight * values[:, slot[("torq", plan.element + 1)]],
+                    )
+                append(plan, "kx", np.sum(kappa * axis1, axis=-1))
+                append(plan, "ky", np.sum(kappa * axis2, axis=-1))
+                if (
+                    pos_order
+                    and plan.element in pos_slot
+                    and plan.element + 1 in pos_slot
+                ):
+                    if source == "positions":
+                        z = value[:, 2]
+                    else:
+                        z = (1 - weight) * positions[
+                            :, pos_slot[plan.element], 2
+                        ] + weight * positions[:, pos_slot[plan.element + 1], 2]
+                    append(plan, "z", z)
+                if use_segments:
+                    if plan.arc <= midpoints[0]:
+                        ten = elem_t[:, ten_slot[0]]
+                    elif plan.arc >= midpoints[-1]:
+                        ten = elem_t[:, ten_slot[n_nodes - 2]]
+                    else:
+                        lower = int(
+                            np.searchsorted(midpoints, plan.arc, side="right") - 1
+                        )
+                        w = (plan.arc - midpoints[lower]) / (
+                            midpoints[lower + 1] - midpoints[lower]
+                        )
+                        ten = (1 - w) * elem_t[:, ten_slot[lower]] + w * elem_t[
+                            :, ten_slot[lower + 1]
+                        ]
+                else:
+                    ten = (1 - weight) * values[
+                        :, slot[("ten", plan.element)]
+                    ] + weight * values[:, slot[("ten", plan.element + 1)]]
+                append(plan, "tension", ten)
+            append(plans[0], "time", time)
+            n_rows += nt
+            first = False
+    finally:
+        for stream in streams:
+            stream.close()
 
     if n_rows < 2:
         raise CableSchemaError(f"{paths['main'].name}: fewer than two output rows")

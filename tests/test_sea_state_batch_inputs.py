@@ -270,3 +270,15 @@ def test_specification_must_be_an_object(tmp_path):
     path.write_text("[1, 2]", encoding="utf-8")
     with pytest.raises(CableInputError, match="must be an object"):
         load_batch_spec(path)
+
+
+def test_cable_source_is_checked_before_any_run_is_read(tmp_path, cable):
+    # The runs point nowhere: a late check would fail reading them first.
+    runs = [SeaStateRun("r", tmp_path / "none", tmp_path / "none.dat", 1.0)]
+    with pytest.raises(FileNotFoundError, match=r"missing.yaml is not a file"):
+        run_sea_state_batch(
+            cable,
+            runs,
+            [SectionRequest("a", 2.0)],
+            cable_source=tmp_path / "missing.yaml",
+        )

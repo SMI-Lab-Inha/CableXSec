@@ -12,7 +12,9 @@ the CableDyn v0.1.0 driver on the ``lazy_wave_vessel_rao`` example cable
 
 from __future__ import annotations
 
+import gc
 import math
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -485,6 +487,57 @@ def test_files_from_different_runs_are_rejected(tmp_path):
     _write_case(tmp_path, shifted, static=False)
     with pytest.raises(CableSchemaError, match="static profile"):
         read_cabledyn_sections(root, deck, {"s": 5.0})
+
+
+def _read_without_open_files(*args, **kwargs):
+    """Read, collect, and fail on any file the read left open."""
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", ResourceWarning)
+        try:
+            return read_cabledyn_sections(*args, **kwargs)
+        finally:
+            gc.collect()
+            leaks = [w for w in caught if issubclass(w.category, ResourceWarning)]
+            assert not leaks, [str(w.message) for w in leaks]
+
+
+def test_reader_closes_every_output_file(tmp_path):
+    # Main table and both per-line files, read in several chunks.
+    nt = 50
+    positions = _bending_case(np.full(nt, 0.02), np.zeros(nt), nt)
+    root, deck = _write_case(tmp_path, positions, deck_kwargs={"t_max": 4.9})
+    read = _read_without_open_files(root, deck, {"s": 5.0}, chunk_rows=16)
+    assert read.histories["s"].time_s.size == nt
+    # A per-line file with an extra row: rejected, and every file closed.
+    with open(f"{root}.Line1.t.out", "a", encoding="utf-8") as f:
+        f.write(_fmt([nt * 0.1, *np.full(N_ELEMENTS, 5000.0)]) + "\n")
+    with pytest.raises(CableSchemaError, match="different row counts"):
+        _read_without_open_files(root, deck, {"s": 5.0}, chunk_rows=16)
+
+
+def test_deck_options_follow_the_record_forms(tmp_path):
+    # Positional records (model first, keyword after the numbers), commentary
+    # after a keyword, the keyword-first dynamic_solver, aliases and the last
+    # record of a keyword winning.
+    extra = (
+        "uniform 0.0 0.6 0.0 current\n"
+        "airy 2.0 8.0 0.0 waves - regular waves\n"
+        "dynamic_solver 1e-8 1e-14 30 12\n"
+        "1000.0 WtrDnsty water density\n"
+        "35.0 WtrDpth - depth\n"
+        "40.0 water_depth\n"
+        "true adaptive_mesh\n"
+    )
+    deck = read_cabledyn_deck(_deck(tmp_path / "o.dat", extra_options=extra))
+    assert deck.options["current"] == "uniform 0.0 0.6 0.0"
+    assert deck.options["waves"] == "airy 2.0 8.0 0.0"
+    assert deck.options["dynamic_solver"] == "1e-8 1e-14 30 12"
+    assert not any(key[0].isdigit() for key in deck.options)
+    assert deck.rho_w_kg_m3 == 1000.0  # the alias set after rhoW 1025
+    assert deck.water_depth_m == 40.0  # the last of WtrDpth / water_depth
+    assert deck.g_m_s2 == 9.81 and deck.dt_s == 0.1 and deck.t_max_s == 1.0
+    assert deck.adaptive_mesh
+    assert deck.defaults_used == ()
 
 
 def test_reversed_segment_order_is_rejected(tmp_path):

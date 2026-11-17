@@ -184,12 +184,14 @@ Functional kernels operating on arrays; most are not called directly by users.
   read-only storage on construction. CSV read/write; `fatigue_from_series`.
 - `time_history_csv.py`: time-history CSV exports, columns selected by header.
 - `cabledyn.py`: CableDyn deck and output files (standalone driver and
-  OpenFAST module). CableDyn writes curvature magnitudes only; the reader
-  reconstructs the curvature vector from the node tangent channels or
-  positions, projects it on a twist-free section frame (material twist added
-  on lines restrained in torsion), interpolates tension, forms hydrostatic
-  pressure, and checks every file, channel and unit against the deck
-  ([doc/global_local_guide.md](doc/global_local_guide.md)).
+  OpenFAST module). The reader reconstructs the curvature vector from the
+  node tangent channels or positions (the `Curv` magnitudes serve as a
+  check), projects it on a twist-free section frame (material twist added
+  where `Twist` channels are written), interpolates tension, forms
+  hydrostatic pressure, and checks every file, channel and unit against the
+  deck ([doc/global_local_guide.md](doc/global_local_guide.md)).
+- `cabledyn_components.py`: station histories from the signed section-frame
+  curvature components `CurvX`/`CurvY` that CableDyn writes since 0.4.0.
 - `riflex_reader.py`: RIFLEX ASCII results.
 - `synthetic.py`: self-contained JONSWAP-style load-series generator.
 

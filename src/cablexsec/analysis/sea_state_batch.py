@@ -851,6 +851,17 @@ def run_sea_state_batch(
     output = None if output_directory is None else Path(output_directory)
     if output is not None and output.exists():
         raise FileExistsError(f"{output} exists; choose a new output directory")
+    # The cable file is digested before any run is read, so a wrong path
+    # fails at once rather than after every section is computed.
+    cable_file = None
+    if cable_source is not None:
+        source_path = Path(cable_source)
+        if not source_path.is_file():
+            raise FileNotFoundError(f"cable_source {source_path} is not a file")
+        cable_file = {
+            "path": str(source_path.resolve()),
+            "sha256": _sha256_bytes(source_path.read_bytes()),
+        }
     basis = _resolve_basis(cable, opts.tension_basis)
     diameter = (
         opts.external_diameter_m
@@ -1013,13 +1024,6 @@ def run_sea_state_batch(
 
     import cablexsec  # noqa: PLC0415
 
-    cable_file = None
-    if cable_source is not None:
-        source_path = Path(cable_source)
-        cable_file = {
-            "path": str(source_path.resolve()),
-            "sha256": _sha256_bytes(source_path.read_bytes()),
-        }
     manifest: dict[str, Any] = {
         "format": "cablexsec-sea-state-batch",
         "version": 1,
