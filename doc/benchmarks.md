@@ -88,7 +88,7 @@ model) is the full construction.
 | Sævik and Bruaseth (2005) umbilical axial stiffness | M | NOT VALIDATED |
 | CIGRE TB880 conductor temperature | MM | PARTIAL |
 | Global–local consistency, floating-wind application | I | Full-slip results are upper estimates |
-| Laid-core friction (gap R1b), Ménard and Cartraud (2023) six ranges | M | Moment and work errors increase; range (b) with core friction FAIL (+27.2 %) |
+| Laid-core friction (gap R1b), Ménard and Cartraud (2023) six ranges | M | With the transferred 0.3 MPa the cores raise the work (range (b) +27.2 %); identified on (b) with the full accounting, predictions (a) and (c) FAIL (+26.0, +23.7 %), (d)–(f) within 13 % |
 | Fretting regime and wear (gap 3.1): Mindlin/Cattaneo closed forms, Fouvry ratios, limits, rotation | A | PASS |
 | Fretting transition, Fouvry et al. (1995) Table 4 | MM | PASS with the printed shear moduli; 1.6–1.7 × the measurements with G = E/2(1 + ν) (stated) |
 | Fretting wear volume, crossed steel wires (Poon et al. 2024; Cruzado et al. 2013) | M | PASS (consistency: coefficient identified on the same tests) |
@@ -284,18 +284,20 @@ registered before the runs; nothing was refitted.
 
 | Case | Class | Target | Armour only | With core friction | Status |
 | --- | --- | --- | --- | --- | --- |
-| Janocha (2024) 66 kV, 50 kN, Fig. 6 loop half-height at κ = 0 | MM | about 1.0 kN·m ± 30 % | 0.081 kN·m (solved) | 0.181 kN·m (μ 0.46, Table 2) | FAIL |
-| Same, slipping slope; IEA Wind Task 49 Table 13 | MM | 42.47 kN·m² ± 15 % (Fig. 6 about 29) | 21.0 kN·m² | 21.0 kN·m² | FAIL |
-| Same, Fig. 12b moment at 0.01 1/m, 10 / 100 / 200 kN | MM | about 5.8 / 9.5 / 12.5 kN·m ± 30 % | 0.23 / 0.37 / 0.53 kN·m | 0.25 / 0.57 / 0.93 kN·m | FAIL |
-| Ménard (2023) range (b), transferred inputs, core μ 0.2 as in the source FE | M | RMSE < 5 %; work within 10 % (BM1-loop) | 2.71 %; +8.8 % | 5.15 %; +27.2 % | FAIL with the cores |
+| Janocha (2024) 66 kV, 50 kN, Fig. 6 loop half-height at κ = 0 | C2C (FE, no initial contact state) | reported (about 1.0 kN·m) | 0.081 kN·m (solved) | 0.181 kN·m (μ 0.46, Table 2); 0.374 kN·m with the filler profiles | reported |
+| Same, slipping slope; IEA Wind Task 49 Table 13 (its row cites the same source) | C2C | reported (42.47 kN·m²; Fig. 6 about 29) | 21.0 kN·m² | 21.0 kN·m² | reported |
+| Same, Fig. 12b moment at 0.01 1/m and stick slope | — | retired (below) | 0.23 / 0.37 / 0.53 kN·m | 0.25 / 0.57 / 0.93 kN·m | retired |
+| Ménard (2023) range (b), transferred inputs (0.3 MPa of the source FE), core μ 0.2 as in the source FE | M | RMSE < 5 %; work within 10 % (BM1-loop) | 2.71 %; +8.8 % | 5.15 %; +27.2 % | FAIL with the cores |
 | Ménard (2023) ranges (a), (c)–(f), work | M | — | +47.2, +44.7, +32.0, +2.2, −3.6 % | +63.1, +59.8, +46.2, +19.3, +12.6 % | (worse) |
 
-- **Janocha.** The source's Fig. 12b knee at 10 kN (5.8 kN·m) exceeds its own
-  Fig. 6 half-height at 50 kN (about 1 kN·m); tension-induced Coulomb contact
-  cannot give both. A 1.0 kN·m half-height would need about 112 kN/m of
-  normal load per core, against 12.2 kN/m in the solved state. Friction does
-  not raise the full-slip slope; the slope gap lies in component bending
-  ([template_66kv.md](template_66kv.md) Section 4.1).
+- **Janocha.** The source is a finite-element model, not a test, and states
+  no initial contact state; its figures are compared code to code and not
+  gated. Fig. 12b is retired as a target (below). With the full contact
+  accounting (wedged trefoil and filler profiles) the Fig. 6 half-height at
+  50 kN is 0.380 / 0.374 kN·m (bounded / solved) against about 1.0 kN·m read
+  from the figure. Friction does not raise the full-slip slope; the slope
+  difference lies in component bending ([template_66kv.md](template_66kv.md)
+  Section 4.1).
 - **Ménard.** The published pressure (0.3 MPa) was calibrated with friction
   on every contact of the source FE, so the armour-only transfer already
   carries the cores' share of the work; adding the cores without
@@ -348,6 +350,73 @@ first commit of the change that adds them (`validation/scripts/check_core_fricti
   it states no initial contact state.
 - Fig. 12b knee moments (M at 0.01 1/m) and its stick slope: retired as
   targets, for the reasons in the next subsection.
+
+### Results against the registered targets
+
+`python validation/scripts/check_core_friction.py` (one thread).
+
+**Ménard and Cartraud (2023), identify on (b), predict the rest** (validation
+row BM1-ID). The
+identified initial pressure is 220 kPa with the full contact accounting and
+275 kPa with the armour law alone (the source FE's calibration: 300 kPa).
+
+| Range | Measured work [J/m] | Full accounting: work, ordered RMSE | Armour only: work, ordered RMSE | Target |
+| --- | --- | --- | --- | --- |
+| (b), identified | 62.3 | −0.0 %, 2.99 % | +0.0 %, 2.20 % | RMSE < 5 %: PASS |
+| (a) | 20.2 | +26.0 %, 6.22 % | +35.8 %, 8.60 % | ±20 %, < 10 %: FAIL |
+| (c) | 20.4 | +23.7 %, 7.05 % | +33.5 %, 8.32 % | FAIL |
+| (d) | 22.6 | +12.9 %, 5.14 % | +21.7 %, 6.93 % | PASS |
+| (e) | 65.0 | −6.5 %, 4.78 % | −6.1 %, 3.93 % | PASS |
+| (f) | 69.2 | −11.7 %, 4.45 % | −11.4 %, 4.29 % | PASS |
+
+The registered target fails on ranges (a) and (c), the two small-amplitude
+ranges. The full accounting brings every small-amplitude prediction closer
+than the armour law identified the same way ((a) +35.8 % → +26.0 %, (c)
++33.5 % → +23.7 %, (d) +21.7 % → +12.9 %) and leaves the large ranges (e)
+and (f) unchanged within 0.6 %. What remains is an over-prediction of the work
+of small cycles at the pressure that fits the larger ones.
+
+**Janocha et al. (2024), code to code (50 kN, ±0.2 1/m, μ 0.46).**
+
+| Model | Half-height at κ = 0, bounded / solved |
+| --- | --- |
+| Armour only | 0.112 / 0.081 kN·m |
+| Laid cores, wedged trefoil | 0.246 / 0.181 kN·m |
+| Laid cores and filler profiles | 0.380 / 0.374 kN·m |
+| Source FE, Fig. 6 (read from the figure) | about 1.0 kN·m |
+
+### Retired: Janocha et al. (2024) Fig. 12b knee moments and stick slope
+
+The knee moments at 0.01 1/m (about 5.8 / 9.5 / 12.5 kN·m at 10 / 100 /
+200 kN) and the initial slope of Fig. 12b were registered as targets in
+gap R1b. They are retired, for three reasons read from the source's own
+figures (about ±5 % of full scale):
+
+1. **The two figures of the same model disagree.** At 0.2 1/m Fig. 6 (50 kN)
+   gives about 6.8 kN·m. Fig. 12b gives about 13.8 kN·m at 10 kN and 17.0 kN·m
+   at 100 kN, so about 15 kN·m at 50 kN, twice Fig. 6 at the same tension and
+   curvature. The Fig. 12b knee at 10 kN (5.8 kN·m) is also several times the
+   Fig. 6 friction moment at 50 kN (half-height about 1 kN·m), although a
+   higher tension can only raise tension-induced friction.
+2. **The stick branch is stiffer than any stuck section.** The Fig. 12b
+   inset reaches about 3.0 kN·m at 1×10⁻³ 1/m and 5.0 kN·m at 2×10⁻³ 1/m at
+   10 kN: a secant of 2,500–3,000 kN·m², above the 1653 kN·m² plane-section
+   bound of the published section with every component stuck. No stick–slip
+   law of the published geometry can follow that branch, and the knee
+   moments at 0.01 1/m sit on it.
+3. **The friction level of Fig. 6 depends on the mesh.** Its very coarse
+   mesh gives a loop about three times as high as the normal and dense
+   meshes, so the Fig. 6 level is kept only as a code-to-code value.
+
+The IEA Wind Task 49 slipping stiffness (Table 13), whose row cites the same
+source, is likewise reported code to code.
+
+### Default of the laid-core law
+
+The law stays off by default. The registered Ménard prediction fails on
+the small ranges, and a cable without a declared clamping state has almost
+no core friction at low tension, so switching the law on would change
+results without a validated gain.
 
 ## Out and von Morgen (1997), frictionless slip bounds (OvM, Out89)
 

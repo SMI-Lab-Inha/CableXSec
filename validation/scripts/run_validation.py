@@ -1804,6 +1804,32 @@ def _rows() -> list[Row]:
             )
         )
 
+    # Laid-core law with full contact accounting: P0 identified on range (b),
+    # ranges (a), (c)-(f) predicted (gap R1b; registered targets in
+    # doc/benchmarks.md).
+    from check_core_friction import identify_then_predict  # noqa: PLC0415
+
+    ident = identify_then_predict()
+    id_rows = ident["rows"]
+    assert isinstance(id_rows, dict)
+    rows.append(
+        Row(
+            "2",
+            "BM1-ID",
+            "Ménard laid cores, wedged trefoil and filler profiles (mu 0.2): "
+            "P0 identified on range (b) cycle work, ranges (a), (c)-(f) predicted",
+            "(b) ordered RMSE < 5%; (a), (c)-(f) cycle work within 20% and "
+            "ordered RMSE < 10%",
+            f"P0 {float(ident['pressure_Pa']) / 1e3:.1f} kPa; "
+            + "; ".join(
+                f"({tag}) {id_rows[tag]['work_error'] * 100:+.1f}% / "
+                f"{id_rows[tag]['rmse_percent']:.2f}%"
+                for tag in "abcdef"
+            ),
+            "PASS (identified, then predicted)" if ident["pass"] else "FAIL",
+        )
+    )
+
     rows.extend(_hu_rows())
     rows.extend(_witz_rows())
     rows.extend(_saevik_rows())

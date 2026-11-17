@@ -318,6 +318,131 @@ def janocha() -> None:
     )
 
 
+MENARD_RANGES = "abcdef"
+_MENARD_CROSSING = (0.0, 0.0, None, None, None, None)
+
+
+def _menard_range(tag: str) -> tuple[np.ndarray, np.ndarray, float | None]:
+    data = np.genfromtxt(
+        ROOT / "validation" / "paper_data" / f"menard_fig16{tag}_ordered.csv",
+        delimiter=",",
+        names=True,
+    )
+    crossing = _MENARD_CROSSING[MENARD_RANGES.index(tag)]
+    return (
+        np.asarray(data["curvature_1_per_m"], dtype=float),
+        np.asarray(data["moment_Nm"], dtype=float),
+        crossing,
+    )
+
+
+def _with_initial_pressure(
+    cable: cx.CableData, pressure: float, scope: str = "all_contacts"
+) -> cx.CableData:
+    from cablexsec.cables.schema import InitialStateProperties  # noqa: PLC0415
+
+    return cable.model_copy(
+        update={
+            "initial_state": InitialStateProperties(
+                external_pressure_Pa=pressure,
+                identification="identified",
+                source="identified on Menard (2023) Fig. 16b cycle work",
+                calibration_scope=scope,
+            )
+        }
+    )
+
+
+def _range_metrics(
+    cable: cx.CableData, tag: str, spec: CoreFrictionSpec | None
+) -> tuple[float, float, float]:
+    """(measured work, model work, ordered RMSE % of the moment range)."""
+    kappa, moment, crossing = _menard_range(tag)
+    measured = float(np.mean(cycle_work(kappa, moment, crossing=crossing)))
+    res = cx.compute_mkappa(cable, np.tile(kappa, 2), mu=0.2, core_friction=spec)
+    seq = res.moment_Nm[-kappa.size :]
+    rmse = float(np.sqrt(np.mean((seq - moment) ** 2)) / np.ptp(moment) * 100)
+    aug, _, cross = insert_cycle_crossings(kappa, crossing=crossing)
+    run = cx.compute_mkappa(cable, np.tile(aug, 2), mu=0.2, core_friction=spec)
+    mech = (run.work.stored_J_per_m + run.work.friction_J_per_m)[-aug.size :]
+    return measured, float(np.mean(np.diff(mech[cross]))), rmse
+
+
+#: Full contact accounting of the Menard cable: the trefoil wedge and the filler
+#: profiles, mu 0.2 on every contact as in the source FE (Section 5).
+MENARD_FULL = CoreFrictionSpec(filler_profiles=True)
+
+
+def identify_then_predict(
+    spec: CoreFrictionSpec | None = MENARD_FULL,
+) -> dict[str, object]:
+    """Identify P0 on range (b) cycle work, then predict the other ranges.
+
+    Registered targets (doc/benchmarks.md, gap R1b): (b) ordered RMSE < 5 %;
+    (a), (c)-(f) matched cycle work within 20 % and ordered RMSE < 10 %.
+    Model: ``menard2023_filled.yaml``, bounded chain, mu 0.2 everywhere.
+    """
+    path = Path(cx.menard2023_yaml_path()).with_name("menard2023_filled.yaml")
+    base = cx.load_cable(path, geometry_override=None)
+    scope = "armour_only" if spec is None else "all_contacts"
+    target = _range_metrics(base, "b", spec)[0]
+
+    def excess(pressure: float) -> float:
+        return (
+            _range_metrics(_with_initial_pressure(base, pressure, scope), "b", spec)[1]
+            - target
+        )
+
+    low, high = 1.0e3, 3.0e5
+    while excess(high) < 0.0:
+        high *= 2.0
+    for _ in range(60):
+        mid = 0.5 * (low + high)
+        if excess(mid) > 0.0:
+            high = mid
+        else:
+            low = mid
+        if high - low < 1e-4 * high:
+            break
+    pressure = 0.5 * (low + high)
+    cable = _with_initial_pressure(base, pressure, scope)
+    rows = {}
+    for tag in MENARD_RANGES:
+        measured, work, rmse = _range_metrics(cable, tag, spec)
+        rows[tag] = {
+            "measured_J_per_m": measured,
+            "model_J_per_m": work,
+            "work_error": work / measured - 1.0,
+            "rmse_percent": rmse,
+        }
+    predicted = [t for t in MENARD_RANGES if t != "b"]
+    passed = rows["b"]["rmse_percent"] < 5.0 and all(
+        abs(rows[t]["work_error"]) <= 0.20 and rows[t]["rmse_percent"] < 10.0
+        for t in predicted
+    )
+    return {"pressure_Pa": pressure, "rows": rows, "pass": passed}
+
+
+def janocha_code_to_code() -> dict[str, float]:
+    """Janocha (2024) Fig. 6 loop half-height, full accounting (reported)."""
+    cable = cx.load_cable(cx.iea_task49_66kv_yaml_path(), geometry_override=None)
+    k = 0.2 * np.sin(np.linspace(0.0, 4.0 * math.pi, 1601))
+    full = CoreFrictionSpec(
+        mu_core_filler=0.46,
+        mu_core_core=0.46,
+        mu_core_sheath=0.46,
+        filler_profiles=True,
+    )
+    out = {}
+    for model in ("bounded", "solved"):
+        for label, spec in (("armour", None), ("wedge", JANOCHA), ("full", full)):
+            res = cx.compute_mkappa(
+                cable, k, tension_N=50e3, contact_model=model, core_friction=spec
+            )
+            out[f"{model}_{label}"] = -_descending_zero(k, res.moment_Nm)
+    return out
+
+
 def menard() -> None:
     cable = cx.load_cable(cx.menard2023_yaml_path(), geometry_override=None)
     print("Menard and Cartraud (2023) Fig. 16, transferred inputs (mu 0.2, P 0.3 MPa)")
@@ -368,3 +493,18 @@ if __name__ == "__main__":
     print("Verification (gate CFW):", wedge_filler_checks())
     janocha()
     menard()
+    print("Menard identify (b), predict (a), (c)-(f), full accounting:")
+    for label, spec in (("full accounting", MENARD_FULL), ("armour only", None)):
+        out = identify_then_predict(spec)
+        rows = out["rows"]
+        assert isinstance(rows, dict)
+        cells = ", ".join(
+            f"({t}) {rows[t]['work_error'] * 100:+.1f} % / RMSE "
+            f"{rows[t]['rmse_percent']:.2f} %"
+            for t in MENARD_RANGES
+        )
+        print(
+            f"  {label}: P0 {float(out['pressure_Pa']) / 1e3:.1f} kPa; {cells}; "
+            f"targets {'PASS' if out['pass'] else 'FAIL'}"
+        )
+    print("Janocha Fig. 6 half-height, code-to-code:", janocha_code_to_code())

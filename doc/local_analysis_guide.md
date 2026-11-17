@@ -395,8 +395,9 @@ winding stress, extrusion or sheath pressure) is an input, not a prediction.
 It governs every friction-dependent result: the bending hysteresis, the
 armour friction stress and its fatigue, the fretting contact loads and how
 all of these change with tension and temperature. Two public cases show its
-weight: the Janocha et al. (2024) 66 kV loops need an initial pressure of
-about 0.48 MPa that the source does not state, and the cold-to-rated damage
+weight: the measured Ménard and Cartraud (2023) loops need an initial
+pressure of 0.2–0.3 MPa (0.22 MPa identified with the full core and filler
+accounting, 0.3 MPa calibrated by the source), and the cold-to-rated damage
 factor of the 66 kV template falls from 115 to about 20 and 2 with 40 and
 100 MPa armour winding stress ([template_66kv.md](template_66kv.md)
 Section 4.2.1).
@@ -2448,11 +2449,13 @@ assumed inputs and bounds of the reconstruction.
   aluminium foil constants are an assumed bound and lead is blocked.
 - **Core friction.** `core_friction` adds the laid-core stick–slip law
   (Section 6.1). Its contact loads are the axisymmetric state held fixed in
-  bending; the layers of one core move together. With the tension-induced
-  contact of the 66 kV template it raises the loop half-height from about
-  0.1 to 0.2 kN·m against about 1 kN·m published, and on the Ménard cable it
-  raises the already high transferred-input loop work further. Use it as a
-  sensitivity, not a calibrated default.
+  bending; the layers of one core move together. Its friction level follows
+  the declared clamping state (Section 4.4): with tension-induced contact
+  alone it is small at low tension. On the measured Ménard ranges, with the
+  initial pressure identified on one range, it predicts the work of the two
+  smallest ranges 24–26 % high (the registered ±20 % fails) and of the other
+  three within 13 % ([benchmarks.md](benchmarks.md), gap R1b). It stays off
+  by default.
 - **Global full-slip bending.** If the global model uses the full-slip
   (minimum) bending stiffness, local damage computed from its curvature
   histories is a conservative upper estimate compared with a global model that
