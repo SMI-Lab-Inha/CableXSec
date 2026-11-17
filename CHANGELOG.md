@@ -10,6 +10,19 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Added
 
+- Laid filler profiles in the core stick-slip law: `CoreFrictionSpec(filler_profiles=True)` (and
+  `mu_filler_profile`) turns the interstitial filler annulus into three profiles laid with the
+  cores that stick and slip with the same direction-tied cap. Their radius `√(J_f/A_f)` and lay
+  angle come from the annulus less the core circles, so the stuck profiles add `ξ_f E J_f cos³β_f
+  / 2`; each carries the ring force on both faces and has its own Yun `ξ_f`. They form their own
+  slip-scale group (`filler_profiles`) in the exported bending law and are reported by the core
+  lay stage of the Section properties analysis. Off by default. Checked by validation row CFW
+  (profile full-slip moment against the closed form, μ = 0 bitwise, stick tangent against
+  `EI_max + E J_f cos³β_f / 2`).
+- `CoreFrictionSpec(central_filler=...)` selects the support of the inward core loads in the
+  bounded core contact estimate: the neighbouring cores of a touching trefoil (default) or a
+  central filler.
+
 - The armour friction coefficient can depend on the contact pressure:
   `FrictionLaw(pressure_factor=((P, f), ...))`, a piecewise-linear factor `f(P)` on the
   coefficient, clamped at the table ends, evaluated at the local friction-setting pressure
@@ -186,6 +199,13 @@ All notable changes to CableXSec are recorded in this file. The format follows
   stale without changing a gate. CI checks the committed report before the coverage run, so a
   stale report fails within about 15 minutes instead of after the 45-minute coverage run.
 
+- Bounded core contact loads of the laid-core law: the inward resultant of a core (capstan load
+  plus its share of the ring line force) is now reacted by its two neighbours, whose contact
+  forces sum to the resultant over `sin(π/n)`, besides the ring share on the outer face. The
+  earlier estimate put both parts on one contact and left out the reaction. On the 66 kV
+  template at 50 kN the core load rises from 9.6 to 16.4 kN/m and the loop half-height with core
+  friction from 0.19 to 0.25 kN·m (bounded; the solved route is unchanged). Results without
+  `core_friction` are unchanged.
 - The distributed helix friction model (`friction_model="distributed"`, and `"auto"` on
   non-planar paths) runs about three times faster on the 66 kV template. `compute_fatigue` on
   one thread, warm, an hour of the 66 kV template at 10 Hz (36 001 samples, both armour

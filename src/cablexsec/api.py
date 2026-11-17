@@ -1022,6 +1022,13 @@ def compute_mkappa(
                 if model.strand_rings
                 else ""
             )
+            + (
+                f" and {model.fillers.n_profiles} laid filler profiles (stick "
+                f"coefficient {model.fillers.xi:.3f}, friction coefficient "
+                f"{model.fillers.mu:.3f})"
+                if model.fillers is not None
+                else ""
+            )
         )
         citations_extra = ("[Yun2020] (core xi)", "[KarlsenHusoy2026]")
         limitations_extra = (

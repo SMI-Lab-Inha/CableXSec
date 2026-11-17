@@ -70,21 +70,58 @@ Normal loads
 ``contact_model="solved"``: the trefoil contact forces of the solved radial
 state (:class:`cablexsec.mechanics.radial_solution.BundleState`): two
 core--core contacts, the filler--core force and the direct core--ring force
-of one core. Otherwise the bounded estimate: the inward capstan load of a
-core ``N_core tan^2 beta / r_c`` per metre of cable, with ``N_core`` its
-cable-axis tension share (as ``capstan_force_per_wire`` for an armour wire),
-plus one third of the line force ``2 pi r P`` that the bounded pressure chain
-applies inside the innermost armour, with the armour winding-stress increment
-superposed as for the armour clamping. With an interstitial filler both parts
-bear on the filler; without one the capstan part bears on the two neighbouring
-cores, whose contact forces sum to the capstan load over ``sin(pi/n)``
-(1.155 times for a trefoil), and the ring part on the sheath.
+of one core. Otherwise the bounded estimate. Each core carries two inward
+loads per metre of cable: its capstan load ``C = N_core tan^2 beta / r_c``
+(``N_core`` its cable-axis tension share, as ``capstan_force_per_wire`` for an
+armour wire) and its share ``R / n`` of the line force ``R = 2 pi r P`` that
+the bounded pressure chain applies inside the innermost armour (the armour
+winding-stress increment superposed as for the armour clamping). ``R / n``
+reaches the core on its outer face, through the filler or directly from the
+ring. The inward resultant ``F = C + R / n`` is reacted on the inner side of
+the core:
+
+* without a central filler (``CoreFrictionSpec.central_filler`` ``None`` or
+  ``False``, the default) by the two neighbouring cores of a touching
+  trefoil, whose contact normals lie ``pi/2 - pi/n`` off the radial
+  direction, so that the two contact forces sum to ``F / sin(pi/n)``
+  (1.155 ``F`` for three cores; two cores touch along the radial line);
+* with a central filler (``central_filler=True``) by that filler, radially.
+
+The normal load of a core is then ``R/n + F/sin(pi/n)`` (wedged trefoil) or
+``R/n + F`` (central filler). The earlier estimate put ``C + R/n`` on one
+contact and left out the reaction on the inner side.
+
+Filler profiles
+---------------
+With ``CoreFrictionSpec(filler_profiles=True)`` the interstitial filler (the
+non-structural filler annulus around the cores) is a population of ``n``
+shaped profiles laid with the cores (same pitch), each sticking to or
+slipping against the cores and the ring with the same direction-tied cap and
+return map. The filler region is the annulus minus the core envelopes
+(circles of the core radius in the cable cross-section); its area ``A_f`` and
+polar moment ``J_f`` about the cable axis give the effective radius
+``r_f = sqrt(J_f / A_f)``, so that ``1/2 E A_f r_f^2`` is the stuck bending
+stiffness ``E J_f / 2`` of the region (times ``xi cos^3 beta_f``), and the lay
+angle ``tan beta_f = 2 pi r_f / pitch``. A profile is loaded on both faces:
+the ring line force ``R / n`` on its outer face and the same force, passed
+on, against the cores (bounded estimate), or the solved filler--ring and
+filler--core forces divided among the profiles (solved), so ``q_f = 2 R / n``
+in the bounded estimate. Its stick coefficient is the Yun form with the
+contact penalty and the shear of half the mean filler depth
+``A_f / (2 pi r_b)`` over the profile perimeter ``4 pi r_b / n`` (``r_b`` the
+filler outer radius). The profiles carry no share of the cable tension (the
+filler stays non-structural axially), so they have no capstan load.
 
 Assumptions (stated, not solved)
 --------------------------------
 * Normal contact loads are those of the axisymmetric state and are held
   fixed during bending (as for the armour); the bending redistribution of
   core contact is not solved.
+* The wedged trefoil assumes touching cores. The outer-face load ``R / n`` of
+  a core and the face loads ``2 R / n`` of a profile are estimates: a profile
+  face is not radial, and part of ``R`` reaches the cores directly.
+* A central filler reacts the inward core loads; it is not part of the
+  slipping filler-profile population.
 * The layers of one core are bonded and move together axially; the core is
   a rod of rigidity ``EA_core`` whose interior shear enters only through
   ``xi``.
@@ -147,6 +184,7 @@ __all__ = [
     "CoreFrictionHistory",
     "CoreFrictionModel",
     "CoreFrictionSpec",
+    "FillerProfiles",
     "StrandRingFriction",
     "build_core_friction",
     "core_contact_loads",
@@ -193,6 +231,19 @@ class CoreFrictionSpec:
         ``mu_strand``).
     direction_hold_fraction : float
         Direction hold of the slip cap near zero curvature, as for the armour.
+    central_filler : bool or None
+        Load path of the inward core loads in the bounded estimate (module
+        notes): ``None`` or ``False`` (default) for a touching trefoil wedged
+        on its neighbours, ``True`` for a central filler that carries them
+        radially. The solved contact model reads the core support of the
+        solved radial state and accepts only ``None``.
+    filler_profiles : bool
+        Treat the interstitial filler as laid frictional profiles, one per
+        core interstice (module notes; default False). Needs a non-structural
+        filler annulus around the cores and a core lay.
+    mu_filler_profile : float or None
+        Friction coefficient of the profile contacts (default:
+        ``mu_core_filler``).
     """
 
     mu_core_filler: float = DEFAULT_CORE_MU
@@ -205,13 +256,29 @@ class CoreFrictionSpec:
     mu_strand: float | None = None
     mu_strand_outer: float | None = None
     direction_hold_fraction: float = DIRECTION_HOLD_FRACTION
+    central_filler: bool | None = None
+    filler_profiles: bool = False
+    mu_filler_profile: float | None = None
+
+    @property
+    def filler_mu(self) -> float:
+        """Friction coefficient of the filler-profile contacts."""
+        if self.mu_filler_profile is None:
+            return self.mu_core_filler
+        return self.mu_filler_profile
 
     def __post_init__(self) -> None:
         for name in ("mu_core_filler", "mu_core_core", "mu_core_sheath"):
             value = getattr(self, name)
             if not math.isfinite(value) or value < 0.0:
                 raise CableInputError(f"{name} must be finite and non-negative")
-        for name in ("mu_strand", "mu_strand_outer"):
+        if self.central_filler is not None and not isinstance(
+            self.central_filler, bool
+        ):
+            raise CableInputError("central_filler must be None, True or False")
+        if not isinstance(self.filler_profiles, bool):
+            raise CableInputError("filler_profiles must be True or False")
+        for name in ("mu_strand", "mu_strand_outer", "mu_filler_profile"):
             value = getattr(self, name)
             if value is not None and (not math.isfinite(value) or value < 0.0):
                 raise CableInputError(f"{name} must be finite and non-negative")
@@ -244,13 +311,16 @@ class CoreContactLoads:
     """Normal contact line loads on one core [N per metre of cable].
 
     ``core_core`` sums both neighbouring cores. ``source`` names the contact
-    model that produced them.
+    model that produced them. ``filler_profile_N_per_m`` is the sum of the
+    normal loads on both faces of one filler profile (module notes), the
+    load of the filler-profile population.
     """
 
     core_core_N_per_m: float
     core_filler_N_per_m: float
     core_sheath_N_per_m: float
     source: str
+    filler_profile_N_per_m: float = 0.0
 
     @property
     def total_N_per_m(self) -> float:
@@ -306,7 +376,12 @@ def _core_geometry(cable: CableData) -> tuple[int, float, float, float]:
 
 
 def _bounded_loads(
-    cable: CableData, axi: AxisymmetricResult, n_cores: int, r_c: float, beta: float
+    cable: CableData,
+    axi: AxisymmetricResult,
+    n_cores: int,
+    r_c: float,
+    beta: float,
+    central_filler: bool,
 ) -> CoreContactLoads:
     core_names = {x.name for x in _core_layers(cable)}
     n_core = sum(v for k, v in axi.layer_tension_N.items() if k in core_names)
@@ -335,16 +410,27 @@ def _bounded_loads(
         pressure += float(
             wound.interface_pressure_Pa[0] - base.interface_pressure_Pa[0]
         )
+    # Share of the ring line force on one core's outer face (through the
+    # filler where there is one, else directly from the ring).
     ring = 2.0 * math.pi * float(axi.interface_radii_m[0]) * pressure / n_cores
-    if _has_filler(cable):
-        return CoreContactLoads(0.0, capstan + ring, 0.0, "bounded")
-    # Without a filler the inward load rests on the neighbouring cores. With
-    # three or more cores each core touches two neighbours whose contact
+    has_filler = _has_filler(cable)
+    inward = capstan + ring
+    filler_face = ring if has_filler else 0.0
+    sheath_face = 0.0 if has_filler else ring
+    # A profile carries the ring force of its interstice on its outer face
+    # and passes it on to the cores: both faces, 2 R / n.
+    profile = 2.0 * ring if has_filler else 0.0
+    if central_filler:
+        # The central filler reacts the inward resultant radially.
+        return CoreContactLoads(
+            0.0, filler_face + inward, sheath_face, "bounded", profile
+        )
+    # Wedged trefoil: each core rests on its two neighbours, whose contact
     # normals lie pi/2 - pi/n off the radial direction, so the two contact
-    # forces sum to capstan / sin(pi/n) (1.155 times for a trefoil); two cores
-    # touch along the radial line.
-    core_core = capstan / math.sin(math.pi / n_cores) if n_cores >= 3 else capstan
-    return CoreContactLoads(core_core, 0.0, ring, "bounded")
+    # forces sum to F / sin(pi/n) (1.155 F for three cores); two cores touch
+    # along the radial line (sin(pi/2) = 1).
+    core_core = inward / math.sin(math.pi / n_cores)
+    return CoreContactLoads(core_core, filler_face, sheath_face, "bounded", profile)
 
 
 def core_contact_loads(
@@ -354,12 +440,23 @@ def core_contact_loads(
     contact_model: str = "bounded",
     radial_state: CableRadialState | None = None,
     section_state: SectionState | None = None,
+    central_filler: bool | None = None,
 ) -> CoreContactLoads:
-    """Normal contact line loads of one laid core (see the module notes)."""
+    """Normal contact line loads of one laid core (see the module notes).
+
+    ``central_filler`` selects the support of the inward core loads in the
+    bounded estimate (``None``/``False``: wedged trefoil; ``True``: central
+    filler); the solved model reads its own and accepts only ``None``.
+    """
     n_cores, r_c, beta, _ = _core_geometry(cable)
     if radial_state is not None or contact_model == "solved":
         if section_state is not None:
             raise CableSchemaError("supply a section state or a radial state, not both")
+        if central_filler is not None:
+            raise CableInputError(
+                "central_filler applies to the bounded core contact estimate; the "
+                "solved radial state sets the core support itself"
+            )
         if radial_state is None:
             from cablexsec.mechanics.radial_cable import (  # noqa: PLC0415
                 solve_cable_radial_state,
@@ -370,11 +467,18 @@ def core_contact_loads(
         bundle = radial_state.result.bundle
         if bundle is None:
             raise CableSchemaError("the solved radial state has no core bundle")
+        filler_core = max(bundle.filler_core_force_N_per_m, 0.0)
+        # One profile per interstice: the filler--ring force of the whole
+        # ring and the filler--core forces of all cores, shared equally.
+        profile = (
+            max(bundle.filler_ring_force_N_per_m, 0.0) + n_cores * filler_core
+        ) / n_cores
         return CoreContactLoads(
             2.0 * max(bundle.core_core_force_N_per_m, 0.0),
-            max(bundle.filler_core_force_N_per_m, 0.0),
+            filler_core,
             max(bundle.core_ring_force_N_per_m, 0.0),
             "solved",
+            profile,
         )
     if section_state is not None:
         section_state.require_cable(cable)
@@ -385,13 +489,13 @@ def core_contact_loads(
                 section_state.tension_N,
                 p_ext_Pa=section_state.external_pressure_Pa,
             )
-        return _bounded_loads(cable, axi, n_cores, r_c, beta)
+        return _bounded_loads(cable, axi, n_cores, r_c, beta, bool(central_filler))
     if contact_model not in {"bounded", "qp"}:
         raise CableSchemaError("contact_model must be 'bounded', 'qp' or 'solved'.")
     axi = compute_contact_forces(
         cable, tension_N, p_ext_Pa=cable.initial_state.external_pressure_Pa
     )
-    return _bounded_loads(cable, axi, n_cores, r_c, beta)
+    return _bounded_loads(cable, axi, n_cores, r_c, beta, bool(central_filler))
 
 
 @dataclass(frozen=True)
@@ -421,6 +525,34 @@ class StrandRingFriction:
 
 
 @dataclass(frozen=True)
+class FillerProfiles:
+    """Laid filler profiles as a frictional helical population (module notes).
+
+    ``line_load_N_per_m`` is the sum of the normal loads on both faces of one
+    profile; ``EA_profile_N`` the axial rigidity of one profile;
+    ``plane_section_EI_Nm2`` the stuck term ``1/2 E A_f r_f^2`` without
+    ``xi cos^3 beta_f``.
+    """
+
+    population: HelicalLayerSpec
+    n_profiles: int
+    layer_name: str
+    area_m2: float
+    r_effective_m: float
+    lay_angle_rad: float
+    EA_profile_N: float
+    line_load_N_per_m: float
+    mu: float
+    xi: float
+    plane_section_EI_Nm2: float
+
+    @property
+    def stick_EI_Nm2(self) -> float:
+        """Stick stiffness of the profiles, ``xi`` times plane section ``cos^3``."""
+        return float(self.population.EI_stick)
+
+
+@dataclass(frozen=True)
 class CoreFrictionModel:
     """Assembled core population, internal rings and their inputs."""
 
@@ -436,6 +568,7 @@ class CoreFrictionModel:
     plane_section_EI_Nm2: float
     strand_rings: tuple[StrandRingFriction, ...] = field(default=())
     tension_N: float = 0.0
+    fillers: FillerProfiles | None = None
 
     @property
     def core_stick_EI_Nm2(self) -> float:
@@ -447,8 +580,21 @@ class CoreFrictionModel:
         return float(sum(r.stick_EI_Nm2 for r in self.strand_rings))
 
     @property
+    def filler_stick_EI_Nm2(self) -> float:
+        return 0.0 if self.fillers is None else self.fillers.stick_EI_Nm2
+
+    @property
     def stick_EI_Nm2(self) -> float:
-        return self.core_stick_EI_Nm2 + self.strand_stick_EI_Nm2
+        return (
+            self.core_stick_EI_Nm2 + self.strand_stick_EI_Nm2 + self.filler_stick_EI_Nm2
+        )
+
+    @property
+    def populations(self) -> tuple[HelicalLayerSpec, ...]:
+        """The helical populations of the law: the cores, then the profiles."""
+        if self.fillers is None:
+            return (self.population,)
+        return (self.population, self.fillers.population)
 
 
 def _stick_coefficient(
@@ -477,6 +623,116 @@ def _stick_coefficient(
                 continue
             stack.append((ro - ri, shear_modulus(e, nu), math.pi * (ro + ri)))
     return yun_xi(series_shear_stiffness(stack), ea_core, beta, r_c)
+
+
+def _filler_region(
+    r_in: float, r_out: float, n_cores: int, r_c: float, r_core: float
+) -> tuple[float, float]:
+    """Area and polar moment about the cable axis of a filler annulus less the
+    core envelopes (circles of radius ``r_core`` at ``r_c``) [m², m⁴].
+
+    At radius ``r`` a core circle covers the angle
+    ``2 acos((r² + r_c² - r_core²) / (2 r r_c))``; the integrals over ``r`` are
+    Gauss--Legendre sums on the pieces between the core-circle radii, where
+    the integrand has square-root ends (relative error below 1e-6).
+    """
+    nodes, weights = np.polynomial.legendre.leggauss(64)
+    edges = sorted(
+        {r_in, r_out, *(x for x in (r_c - r_core, r_c + r_core) if r_in < x < r_out)}
+    )
+    area = polar = 0.0
+    for a, b in zip(edges[:-1], edges[1:], strict=False):
+        # Substitute r = a + (b - a) (1 - cos t) / 2 to smooth the ends.
+        t = 0.5 * math.pi * (nodes + 1.0)
+        r = a + 0.5 * (b - a) * (1.0 - np.cos(t))
+        dr = 0.5 * (b - a) * np.sin(t) * 0.5 * math.pi
+        cosine = np.clip((r**2 + r_c**2 - r_core**2) / (2.0 * r * r_c), -1.0, 1.0)
+        covered = np.where(np.abs(r - r_c) < r_core, 2.0 * np.arccos(cosine), 0.0)
+        width = np.maximum(2.0 * math.pi - n_cores * covered, 0.0)
+        area += float(np.sum(weights * width * r * dr))
+        polar += float(np.sum(weights * width * r**3 * dr))
+    return area, polar
+
+
+def _filler_profiles(
+    cable: CableData,
+    spec: CoreFrictionSpec,
+    loads: CoreContactLoads,
+    n_cores: int,
+    r_c: float,
+    beta: float,
+    r_core: float,
+) -> FillerProfiles:
+    fillers = [
+        x
+        for x in cable.layers
+        if isinstance(x, CylindricalLayer) and is_interstitial_filler(x, cable)
+    ]
+    if len(fillers) != 1:
+        raise CableSchemaError(
+            "filler profiles need exactly one interstitial filler layer around "
+            f"the cores (found {len(fillers)})"
+        )
+    layer = fillers[0]
+    if layer.structural:
+        # A structural filler annulus already bends in EI_min; the profiles
+        # would add the same material a second time.
+        raise CableSchemaError(
+            f"filler profiles need a non-structural filler annulus; "
+            f"{layer.name!r} is structural (declare structural: false)"
+        )
+    r_in, r_out = float(layer.r_inner_m or 0.0), float(layer.r_outer_m or 0.0)
+    area, polar = _filler_region(r_in, r_out, n_cores, r_c, r_core)
+    if not (area > 0.0 and polar > 0.0):
+        raise CableSchemaError(
+            f"filler layer {layer.name!r} leaves no area around the cores"
+        )
+    try:
+        e_f = library.get_property(layer.material, "E_Pa")
+        nu_f = library.get_property(layer.material, "nu")
+    except KeyError:
+        raise CableInputError(
+            f"filler layer {layer.name!r}: material {layer.material!r} has no "
+            "isotropic modulus (E_Pa, nu) for the filler profiles"
+        ) from None
+    r_f = math.sqrt(polar / area)
+    beta_f = math.atan(math.tan(beta) * r_f / r_c)
+    ea_profile = e_f * area / n_cores
+    stack: list[tuple[float, float, float]] = []
+    perimeter = 4.0 * math.pi * r_out / n_cores
+    if math.isfinite(spec.interface_stiffness_Pa_per_m):
+        stack.append((1.0, spec.interface_stiffness_Pa_per_m, perimeter))
+    if spec.core_shear:
+        depth = area / (2.0 * math.pi * r_out)
+        stack.append((0.5 * depth, shear_modulus(e_f, nu_f), perimeter))
+    xi_f = yun_xi(series_shear_stiffness(stack), ea_profile, beta_f, r_f)
+    n_st = n_cores * spec.n_stations_per_core
+    q_f = loads.filler_profile_N_per_m
+    population = HelicalLayerSpec(
+        n_wires=n_st,
+        r_helix_m=r_f,
+        lay_angle_rad=beta_f,
+        E_wire_Pa=e_f,
+        A_wire_m2=area / n_st,
+        xi=xi_f,
+        mu=spec.filler_mu,
+        F_n_axi_N=q_f,
+        contact_pressure_Pa=n_cores * q_f / (2.0 * math.pi * r_f),
+        normal_load_is_line=True,
+    )
+    return FillerProfiles(
+        population=population,
+        n_profiles=n_cores,
+        layer_name=layer.name,
+        area_m2=area,
+        r_effective_m=r_f,
+        lay_angle_rad=beta_f,
+        EA_profile_N=ea_profile,
+        line_load_N_per_m=q_f,
+        mu=spec.filler_mu,
+        xi=xi_f,
+        plane_section_EI_Nm2=0.5 * e_f * area * r_f**2,
+    )
 
 
 def _strand_rings(
@@ -568,6 +824,7 @@ def build_core_friction(
         contact_model=contact_model,
         radial_state=radial_state,
         section_state=section_state,
+        central_filler=spec.central_filler,
     )
     axial = axial_stiffness_by_layer(cable)
     cos3 = math.cos(beta) ** 3
@@ -606,22 +863,32 @@ def build_core_friction(
         plane_section_EI_Nm2=0.5 * contribution * r_c**2,
         strand_rings=_strand_rings(cable, spec, loads, tension_N, n_cores, beta),
         tension_N=float(tension_N),
+        fillers=(
+            _filler_profiles(cable, spec, loads, n_cores, r_c, beta, r_core)
+            if spec.filler_profiles
+            else None
+        ),
     )
 
 
 @dataclass(frozen=True)
 class CoreFrictionHistory:
-    """Moments ``(samples, 2)`` and work of the cores and internal rings."""
+    """Moments ``(samples, 2)`` and work of the cores, internal rings and
+    filler profiles (``filler_moment_Nm`` zero without profiles)."""
 
     core_moment_Nm: FloatArray
     strand_moment_Nm: FloatArray
     core_slip_fraction: FloatArray
     work: BendingWork
     model: CoreFrictionModel
+    filler_moment_Nm: FloatArray | None = None
 
     @property
     def moment_Nm(self) -> FloatArray:
-        return np.asarray(self.core_moment_Nm + self.strand_moment_Nm)
+        total = self.core_moment_Nm + self.strand_moment_Nm
+        if self.filler_moment_Nm is not None:
+            total = total + self.filler_moment_Nm
+        return np.asarray(total)
 
 
 def _strand_history(
@@ -658,11 +925,12 @@ def core_friction_history(
     *,
     initial_bending_angle: float = 0.0,
 ) -> CoreFrictionHistory:
-    """Biaxial history of the core population and the internal rings.
+    """Biaxial history of the core population, the internal rings and the
+    filler profiles.
 
-    The core stations use :func:`wire_slip_history` unchanged (direction-tied
-    Papailiou cap); the rings use :func:`strand_slip_strain`. Both return
-    moments in the material frame of the curvature components.
+    The core and profile stations use :func:`wire_slip_history` unchanged
+    (direction-tied Papailiou cap); the rings use :func:`strand_slip_strain`.
+    All return moments in the material frame of the curvature components.
     """
     kx = np.asarray(kappa_x, dtype=np.float64)
     ky = np.asarray(kappa_y, dtype=np.float64)
@@ -681,6 +949,21 @@ def core_friction_history(
     friction = w.friction_J_per_m + s_friction
     endpoint = w.endpoint_work_J_per_m + s_endpoint
     remainder = w.integration_remainder_J_per_m + s_remainder
+    filler_moment = None
+    if model.fillers is not None:
+        filler = wire_slip_history(
+            model.fillers.population,
+            kx,
+            ky,
+            initial_bending_angle=initial_bending_angle,
+            direction_hold_fraction=model.spec.direction_hold_fraction,
+        )
+        filler_moment = np.asarray(filler.moment_Nm)
+        fw = filler.work
+        stored = stored + fw.stored_J_per_m
+        friction = friction + fw.friction_J_per_m
+        endpoint = endpoint + fw.endpoint_work_J_per_m
+        remainder = remainder + fw.integration_remainder_J_per_m
     return CoreFrictionHistory(
         core_moment_Nm=np.asarray(history.moment_Nm),
         strand_moment_Nm=s_moment,
@@ -693,4 +976,5 @@ def core_friction_history(
             endpoint - stored - friction - remainder,
         ),
         model=model,
+        filler_moment_Nm=filler_moment,
     )

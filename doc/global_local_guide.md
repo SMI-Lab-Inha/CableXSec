@@ -420,8 +420,8 @@ bounds scale by `ρ` therefore obeys `M(κ; ρ) = ρ M(κ/ρ; 1)` over any curva
 capstan bound included, and its Iwan elements keep their stiffnesses `k_i` while their yield curvatures become
 `ρ κ_y,i`. With `slip_scale=True` the export carries this form as `BendingLawExport.slip_scale`, a `SlipScaleTable`:
 
-- the law at a reference tension split into friction groups, one per structural armour layer and `laid_cores` for
-  the core lay stage, each with its elements (`k_i`, `κ_y,i`), plus the full-slip stiffness `EI_slip`;
+- the law at a reference tension split into friction groups, one per structural armour layer, `laid_cores` for
+  the core lay stage and `filler_profiles` for its laid filler profiles, each with its elements (`k_i`, `κ_y,i`), plus the full-slip stiffness `EI_slip`;
 - the cap `R_g` of every group (its planar full-slip friction moment) over a table of tensions and, optionally,
   external pressures, the group scale `ρ_g = R_g / R_g,ref`, the single cap-weighted scale
   `s = Σ R_g / Σ R_g,ref`, and their derivatives `∂/∂T` and `∂/∂p_e` (central differences of the contact model,

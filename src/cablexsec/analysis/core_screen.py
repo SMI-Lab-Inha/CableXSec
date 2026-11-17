@@ -442,6 +442,9 @@ def compute_core_screen_fatigue(
             contact_tension_N,
             contact_model=contact_model,
             radial_state=radial_state,
+            central_filler=None
+            if core_friction is None
+            else core_friction.central_filler,
         )
         p_core = loads.total_N_per_m / (2.0 * math.pi * r_out)
         limitations.append(

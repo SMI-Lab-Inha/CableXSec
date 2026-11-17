@@ -93,7 +93,15 @@ def _bending_source(result: SectionPropertiesResult, case: SectionCaseResult) ->
         f"{cores.mu:.3g}, stick coefficient {cores.xi:.3g}, contact line load "
         f"{cores.contact_line_load_N_per_m:.6g} N/m per core, slip from "
         f"{cores.onset_curvature_1_m:.6g} to {cores.full_slip_curvature_1_m:.6g} "
-        "1/m)"
+        "1/m"
+        + (
+            ""
+            if cores.filler_line_load_N_per_m is None
+            else f"; filler profiles: line load {cores.filler_line_load_N_per_m:.6g}"
+            f" N/m per profile, slip from {cores.filler_onset_curvature_1_m:.6g} "
+            f"to {cores.filler_full_slip_curvature_1_m:.6g} 1/m"
+        )
+        + ")"
     )
     return (
         "monotonic backbone of the Papailiou slip-front law of the armour "
@@ -254,6 +262,16 @@ def section_properties_csv(
             "laid cores slip onset curvature [1/m]",
             "laid cores full slip curvature [1/m]",
         ]
+    with_fillers = any(
+        case.cores is not None and case.cores.filler_line_load_N_per_m is not None
+        for case in result.cases
+    )
+    if with_fillers:
+        header += [
+            "filler profiles line load per profile [N/m]",
+            "filler profiles slip onset curvature [1/m]",
+            "filler profiles full slip curvature [1/m]",
+        ]
     rows = [",".join(_csv_text(name) for name in header)]
     for case in result.cases:
         route = "solved section" if case.route == "solved" else "fixed radius"
@@ -274,6 +292,20 @@ def section_properties_csv(
                     _number(core.contact_line_load_N_per_m),
                     _number(core.onset_curvature_1_m),
                     _number(core.full_slip_curvature_1_m),
+                ]
+            )
+        if with_fillers:
+            core = case.cores
+            cells += (
+                ["", "", ""]
+                if core is None
+                or core.filler_line_load_N_per_m is None
+                or core.filler_onset_curvature_1_m is None
+                or core.filler_full_slip_curvature_1_m is None
+                else [
+                    _number(core.filler_line_load_N_per_m),
+                    _number(core.filler_onset_curvature_1_m),
+                    _number(core.filler_full_slip_curvature_1_m),
                 ]
             )
         rows.append(",".join(cells))
