@@ -96,6 +96,7 @@ __all__ = [
     "HelicalStrandedLayer",
     "InitialStateProperties",
     "Layer",
+    "LayerStiffness",
     "ManufacturingClamping",
     "MaterialValue",
     "PressureIdentification",
@@ -936,8 +937,55 @@ class ExtrusionShrinkage(_Frozen):
         return self
 
 
+#: Poisson ratio of a stiffness-defined layer whose ``stiffness`` block gives
+#: none: the stand-in of an isotropic solid (a model assumption).
+STIFFNESS_LAYER_POISSON = 0.3
+
+
+class LayerStiffness(_Frozen):
+    """Section stiffness of a cylindrical layer from a datasheet.
+
+    ``EA_N`` axial, ``EI_Nm2`` bending and ``GJ_Nm2`` torsional stiffness of
+    the layer about its own (the cable) axis, ``mass_kg_per_m`` its mass per
+    length; ``source`` names the datasheet. ``poisson_ratio`` (optional) sets
+    the Poisson ratio of the isotropic stand-in that a calculation needing a
+    material modulus uses (default :data:`STIFFNESS_LAYER_POISSON`).
+    """
+
+    EA_N: float
+    EI_Nm2: float
+    GJ_Nm2: float
+    mass_kg_per_m: float
+    source: str
+    poisson_ratio: float | None = None
+    notes: str = ""
+
+    @model_validator(mode="after")
+    def _stiffness_values(self) -> LayerStiffness:
+        for name in ("EA_N", "EI_Nm2", "mass_kg_per_m"):
+            if not getattr(self, name) > 0.0:
+                raise ValueError(f"stiffness {name} must be > 0")
+        if not self.GJ_Nm2 >= 0.0:
+            raise ValueError("stiffness GJ_Nm2 must be >= 0")
+        if self.poisson_ratio is not None and not 0.0 <= self.poisson_ratio < 0.5:
+            raise ValueError("stiffness poisson_ratio must lie in [0, 0.5)")
+        if not self.source.strip():
+            raise ValueError("a stiffness-defined layer needs a source")
+        return self
+
+
+def stiffness_material_name(layer_name: str) -> str:
+    """Material key of the stand-in material of a stiffness-defined layer."""
+    return f"{layer_name} (stiffness)"
+
+
 class CylindricalLayer(_LayerBase):
     """Solid annular layer (bedding, filler, polymer sheath) or a serving.
+
+    ``stiffness`` (:class:`LayerStiffness`) defines the layer by its section
+    stiffness instead of a material: a component whose properties come from a
+    datasheet. Its ``material`` is then a stand-in that the cable supplies
+    (:func:`stiffness_material_name`).
 
     ``construction: serving`` declares a served yarn or a wound tape. The
     layer keeps its mass, its radial and hoop stiffness (an annulus in plane
@@ -958,6 +1006,23 @@ class CylindricalLayer(_LayerBase):
     # "" (extruded or solid annulus) or "serving" (yarn or tape serving:
     # radial and hoop stiffness only).
     construction: Literal["", "serving"] = ""
+    # Section stiffness from a datasheet instead of a material.
+    stiffness: LayerStiffness | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _stiffness_material(cls, data: Any) -> Any:
+        """A stiffness-defined layer takes the stand-in material of its name."""
+        if not isinstance(data, Mapping) or data.get("stiffness") is None:
+            return data
+        expected = stiffness_material_name(str(data.get("name", "")))
+        given = data.get("material")
+        if given not in (None, "", expected):
+            raise ValueError(
+                "a stiffness-defined layer takes no material; omit 'material' "
+                "(its stand-in is named after the layer)"
+            )
+        return {**data, "material": expected}
 
     @model_validator(mode="before")
     @classmethod
@@ -1001,12 +1066,32 @@ class CylindricalLayer(_LayerBase):
             raise ValueError(
                 "a serving is wound, not extruded: it has no extrusion_shrinkage"
             )
+        if self.stiffness is not None:
+            if self.is_serving or not self.structural:
+                raise ValueError(
+                    "a stiffness-defined layer carries its stiffness: it cannot "
+                    "be a serving or non-structural"
+                )
+            if (
+                self.tape is not None
+                or self.strain_life
+                or self.extrusion_shrinkage is not None
+            ):
+                raise ValueError(
+                    "a stiffness-defined layer has no material for a tape "
+                    "winding, strain-life constants or an extrusion shrinkage"
+                )
         return self
 
 
 def is_serving(layer: object) -> bool:
     """Whether ``layer`` is a ``cylindrical`` layer declared as a serving."""
     return isinstance(layer, CylindricalLayer) and layer.is_serving
+
+
+def layer_stiffness(layer: object) -> LayerStiffness | None:
+    """The datasheet stiffness of a stiffness-defined layer (else ``None``)."""
+    return layer.stiffness if isinstance(layer, CylindricalLayer) else None
 
 
 class CoreStrandRing(_Frozen):
@@ -1333,6 +1418,48 @@ class CableMaterial(_Frozen):
     def yaml_body(self) -> dict[str, Any]:
         """The mapping of this material under its key in the cable YAML."""
         return self.model_dump(mode="json", exclude={"name"}, exclude_defaults=True)
+
+
+def stiffness_material(layer: CylindricalLayer) -> CableMaterial | None:
+    """The stand-in material of a stiffness-defined layer (``None`` otherwise).
+
+    An isotropic solid filling the annulus with the datasheet's axial
+    stiffness and mass: ``E = EA / A``, ``E_eff_bending = EI / I``, density
+    ``m / A``, Poisson ratio from the block (default
+    :data:`STIFFNESS_LAYER_POISSON`) and no thermal expansion. It serves the
+    calculations that read a material (mass, stress recovery, the shear
+    support of the armour, the hoop restraint of the buckling screen); the
+    section stiffness itself is taken from the block. ``None`` also while
+    the radii are withheld.
+    """
+    block = layer.stiffness
+    if block is None or layer.r_inner_m is None or layer.r_outer_m is None:
+        return None
+    ri, ro = layer.r_inner_m, layer.r_outer_m
+    area = math.pi * (ro**2 - ri**2)
+    inertia = math.pi * (ro**4 - ri**4) / 4.0
+    source = f"stiffness of layer {layer.name!r}: {block.source}"
+
+    def value(number: float, how: str) -> MaterialValue:
+        return MaterialValue(value=number, source=f"{how} ({source})")
+
+    nu = block.poisson_ratio
+    return CableMaterial(
+        name=layer.material,
+        description=f"stand-in of the stiffness-defined layer {layer.name!r}",
+        E_Pa=value(block.EA_N / area, "EA over the annulus area"),
+        E_eff_bending_Pa=value(block.EI_Nm2 / inertia, "EI over the annulus inertia"),
+        nu=MaterialValue(
+            value=STIFFNESS_LAYER_POISSON if nu is None else nu,
+            source="model assumption (isotropic stand-in)"
+            if nu is None
+            else f"stiffness block ({source})",
+        ),
+        rho_kg_m3=value(block.mass_kg_per_m / area, "mass over the annulus area"),
+        alpha_T_K=MaterialValue(
+            value=0.0, source="model assumption: no thermal expansion given"
+        ),
+    )
 
 
 @lru_cache(maxsize=64)
@@ -1685,9 +1812,23 @@ class CableData(_Frozen):
         if len(names) != len(set(names)):
             raise ValueError("layer names must be unique within a cable")
         keys = [material.name for material in self.materials]
+        keys += [material.name for material in self.stiffness_materials]
         if len(keys) != len(set(keys)):
-            raise ValueError("material names must be unique within a cable")
+            raise ValueError(
+                "material names must be unique within a cable (a stiffness-defined "
+                "layer reserves the key '<layer> (stiffness)')"
+            )
         return self
+
+    @property
+    def stiffness_materials(self) -> tuple[CableMaterial, ...]:
+        """Stand-in materials of the stiffness-defined layers."""
+        return tuple(
+            material
+            for layer in self.layers
+            if isinstance(layer, CylindricalLayer)
+            and (material := stiffness_material(layer)) is not None
+        )
 
     @model_validator(mode="after")
     def _radially_ordered(self) -> CableData:
@@ -1720,11 +1861,13 @@ class CableData(_Frozen):
         the library alone answer, also inside the scope of another cable.
         The scope is local to the current thread (and task).
         """
-        return library.material_scope(material_overlay(self.materials))
+        return library.material_scope(
+            material_overlay(self.materials + self.stiffness_materials)
+        )
 
     def get_material(self, name: str) -> CableMaterial:
-        """Return the cable material ``name``."""
-        for material in self.materials:
+        """Return the cable material ``name`` (or a stiffness-defined stand-in)."""
+        for material in self.materials + self.stiffness_materials:
             if material.name == name:
                 return material
         raise CableLookupError(

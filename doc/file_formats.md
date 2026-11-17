@@ -93,7 +93,7 @@ them filled.
 | --- | --- | --- |
 | `helical` (armour wires) | `n_wires`, `d_wire_m`, `r_helix_m`, `lay_angle_deg` | `lay_direction` (`right_hand` default, `left_hand`), `manufacturing_clamping`, `bulk_sn`, `fretting_sn`, `transverse_slip_fraction`; flat or profiled wires: `wire_shape` (`round` default, `rectangular`, `profiled`), `wire_width_m`, `wire_thickness_m`, `wire_corner_radius_m`, `wire_area_m2`, `wire_I_normal_m4`, `wire_I_lateral_m4`, `wire_J_m4` |
 | `helical_stranded` (strand within conductor within cable) | `n_conductors`, `r_cable_m`, `lay_angle_cable_deg`, `n_strands`, `r_strand_m`, `d_strand_m`, `lay_angle_strand_deg` | `bulk_sn`, `fretting_sn` |
-| `cylindrical` (polymer annulus, bedding, filler, sheath, serving) | `r_inner_m`, `r_outer_m` | `tape` (helical tape winding), `strain_life`, `extrusion_shrinkage`, `construction` (`serving`) |
+| `cylindrical` (polymer annulus, bedding, filler, sheath, serving) | `r_inner_m`, `r_outer_m` | `tape` (helical tape winding), `strain_life`, `extrusion_shrinkage`, `construction` (`serving`), `stiffness` (instead of `material`) |
 | `cylindrical_offset` (core component: conductor, insulation, screen) | `r_offset_m`, `r_inner_m`, `r_outer_m` | `n_cores` (default 3), `conductor_area_mm2`, `strand_layers`, `n_strands`, `strand_diameter_mm`, `strand_lay_angle_deg`, `construction`, `electrical`, `bulk_sn`, `fretting_sn`, `strain_life`, `outer_face_pressure`, `tape` |
 | `cylindrical_shell` (lead or corrugated aluminium sheath) | `r_mid_m`, `t_m` | `f_corrugation` (default 1), `scf` (default 1), `construction` (`bonded_laminate`), `bulk_sn`, `fretting_sn`, `strain_life` |
 
@@ -110,6 +110,39 @@ marked `kinematic`. A serving is non-structural
 (`structural` defaults to `false`; `true` is refused), needs `r_inner_m > 0`, has no `extrusion_shrinkage`
 and is never an interstitial filler. Without `construction` a `cylindrical`
 layer is a solid annulus, as before.
+
+A `cylindrical` layer whose properties come from a datasheet is defined by its
+section stiffness instead of a material:
+
+```yaml
+  - name: datasheet_unit
+    layer_type: cylindrical
+    r_inner_m: 0.0
+    r_outer_m: 0.012
+    stiffness:
+      EA_N: 2.4e6            # axial stiffness [N]
+      EI_Nm2: 4.1            # bending stiffness [N m2]
+      GJ_Nm2: 3.2            # torsional stiffness [N m2]
+      mass_kg_per_m: 0.21
+      poisson_ratio: 0.35    # optional; default 0.3 (model assumption)
+      source: "manufacturer datasheet, rev. B"
+```
+
+The layer adds `EA_N` to the axial stiffness and the load sharing, `EI_Nm2`
+to the bending stiffness (stick and slip; a concentric layer has no
+parallel-axis term) and `GJ_Nm2` to the torsional stiffness, and
+`mass_kg_per_m` to the mass. It takes no `material` key: the cable supplies a
+stand-in material `"<name> (stiffness)"`, an isotropic solid filling the
+annulus (`E = EA/A`, bending modulus `EI/I`, density `m/A`, the Poisson ratio
+above, no thermal expansion), for the calculations that read a material: the
+shear support of the armour in the finite-support no-slip coefficient, the
+hoop restraint of the armour buckling screen and the component stress, which
+is that of the stand-in and has no limit. The radii place the layer in the
+bounded contact chain. The coupled radial models (`contact_model="qp"`,
+`"solved"`, coiling, the solved torque balance) refuse the layer, which has
+no radial law, and thermal analyses need the material properties it lacks.
+The layer is structural and cannot be a serving or carry a tape winding or an
+extrusion shrinkage.
 
 `lay_angle_deg` lies between −90° and 90°. A rectangular or profiled wire
 fills in `d_wire_m` as the diameter of the round wire of the same area. A

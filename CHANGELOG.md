@@ -45,6 +45,15 @@ All notable changes to CableXSec are recorded in this file. The format follows
 - `CoreFrictionSpec(central_filler=...)` selects the support of the inward core loads in the
   bounded core contact estimate: the neighbouring cores of a touching trefoil (default) or a
   central filler.
+- A cylindrical layer defined by its section stiffness: `stiffness: {EA_N, EI_Nm2, GJ_Nm2,
+  mass_kg_per_m, source}` (optional `poisson_ratio`) replaces `material` for a component whose
+  properties come from a datasheet. It adds its `EA` to the axial stiffness and the load
+  sharing, its `EI` to the stick and slip bending stiffness, its `GJ` to the torsional stiffness
+  and its mass to the section; the radii place it in the bounded contact chain. A stand-in
+  material, an isotropic solid filling the annulus (`E = EA/A`, `EI/I`, `m/A`, Poisson ratio
+  0.3 unless given, no thermal expansion), serves the calculations that read a material. The
+  coupled radial models refuse the layer. A stiffness block that repeats a material layer's
+  values reproduces its stiffness, mass and fatigue damage to round-off.
 - A serving layer: `construction: serving` on a `cylindrical` layer declares a served yarn or a
   wound tape. It keeps its mass, its radial and hoop stiffness (an annulus of its material in
   plane stress along the cable axis, in the concentric and the meshed three-core radial
