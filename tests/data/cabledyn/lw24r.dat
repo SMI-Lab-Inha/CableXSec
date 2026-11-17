@@ -1,0 +1,99 @@
+--------------------- CableDyn Input File ------------------------------------
+Lazy-wave power cable with a clamped hang-off on a vessel moving with its RAOs in a JONSWAP sea
+-- Geometry and properties match lozon_gomex80_power_cable.dat. The vessel moves as the response of
+-- a displacement RAO table to the deck sea; the same wave components load the cable, so the
+-- vessel and the line see one sea. The RAO values in sample_rao.txt are illustrative.
+-- The hang-off is clamped (Rigid) along the static fairlead tangent, so the clamp turns with the
+-- vessel and BendMom1N1 reports the connection moment at End A.
+--------------------- LINE TYPES ---------------------------------------------
+TypeName  Diam   MassDenInAir  EA       BA   EI       Cd_n Cd_t Ca_n Ca_t
+(-)       (m)    (kg/m)        (N)      (-)  (N-m2)   (-)  (-)  (-)  (-)
+bare      0.160  36.70         4.69e8   0.0  1.99e4   1.2  0.1  1.0  0.0
+buoy      0.290  59.53         4.69e8   0.0  1.99e4   1.2  0.1  1.0  0.0
+--------------------- POINTS ------------------------------------------------
+ID  Type     X       Y    Z
+(-) (-)      (m)     (m)  (m)
+1   Coupled  5.0     0.0  -14.0
+2   Fixed    125.0   0.0  -80.0
+--------------------- LINES -------------------------------------------------
+ID  NodeA  NodeB  Outputs
+(-) (-)    (-)    (-)
+1   1      2      pt
+--------------------- SECTIONS ----------------------------------------------
+LineID  LineType  Length   NumSegs
+(-)     (-)       (m)      (-)
+1       bare      68.114   10
+1       buoy      50.000   8
+1       bare      52.101   6
+--------------------- END CONNECTIONS ---------------------------------------
+-- End A is clamped along the static hang-off tangent (81.6 deg below horizontal, toward End B).
+LineID  End  Stiffness  EzX     EzY  EzZ
+(-)     (-)  (N-m/rad)  (-)     (-)  (-)
+1       A    Rigid      0.1461  0.0  -0.9893
+--------------------- OPTIONS -----------------------------------------------
+9.80665  g                                   - Gravitational acceleration (m/s^2) [default: 9.80665]
+1025.0   rhoW                                - Water density (kg/m^3) [default: 1025]
+80.0     WtrDpth                             - Water depth for the flat seabed (m) [default: absent standalone; host-owned OpenFAST]
+1.0e5    kBot                                - Seabed penalty stiffness base (Pa/m) [default: 1.0e5]
+1.0e4    cBot                                - Seabed normal damping base (Pa-s/m) [default: 1.0e4]
+0.4      rhoInf                              - Generalised-alpha spectral radius {0<=rhoInf<=1} [default: 0.4]
+False    modified_newton                     - Tangent-reuse mode {False=full Newton; True=guarded reuse} [default: False]
+0.1      dtM                                 - CableDyn internal time step (s) [default: omitted standalone; 0.1 s target OpenFAST]
+1.0      TMax                                - Standalone simulation duration (s)
+sample_rao.txt vesselRAO - Displacement RAO table: vessel motion from the deck waves
+0.0|0.0|0.0 vesselRef - Vessel reference point, rotation centre and RAO origin (m) [default: 0|0|0]
+False     adaptive_mesh    - Automatic finite-EI refinement {False; True} [default: False]
+True      tensile_safety   - Refine and reject local axial compression in this tensile cable
+dynamic_solver 1.0e-4 1.0e-14 100 12 - Relative tolerance, absolute tolerance, max iterations, backtracks
+none      frictionMu       - Seabed friction coefficient {none; value>=0} [default: none]
+none      current           - Current model and velocity (m/s) {none; uniform; profile} [default: none]
+jonswap 4.0 10.0 3.3 30.0 waves - Wave model, JONSWAP Hs, Tp, gamma, and direction (m, s, deg) {none; airy; jonswap}
+1         WaveSeed          - Seed of the random sea [default: 1]
+5.0       rampTime          - Half-cosine start-up ramp of the wave amplitudes (s) [default: 0]
+0         WaterKin          - Water-kinematics source {0/none; file; SEASTATE coupled only} [default: no policy]
+-- Complete option/default reference: cabledyn_options_reference.dat and doc/options.rst.
+--------------------- OUTPUTS -----------------------------------------------
+"FairTen1"
+"AnchTen1"
+"Curv1N2"
+"Curv1N3"
+"Curv1N4"
+"Curv1N8"
+"Curv1N10"
+"Curv1N12"
+"Ten1N2"
+"Ten1N3"
+"Ten1N4"
+"Ten1N8"
+"Ten1N9"
+"Ten1N10"
+"Ten1N12"
+"L1N1Dec"
+"L1N1Azi"
+"L1N2Dec"
+"L1N2Azi"
+"L1N3Dec"
+"L1N3Azi"
+"L1N4Dec"
+"L1N4Azi"
+"L1N5Dec"
+"L1N5Azi"
+"L1N6Dec"
+"L1N6Azi"
+"L1N7Dec"
+"L1N7Azi"
+"L1N8Dec"
+"L1N8Azi"
+"L1N9Dec"
+"L1N9Azi"
+"L1N10Dec"
+"L1N10Azi"
+"L1N11Dec"
+"L1N11Azi"
+"L1N12Dec"
+"L1N12Azi"
+"L1N13Dec"
+"L1N13Azi"
+"L1N14Dec"
+"L1N14Azi"
+--------------------- need this line ----------------------------------------

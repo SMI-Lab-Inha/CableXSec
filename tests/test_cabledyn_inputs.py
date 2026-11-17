@@ -221,7 +221,13 @@ def test_coupled_static_profile_is_recorded(tmp_path):
         f.write("\t".join(["(s)", *units]) + "\n")
         for k in range(nt):
             f.write(_fmt([0.1 * k, *[channels[n][k] for n in names]]) + "\n")
-    (tmp_path / "of.CD.static.out").write_text("static\n", encoding="utf-8")
+    (tmp_path / "of.CD.static.out").write_text(
+        "CableDyn coupled static configuration\n"
+        "LineID\tNode\tArcLength\tX\tY\tZ\n"
+        "(-)\t(-)\t(m)\t(m)\t(m)\t(m)\n"
+        + "".join(f"1\t{j}\t0\t0\t0\t0\n" for j in range(1, 102)),
+        encoding="utf-8",
+    )
     read = read_cabledyn_sections(
         tmp_path / "of",
         tmp_path / "of.dat",
@@ -312,7 +318,7 @@ def test_duplicated_channel(tmp_path):
             ],
             "rows missing or unordered",
         ),
-        (lambda rows: rows[:-1], "nodes, expected"),
+        (lambda rows: rows[:-1], "different numbers of nodes"),
     ],
 )
 def test_static_profile(tmp_path, edit, match):
@@ -372,19 +378,40 @@ def test_element_file_layout(tmp_path, kwargs, match):
         _read(root, deck)
 
 
-def test_mesh_change_needs_and_is_checked_by_the_element_file(tmp_path):
+def test_mesh_change_is_checked_by_the_element_file(tmp_path):
     root, deck = _case(tmp_path)
-    _elements(tmp_path / "case.elements.out", 10.0 * np.arange(51) / 50)
+    # As many nodes as the deck, at other arc lengths.
+    _elements(tmp_path / "case.elements.out", 10.0 * (np.arange(101) / 100) ** 1.1)
     with pytest.raises(CableSchemaError, match="differs from the deck sections"):
         _read(root, deck)
+    _elements(tmp_path / "case.elements.out", 10.0 * np.arange(51) / 50)
+    with pytest.raises(CableSchemaError, match="files from different runs"):
+        _read(root, deck)
     (tmp_path / "case.elements.out").unlink()
+    # adaptive_mesh may refine; files listing the deck nodes show it did not.
     _edit(
         deck,
         "--------------------- OUTPUTS ---",
         "true adaptive_mesh - x\n--------------------- OUTPUTS ---",
     )
-    with pytest.raises(CableSchemaError, match="elements.out file is needed"):
-        _read(root, deck)
+    read = _read(root, deck)
+    assert read.checks["mesh"]["refined"] is False
+    assert read.checks["arc_lengths"] == "deck sections"
+
+
+@pytest.mark.parametrize("ei", [0.0, 2.0e4])
+def test_element_file_of_other_lines(tmp_path, ei):
+    """``.elements.out`` may list only the finite-EI lines of a run."""
+    root, deck = _case(tmp_path, deck_kwargs={"ei": ei})
+    path = tmp_path / "case.elements.out"
+    _elements(path, 10.0 * np.arange(101) / 100)
+    text = path.read_text(encoding="utf-8").replace("\n1\t", "\n2\t")
+    path.write_text(text, encoding="utf-8")
+    if ei > 0.0:
+        with pytest.raises(CableSchemaError, match="elements of line 1"):
+            _read(root, deck)
+    else:
+        assert _read(root, deck).checks["arc_lengths"] == "deck sections"
 
 
 # --------------------------------------------------------------------------- #

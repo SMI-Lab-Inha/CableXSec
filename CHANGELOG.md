@@ -397,6 +397,24 @@ All notable changes to CableXSec are recorded in this file. The format follows
   its plane stays planar. Over the 1 203 tests that reach the planarity test and the shipped
   fatigue examples and tutorials, no path other than the new checks changes its verdict.
 
+- `read_cabledyn_sections` reads runs whose static solve refined the mesh of a finite-EI line
+  (`adaptive_mesh`, `tensile_safety` or CableDyn's automatic refinement). It rejected them with
+  "mesh of line … differs from the deck sections": `.static.out`, `.elements.out` and the
+  per-line files list every node of the refined mesh, while the node channels name the deck
+  nodes. The current CableDyn refines the 24 deck elements of the test deck `lw24.dat` to 43, so
+  that run could not be read. The reader now locates the deck nodes among the mesh nodes by the
+  `DeckNode` column of `.static.out` or the `# DeckNode` line of `.Line<L>.p.out` (failing both,
+  by their arc lengths in `.elements.out`), reads the node channels at the deck nodes and the
+  positions and segment tensions on the refined mesh, and records the mesh in
+  `checks["mesh"]`. A deck that does not match the output is still rejected: the files must
+  list the same number of nodes, every `DeckNode` numbering must name the deck nodes in order
+  and agree with the others, and the deck nodes must lie at the arc lengths of the deck sections
+  in `.elements.out`. Without `.elements.out` (no placement of the added nodes) the positions are
+  read at the deck nodes, `tension_source="auto"` takes the node channels and
+  `tension_source="segments"` or chord tangents are refused by name. `adaptive_mesh` without
+  `.elements.out` is no longer refused: the files show whether the mesh was refined. Real
+  CableDyn 0.4.2 output of the refined run is in `tests/data/cabledyn/lw24r.*`; from the refined
+  positions the curvature meets every `Curv` channel within the default 5 %.
 - `read_cabledyn_sections` closes every output file it reads. The per-line `.p.out` and
   `.t.out` readers were left open after a read (and after a failed one) until garbage
   collection, which raised `ResourceWarning`. The files of one run must now also end on the same

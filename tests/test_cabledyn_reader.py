@@ -9,8 +9,10 @@ tensions and curvature magnitudes. ``tests/data/cabledyn`` holds compact runs
 on the ``lazy_wave_vessel_rao`` example cable (JONSWAP Hs 4 m, Tp 10 s,
 30 deg; RAO-driven hang-off): ``lw128`` of the CableDyn 0.4.2 driver (node
 tangents; development build 4b94321), ``lw128_v010`` of the v0.1.0 driver
-on the same deck (chord tangents) and ``lw24`` of the v0.1.0 driver (no
-tangent channels).
+on the same deck (chord tangents), ``lw24`` of the v0.1.0 driver (no
+tangent channels) and ``lw24r`` of the CableDyn 0.4.2 driver (development
+build 4b94321) on the ``lw24`` deck (1 s, tangent channels), whose static
+solve (``tensile_safety True``) now refines the 24 deck elements to 43.
 """
 
 from __future__ import annotations
@@ -603,7 +605,7 @@ def test_mesh_that_differs_from_the_deck_is_rejected(tmp_path):
     positions = _bending_case(np.full(3, 0.02), np.zeros(3), 3)
     root, deck = _write_case(tmp_path, positions)
     _deck(deck, n_elements=99)
-    with pytest.raises(CableSchemaError, match="header does not match"):
+    with pytest.raises(CableSchemaError, match="the deck and the output differ"):
         read_cabledyn_sections(root, deck, {"s": 5.0})
 
 
@@ -863,3 +865,158 @@ def test_real_cabledyn_run_with_line_files():
         "elements",
         "deck",
     }
+
+
+# --------------------------------------------------------------------------- #
+# A mesh the static solve refined                                             #
+# --------------------------------------------------------------------------- #
+def _refined_copy(tmp_path, files=("out", "Line1.p.out", "Line1.t.out", "dat")):
+    """Copy of the ``lw24r`` run with only ``files`` (suffixes after the root)."""
+    for suffix in files:
+        name = f"lw24r.{suffix}"
+        (tmp_path / name).write_bytes((DATA / name).read_bytes())
+    return tmp_path / "lw24r", tmp_path / "lw24r.dat"
+
+
+@pytest.mark.full_scale
+def test_real_cabledyn_run_on_a_refined_mesh():
+    """``tensile_safety True`` refines the 24 deck elements to 43.
+
+    CableDyn 0.4.2 (development build 4b94321) splits deck elements 6 to 24 in
+    two; the per-line files, ``.static.out`` and ``.elements.out`` list the
+    44 mesh nodes, the node channels name the 25 deck nodes (``# DeckNode``
+    of ``.p.out`` and the ``DeckNode`` column of ``.static.out``). From the
+    refined positions the curvature meets every ``Curv`` channel within the
+    default 5 % (the 24-element ``lw24`` run of v0.1.0 needs 50 %); from the
+    deck-node tangents alone within 10 %.
+    """
+    root, deck = DATA / "lw24r", DATA / "lw24r.dat"
+    sections = {"upper": 10.0, "sag": 58.4}
+    read = read_cabledyn_sections(root, deck, sections, curvature_source="positions")
+    assert read.checks["mesh"] == {
+        "deck_nodes": 25,
+        "output_nodes": 44,
+        "refined": True,
+        "deck_nodes_located_by": "DeckNode of lw24r.Line1.p.out, lw24r.static.out",
+    }
+    assert read.checks["arc_lengths"].startswith("refined mesh of .elements.out")
+    assert read.checks["first_row_vs_static_m"] == 0.0
+    assert read.checks["tension_source"].startswith("segment")
+    records = read.checks["curvature_vs_channels"]
+    assert set(records) == {"N2", "N3", "N4", "N8", "N10", "N12"}
+    for node in ("N3", "N4", "N8", "N10", "N12"):
+        record = records[node]
+        assert record["max_abs_error_1_m"] <= 0.025 * record["max_channel_1_m"], node
+    sag = read.histories["sag"]
+    assert np.all(sag.rotation_curvature_y_1_m < -0.09)
+    assert 1.3e3 < sag.effective_tension_N.mean() < 1.5e3
+
+    tangent = read_cabledyn_sections(
+        root,
+        deck,
+        sections,
+        curvature_source="tangent",
+        curvature_check_rtol=0.1,
+    )
+    assert tangent.checks["tangent_placement"].startswith("node")
+    for node, record in tangent.checks["curvature_vs_channels"].items():
+        assert record["max_abs_error_1_m"] <= 0.1 * record["max_channel_1_m"], node
+    np.testing.assert_allclose(
+        tangent.histories["sag"].rotation_curvature_y_1_m,
+        sag.rotation_curvature_y_1_m,
+        rtol=0.01,
+    )
+    # Chords on the refined mesh (CableDyn 0.4.1 placement) do not fit 0.4.2.
+    with pytest.raises(CableSchemaError, match="needs the default tangent_placement"):
+        read_cabledyn_sections(
+            root,
+            deck,
+            sections,
+            curvature_source="tangent",
+            curvature_check_rtol=0.1,
+            tangent_placement="chord",
+        )
+
+
+def test_refined_mesh_is_located_without_a_deck_node_numbering(tmp_path):
+    """Without ``DeckNode`` the deck nodes are found by their arc lengths."""
+    root, deck = _refined_copy(
+        tmp_path, ("out", "Line1.t.out", "elements.out", "static.out", "dat")
+    )
+    lines = (DATA / "lw24r.Line1.p.out").read_text(encoding="utf-8").splitlines()
+    assert lines[1].startswith("# DeckNode")
+    (tmp_path / "lw24r.Line1.p.out").write_text(
+        "\n".join([lines[0], *lines[2:]]) + "\n", encoding="utf-8"
+    )
+    static = (tmp_path / "lw24r.static.out").read_text(encoding="utf-8").splitlines()
+    (tmp_path / "lw24r.static.out").write_text(
+        "\n".join([static[0], *("\t".join(row.split("\t")[:-1]) for row in static[1:])])
+        + "\n",
+        encoding="utf-8",
+    )
+    read = read_cabledyn_sections(
+        root, deck, {"sag": 58.4}, curvature_source="positions"
+    )
+    assert read.checks["mesh"]["deck_nodes_located_by"] == (
+        "arc lengths of lw24r.elements.out"
+    )
+    reference = read_cabledyn_sections(
+        DATA / "lw24r", DATA / "lw24r.dat", {"sag": 58.4}, curvature_source="positions"
+    )
+    np.testing.assert_array_equal(
+        read.histories["sag"].rotation_curvature_y_1_m,
+        reference.histories["sag"].rotation_curvature_y_1_m,
+    )
+
+
+def test_refined_mesh_without_the_element_file(tmp_path):
+    """The multibody march writes no ``.static.out`` or ``.elements.out``.
+
+    The ``# DeckNode`` line of ``.p.out`` still locates the deck nodes, so the
+    positions are read there; the segments of ``.t.out`` and chords on the
+    refined mesh cannot be placed.
+    """
+    root, deck = _refined_copy(tmp_path)
+    sections = {"upper": 10.0, "sag": 58.4}
+    read = read_cabledyn_sections(root, deck, sections, curvature_check_rtol=0.1)
+    assert read.checks["curvature_source"] == "tangent"
+    assert read.checks["tension_source"] == "node channels Ten<L>N<J>"
+    assert "lw24r.Line1.t.out" in read.checks["tension_file_skipped"]
+    assert read.checks["arc_lengths"].startswith("deck sections at the deck nodes")
+    with pytest.raises(CableSchemaError, match="elements.out places; it is missing"):
+        read_cabledyn_sections(root, deck, sections, tension_source="segments")
+    with pytest.raises(CableSchemaError, match="elements.out locates; it is missing"):
+        read_cabledyn_sections(root, deck, sections, tangent_placement="chord")
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "match"),
+    [
+        # One deck element fewer: the DeckNode numbering names 25 nodes.
+        ("1       bare      68.114   10", "1       bare      68.114   9", "DeckNode"),
+        # Same mesh, another section length: the deck nodes move.
+        ("1       buoy      50.000   8", "1       buoy      51.000   8", "differs"),
+    ],
+)
+def test_refined_mesh_of_another_deck_is_rejected(tmp_path, old, new, match):
+    root, deck = _refined_copy(
+        tmp_path,
+        ("out", "Line1.p.out", "Line1.t.out", "elements.out", "static.out", "dat"),
+    )
+    text = deck.read_text(encoding="utf-8")
+    assert old in text
+    deck.write_text(text.replace(old, new), encoding="utf-8")
+    with pytest.raises(CableSchemaError, match=match):
+        read_cabledyn_sections(root, deck, {"sag": 58.4})
+
+
+def test_deck_node_numberings_must_agree(tmp_path):
+    root, deck = _refined_copy(
+        tmp_path, ("out", "Line1.p.out", "Line1.t.out", "static.out", "dat")
+    )
+    path = tmp_path / "lw24r.Line1.p.out"
+    lines = path.read_text(encoding="utf-8").splitlines()
+    lines[1] = lines[1].replace("\t6\t0\t7\t", "\t6\t7\t0\t", 1)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    with pytest.raises(CableSchemaError, match="DeckNode numberings of line 1 differ"):
+        read_cabledyn_sections(root, deck, {"sag": 58.4})
