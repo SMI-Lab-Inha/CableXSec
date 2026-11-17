@@ -194,6 +194,11 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Changed
 
+- The validation report's test-taxonomy lines record the passed count only: the deselected
+  count is the rest of the suite, so a test added anywhere else marked the committed report
+  stale without changing a gate. CI checks the committed report before the coverage run, so a
+  stale report fails within about 15 minutes instead of after the 45-minute coverage run.
+
 - Bounded core contact loads of the laid-core law: the inward resultant of a core (capstan load
   plus its share of the ring line force) is now reacted by its two neighbours, whose contact
   forces sum to the resultant over `sin(π/n)`, besides the ring share on the outer face. The

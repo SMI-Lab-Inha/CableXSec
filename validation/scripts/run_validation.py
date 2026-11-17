@@ -1869,10 +1869,10 @@ def _taxonomy_counts() -> dict[str, str]:
         if not summaries:
             raise RuntimeError(f"pytest taxonomy {marker!r} emitted no pass summary")
         stable_summary = summaries[-1].split(" in ", maxsplit=1)[0]
+        # The passed count only: the deselected count is the rest of the suite, so a test
+        # added anywhere else would mark the report stale without changing a gate.
         stable_parts = [
-            part.strip()
-            for part in stable_summary.split(",")
-            if "passed" in part or "deselected" in part
+            part.strip() for part in stable_summary.split(",") if "passed" in part
         ]
         out[marker] = ", ".join(stable_parts)
     return out

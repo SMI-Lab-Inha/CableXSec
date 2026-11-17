@@ -109,13 +109,10 @@ jobs:
           cache-dependency-path: pyproject.toml
       - name: Install the package and test dependencies
         run: python -m pip install --upgrade pip ".[dev,fast,contact]"
-      - name: Run the whole suite with line and branch coverage, kernels traced
-        # Functions compiled by numba run outside the coverage tracer, so the kernel
-        # tests run a second time with NUMBA_DISABLE_JIT=1 and are appended.
-        run: python release/check_coverage.py --fail-under 95
       - name: The committed validation report is current
         # The script exits non-zero while registered benchmark rows fail; the step
-        # fails only if the committed report differs from the live calculation.
+        # fails only if the committed report differs from the live calculation. It runs
+        # before the coverage run (about 45 min), so a stale report fails within minutes.
         shell: bash
         run: |
           set +e
@@ -123,6 +120,10 @@ jobs:
           status=${PIPESTATUS[0]}
           if grep -q "validation artefacts are stale" validation-check.txt; then exit 1; fi
           echo "run_validation exit status ${status} (registered FAIL rows are expected)"
+      - name: Run the whole suite with line and branch coverage, kernels traced
+        # Functions compiled by numba run outside the coverage tracer, so the kernel
+        # tests run a second time with NUMBA_DISABLE_JIT=1 and are appended.
+        run: python release/check_coverage.py --fail-under 95
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
