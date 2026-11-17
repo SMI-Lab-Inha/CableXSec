@@ -1495,13 +1495,15 @@ run uncompiled.
   (`curvature_path_out_of_plane_ratio`: the largest distance of a sample
   `(κ_x, κ_y)` from the principal line through the origin, over the smaller of
   the largest curvature and the largest distance of a sample from the mean
-  curvature, the latter not below `1e-3` of the largest curvature) is at most
+  curvature, the latter not below `1e-2` of the largest curvature) is at most
   `PLANAR_PATH_TOLERANCE = 1e-3`. A planar path in any plane gives round-off,
   a static offset in that plane included, the same path written with six
   significant digits less than `1e-5`, an ellipse its axis ratio. The second
   scale keeps a static bend from hiding cycles normal to it: a static
   curvature of 0.05 1/m with cycles of 4e-5 1/m normal to it is 8e-4 out of
-  plane against the largest curvature, but 0.8 against the floor of its range.
+  plane against the largest curvature, but 0.08 against the floor of its range
+  (cycles of 4e-4 1/m: 0.8). The floor keeps a nearly constant curvature
+  written with six significant digits planar (at most 7.1e-4).
   A layer the distributed law does not cover (rigid interface `ξ ≥ 1`, a
   stick modulus that changes over the record, a rate-dependent friction law)
   keeps the direction-tied law and warns (`FrictionModelFallbackWarning`, once

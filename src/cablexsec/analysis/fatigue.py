@@ -144,10 +144,13 @@ DistributedBound = Literal["signed", "uniform"]
 #: which the default direction-tied law warns).
 PLANAR_PATH_TOLERANCE = 1e-3
 #: Smallest range about the mean, relative to the largest curvature, against
-#: which :func:`curvature_path_out_of_plane_ratio` judges a path: a static
-#: curvature written with six significant digits (error up to 5e-7 of it)
-#: stays planar, and cycles normal to a static bend count from 1e-6 of it.
-_PATH_SPREAD_FLOOR = 1e-3
+#: which :func:`curvature_path_out_of_plane_ratio` judges a path. Six
+#: significant digits put each component within 5e-6 of the largest
+#: curvature (half a unit in the last digit of a mantissa near 1), so a
+#: rounded static curvature is at most 7.1e-6 off its line and 7.1e-4 out of
+#: plane against this floor; cycles normal to a static bend count from 1e-5
+#: of it.
+_PATH_SPREAD_FLOOR = 1e-2
 #: Measured bias of the direction-tied law under rotating curvature, quoted by
 #: :class:`~cablexsec.provenance.DirectionTiedFrictionWarning`.
 DIRECTION_TIED_ROTATION_BIAS = (
@@ -195,10 +198,10 @@ def curvature_path_out_of_plane_ratio(
     keeps a static bend from hiding the cycles about it: a static curvature
     with small cycles normal to its plane is as far from planar as the cycles
     are large, not as small as they are against the static bend. A range
-    below ``1e-3`` of the largest curvature is judged against that floor, so
+    below ``1e-2`` of the largest curvature is judged against that floor, so
     that the rounding of a nearly constant curvature in output files (six
-    significant digits: at most ``5e-4``) stays planar; cycles normal to a
-    static bend then count from ``1e-6`` of it. A zero history returns zero.
+    significant digits: at most ``7.1e-4``) stays planar; cycles normal to a
+    static bend then count from ``1e-5`` of it. A zero history returns zero.
     """
     kx = np.asarray(kappa_x, dtype=np.float64)
     ky = np.asarray(kappa_y, dtype=np.float64)

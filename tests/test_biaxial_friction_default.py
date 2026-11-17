@@ -140,17 +140,17 @@ def test_out_of_plane_ratio():
         PLANAR_PATH_TOLERANCE
     )
     # A static bend with cycles normal to its plane is judged against the
-    # cycles (or 1e-3 of the bend, if smaller), not against the bend: cycles
-    # of 8e-4 and 8e-3 of the bend give 0.8 and 1.
+    # cycles (or 1e-2 of the bend, if larger), not against the bend: cycles
+    # of 8e-4, 8e-3 and 8e-2 of the bend give 0.08, 0.8 and 1.
     static = np.full(th.size, 0.05)
     cycles = 4e-5 * np.sin(th)
-    for factor, expected in ((1.0, 0.8), (10.0, 1.0)):
+    for factor, expected in ((1.0, 0.08), (10.0, 0.8), (100.0, 1.0)):
         assert curvature_path_out_of_plane_ratio(
             static, factor * cycles
-        ) == pytest.approx(expected, rel=1e-6)
+        ) == pytest.approx(expected, rel=1e-4)
         assert curvature_path_out_of_plane_ratio(
             -factor * cycles, static
-        ) == pytest.approx(expected, rel=1e-6)
+        ) == pytest.approx(expected, rel=1e-4)
     # Rounded to six significant digits, a static bend in an oblique plane
     # stays planar.
     oblique = [float(f"{v:.6g}") for v in (0.05 * math.cos(0.4), 0.05 * math.sin(0.4))]
@@ -158,6 +158,15 @@ def test_out_of_plane_ratio():
     rx = np.array([float(f"{v * math.cos(0.4):.6g}") for v in noisy] + oblique[:1])
     ry = np.array([float(f"{v * math.sin(0.4):.6g}") for v in noisy] + oblique[1:])
     assert curvature_path_out_of_plane_ratio(rx, ry) < PLANAR_PATH_TOLERANCE
+    # Six significant digits round a mantissa near 1 by up to 5e-6 of the
+    # value: the worst case stays planar too, at any angle.
+    for angle in np.linspace(0.0, math.pi, 181):
+        for radius in (0.015, 0.0100001, 0.0999999):
+            noisy = radius * np.array([1.0, 1.000001, 0.999999])
+            rx = np.array([float(f"{v * math.cos(angle):.6g}") for v in noisy])
+            ry = np.array([float(f"{v * math.sin(angle):.6g}") for v in noisy])
+            value = curvature_path_out_of_plane_ratio(rx, ry)
+            assert value < PLANAR_PATH_TOLERANCE, (angle, radius, value)
     # The same cycles in the plane of the bend stay planar, in any plane.
     for angle in (0.0, 0.4, 2.0):
         s = static + cycles

@@ -258,9 +258,10 @@ All notable changes to CableXSec are recorded in this file. The format follows
   static bend hid cycles normal to it: a static 0.05 1/m with ±4e-5 1/m normal cycles was 8e-4
   out of plane (planar) and `"auto"` took the direction-tied law, whose cap follows the static
   bending direction. The distance is now judged against the smaller of the largest curvature and
-  the largest distance from the mean curvature, the latter floored at 1e-3 of the largest
-  curvature (so a nearly constant curvature written with six significant digits stays planar):
-  that path is 0.8 out of plane. Paths without a static offset (every bundled check: planar
+  the largest distance from the mean curvature, the latter floored at 1e-2 of the largest
+  curvature (so a nearly constant curvature written with six significant digits, each component
+  within 5e-6 of the largest, stays planar at 7.1e-4 or less): that path is 0.08 out of plane,
+  with ±4e-4 1/m cycles 0.8. Paths without a static offset (every bundled check: planar
   paths, centred ellipses and circles) keep their ratio; a planar path with a static offset in
   its plane stays planar. Over the 1 203 tests that reach the planarity test and the shipped
   fatigue examples and tutorials, no path other than the new checks changes its verdict.
