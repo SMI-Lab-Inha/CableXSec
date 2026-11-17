@@ -2055,9 +2055,13 @@ without a gate:
 | Core lay | Armour pitch 1.8 m (kN m²) | Armour pitch 3.0 m (kN m²) |
 | --- | --- | --- |
 | Range of the three tools (Table 5) | 59.6–83.2 | 34.3–44.7 |
-| Straight (packaged) | CH_S18 | CH_S30 |
-| S, assumed pitch 2.5 m | CH_A18 | CH_A30 |
-| S, assumed pitch 3.0 m | CH_B18 | CH_B30 |
+| Straight (packaged) | 81.9 | 50.5 |
+| S, assumed pitch 2.5 m | 61.1 | 35.0 |
+| S, assumed pitch 3.0 m | 64.4 | 37.3 |
+
+With straight cores the value is inside the tools' range at 1.8 m and 13 %
+above its top at 3.0 m; with S-lay cores at either assumed pitch it is inside
+at both pitches, at 0.88–0.93 of the middle tool at 1.8 m and 0.79–0.84 at 3.0 m.
 
 - **Core lay.** The source lays the cores S, like the armour (Sec. 2.1.2), but
   gives no core pitch; the packaged file keeps straight cores. Under an
