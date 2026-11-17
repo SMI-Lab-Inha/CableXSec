@@ -42,6 +42,23 @@ curvature *vector* from the solved geometry and uses ``Curv`` as a check:
 Curvature is per unit deformed length; the stretch enters only through the
 spline parameter (relative effect of order of the axial strain).
 
+Refined meshes
+--------------
+The static solve may refine the mesh of a finite-EI line (``adaptive_mesh``,
+``tensile_safety`` or the automatic refinement; CableDyn ``doc/outputs.rst``,
+node channels on a refined line). Refinement splits deck elements, so every
+deck node stays a mesh node at its own unstretched arc length. The ``<J>`` of
+the node channels names a deck node (since CableDyn 0.2.0); ``.static.out``,
+``.elements.out`` and the per-line files list every node of the refined mesh.
+The reader locates the deck nodes by the ``DeckNode`` column of
+``.static.out`` or the ``# DeckNode`` line of ``.Line<L>.p.out`` (failing both,
+by their arc lengths in ``.elements.out``), requires every file to list the
+same nodes and the deck nodes to lie at the arc lengths of the deck sections,
+and reads positions and segment tensions on the refined mesh, which
+``.elements.out`` places. Without that file the positions are read at the deck
+nodes only and the segment tensions not at all (``tension_source="auto"``
+then takes the node channels).
+
 Frames and signs
 ----------------
 The global frame is CableDyn's: right-handed, :math:`z` up, still water at
@@ -639,8 +656,18 @@ def _main_table(path: Path) -> _Table:
     return _Table(path, 2, header, units)
 
 
-def _line_table(path: Path, title_word: str, columns: Sequence[str]) -> _Table:
-    head = _head(path, 2)
+@dataclass(frozen=True)
+class _LineHead:
+    """Title, optional ``# DeckNode`` line and header row of a per-line table."""
+
+    path: Path
+    header: tuple[str, ...]
+    deck_nodes: tuple[int, ...] | None
+    skip: int
+
+
+def _line_head(path: Path, title_word: str) -> _LineHead:
+    head = _head(path, 3)
     if len(head) < 2 or not head[0].startswith("# CableDyn"):
         raise CableSchemaError(f"{path.name}: not a CableDyn per-line table")
     title = head[0].casefold()
@@ -651,7 +678,30 @@ def _line_table(path: Path, title_word: str, columns: Sequence[str]) -> _Table:
         )
     if "static" in title:
         raise CableSchemaError(f"{path.name}: a static table has no time history")
-    header = tuple(cell.strip() for cell in head[1].split("\t"))
+    deck_nodes = None
+    header_row, skip = head[1], 2
+    if head[1].startswith("#"):
+        # A line whose mesh the static solve refined: the deck node of every
+        # node, 0 for a node the refinement added (CableDyn doc/outputs.rst).
+        tokens = head[1].split()
+        if tokens[:2] != ["#", "DeckNode"] or len(head) < 3:
+            raise CableSchemaError(
+                f"{path.name}: unexpected second comment line {head[1][:40]!r}; "
+                "a CableDyn per-line table has only a '# DeckNode' line there"
+            )
+        try:
+            deck_nodes = tuple(int(token) for token in tokens[2:])
+        except ValueError:
+            raise CableSchemaError(
+                f"{path.name}: malformed '# DeckNode' line"
+            ) from None
+        header_row, skip = head[2], 3
+    header = tuple(cell.strip() for cell in header_row.split("\t"))
+    return _LineHead(path, header, deck_nodes, skip)
+
+
+def _line_table(head: _LineHead, columns: Sequence[str]) -> _Table:
+    path, header = head.path, head.header
     expected = ("Time(s)", *columns)
     if header != expected:
         mismatch = next(
@@ -665,7 +715,7 @@ def _line_table(path: Path, title_word: str, columns: Sequence[str]) -> _Table:
         raise CableSchemaError(
             f"{path.name}: header does not match the line: {mismatch}"
         )
-    return _Table(path, 2, header, None)
+    return _Table(path, head.skip, header, None)
 
 
 def _chunks(
@@ -985,11 +1035,12 @@ class _Plan:
     """Static data of one section (or a curvature probe at a node)."""
 
     name: str
-    arc: float
-    element: int  # 0-based element containing the arc
-    window: list[int]  # 0-based nodes of the curvature spline
+    arc: float  # on the grid of the curvature source
+    elem_deck: int  # 0-based deck element containing the arc (node channels)
+    elem_pos: int  # 0-based element of the position grid containing the arc
+    window: list[int]  # 0-based nodes of the curvature spline (its grid)
     probe: bool = False
-    node: int = -1  # 0-based node of a curvature probe
+    node: int = -1  # 0-based deck node of a curvature probe
     data: dict[str, list[FloatArray]] = field(default_factory=dict)
 
 
@@ -1041,8 +1092,11 @@ def _discover(out_root: Path, line_id: int) -> dict[str, Path]:
     return files
 
 
-def _static_profile(path: Path, line_id: int) -> FloatArray:
-    """X, Y, Z of the line's nodes from a static profile table."""
+def _static_profile(
+    path: Path, line_id: int
+) -> tuple[FloatArray, tuple[int, ...] | None]:
+    """X, Y, Z of the line's nodes from a static profile table, and the
+    ``DeckNode`` column when the profile has one (a refined mesh in the run)."""
     rows = path.read_text(encoding="utf-8").splitlines()
     if len(rows) < 4:
         raise CableSchemaError(f"{path.name}: incomplete static profile")
@@ -1057,17 +1111,172 @@ def _static_profile(path: Path, line_id: int) -> FloatArray:
     ):
         if name not in header or units[header.index(name)] != unit:
             raise CableSchemaError(f"{path.name}: static column {name} {unit} missing")
-    take = [header.index(name) for name in ("LineID", "Node", "X", "Y", "Z")]
+    names = ["LineID", "Node", "X", "Y", "Z"]
+    if "DeckNode" in header:
+        if units[header.index("DeckNode")] != "(-)":
+            raise CableSchemaError(f"{path.name}: static column DeckNode (-) missing")
+        names.append("DeckNode")
+    take = [header.index(name) for name in names]
     data = np.array(
         [[float(row.split("\t")[i]) for i in take] for row in rows[3:] if row.strip()]
     )
     mine = data[data[:, 0] == line_id]
     if mine.size == 0 or np.any(np.diff(mine[:, 1]) != 1) or mine[0, 1] != 1:
         raise CableSchemaError(f"{path.name}: line {line_id} rows missing or unordered")
-    return np.asarray(mine[:, 2:5])
+    deck_nodes = None
+    if "DeckNode" in names:
+        column = mine[:, 5]
+        if np.any(column != np.round(column)):
+            raise CableSchemaError(f"{path.name}: DeckNode values must be integers")
+        deck_nodes = tuple(int(value) for value in column)
+    return np.asarray(mine[:, 2:5]), deck_nodes
 
 
-def _element_arcs(path: Path, line_id: int) -> FloatArray:
+@dataclass(frozen=True)
+class _Mesh:
+    """Nodes of the per-line files (the line's final mesh) and its deck nodes.
+
+    ``deck_rows[j]`` is the 0-based mesh node of deck node ``j + 1``, the node
+    the ``<J>`` of the node channels names (CableDyn 0.2.0 and later).
+    ``arcs`` is ``None`` when a refined mesh has no ``.elements.out`` to place
+    the nodes the refinement added.
+    """
+
+    n_nodes: int
+    arcs: FloatArray | None
+    deck_rows: tuple[int, ...]
+    refined: bool
+    map_source: str
+
+
+def _deck_rows(
+    deck_nodes: Sequence[int], n_deck: int, where: str, line_id: int
+) -> tuple[int, ...]:
+    """Mesh rows of the deck nodes from a ``DeckNode`` numbering."""
+    numbered = [(row, value) for row, value in enumerate(deck_nodes) if value != 0]
+    if (
+        any(value < 0 for value in deck_nodes)
+        or [value for _, value in numbered] != list(range(1, n_deck + 1))
+        or not deck_nodes
+        or deck_nodes[0] != 1
+        or deck_nodes[-1] != n_deck
+    ):
+        named = max((value for _, value in numbered), default=0)
+        raise CableSchemaError(
+            f"{where}: the DeckNode numbering of line {line_id} does not name the "
+            f"{n_deck} deck nodes of the deck sections in order, End A first and "
+            f"End B last (largest deck node named: {named}): the deck and the "
+            "output differ"
+        )
+    return tuple(row for row, _ in numbered)
+
+
+def _line_mesh(
+    line: CableDynLine,
+    deck_arcs: FloatArray,
+    finite_ei: bool,
+    element_arcs: tuple[Path, FloatArray] | None,
+    static: tuple[Path, int, tuple[int, ...] | None] | None,
+    heads: Sequence[tuple[_LineHead, int]],
+) -> _Mesh:
+    """The mesh of the per-line files and the mesh row of every deck node.
+
+    A static solve that refines a finite-EI line (``adaptive_mesh``,
+    ``tensile_safety`` or the automatic refinement) splits deck elements, so
+    every deck node stays a mesh node at its own unstretched arc length. The
+    node channels name deck nodes; ``.static.out``, ``.elements.out`` and the
+    per-line files list every mesh node. The deck nodes are located by the
+    ``DeckNode`` column of ``.static.out`` or the ``# DeckNode`` line of
+    ``.Line<L>.p.out`` and, failing both, by their arc lengths in
+    ``.elements.out``; every source present must agree.
+    """
+    line_id = line.line_id
+    n_deck = int(deck_arcs.size)
+    tol = 1e-6 * max(1.0, line.length_m)
+    counts: dict[str, int] = {}
+    maps: dict[str, tuple[int, ...]] = {}
+    if element_arcs is not None:
+        counts[element_arcs[0].name] = int(element_arcs[1].size)
+    if static is not None:
+        counts[static[0].name] = static[1]
+        if static[2] is not None:
+            maps[static[0].name] = static[2]
+    for head, n_nodes in heads:
+        counts[head.path.name] = n_nodes
+        if head.deck_nodes is not None:
+            maps[head.path.name] = head.deck_nodes
+    if len(set(counts.values())) > 1:
+        raise CableSchemaError(
+            f"the output files list different numbers of nodes of line {line_id} "
+            f"({counts}): files from different runs?"
+        )
+    n_mesh = next(iter(counts.values()), n_deck)
+    for name, numbering in maps.items():
+        if len(numbering) != n_mesh:
+            raise CableSchemaError(
+                f"{name}: the DeckNode numbering of line {line_id} has "
+                f"{len(numbering)} entries for {n_mesh} nodes"
+            )
+    if len(set(maps.values())) > 1:
+        raise CableSchemaError(
+            f"the DeckNode numberings of line {line_id} differ between "
+            f"{sorted(maps)}: files from different runs?"
+        )
+    if maps:
+        source, numbering = next(iter(maps.items()))
+        deck_rows = _deck_rows(numbering, n_deck, source, line_id)
+        map_source = f"DeckNode of {', '.join(sorted(maps))}"
+    elif n_mesh == n_deck:
+        deck_rows = tuple(range(n_deck))
+        map_source = "deck mesh (not refined)"
+    elif element_arcs is not None:
+        # No numbering: each deck node is the mesh node at its arc length.
+        mesh = element_arcs[1]
+        rows = np.searchsorted(mesh, deck_arcs - tol)
+        found = (rows < mesh.size) & (
+            np.abs(mesh[np.minimum(rows, mesh.size - 1)] - deck_arcs) <= tol
+        )
+        if not found.all():
+            raise CableSchemaError(
+                f"{element_arcs[0].name}: mesh of line {line_id} differs from the "
+                f"deck sections ({mesh.size} nodes, deck node at "
+                f"{float(deck_arcs[int(np.argmin(found))]):.6g} m not among them)"
+            )
+        deck_rows = tuple(int(row) for row in rows)
+        map_source = f"arc lengths of {element_arcs[0].name}"
+    else:
+        raise CableSchemaError(
+            f"the output files list {n_mesh} nodes of line {line_id}, the deck "
+            f"sections {n_deck}, and no DeckNode numbering locates the deck nodes "
+            f"among them ({sorted(counts)}): the deck and the output differ"
+        )
+    refined = n_mesh != n_deck
+    if refined and not finite_ei:
+        raise CableSchemaError(
+            f"line {line_id} has no finite-EI section, so its mesh is never refined, "
+            f"but the output lists {n_mesh} nodes against {n_deck} deck nodes: the "
+            "deck and the output differ"
+        )
+    arcs: FloatArray | None = None
+    if element_arcs is not None:
+        mesh = element_arcs[1]
+        if not np.allclose(mesh[list(deck_rows)], deck_arcs, rtol=0.0, atol=tol):
+            worst = int(np.argmax(np.abs(mesh[list(deck_rows)] - deck_arcs)))
+            raise CableSchemaError(
+                f"{element_arcs[0].name}: mesh of line {line_id} differs from the "
+                f"deck sections (deck node {worst + 1} at "
+                f"{float(mesh[deck_rows[worst]]):.6g} m against "
+                f"{float(deck_arcs[worst]):.6g} m in the deck)"
+            )
+        arcs = mesh
+    elif not refined:
+        arcs = deck_arcs
+    return _Mesh(n_mesh, arcs, deck_rows, refined, map_source)
+
+
+def _element_arcs(path: Path, line_id: int, *, required: bool) -> FloatArray | None:
+    """Reference arc lengths of the line's element ends, End A first; ``None``
+    when the file has no rows of an ``EI = 0`` line (``required=False``)."""
     rows = path.read_text(encoding="utf-8").splitlines()
     header = [cell.strip() for cell in rows[1].split("\t")]
     units = [cell.strip() for cell in rows[2].split("\t")]
@@ -1083,7 +1292,9 @@ def _element_arcs(path: Path, line_id: int) -> FloatArray:
     data = np.array(
         [[float(row.split("\t")[i]) for i in take] for row in rows[3:] if row.strip()]
     )
-    mine = data[data[:, 0] == line_id]
+    mine = data[data[:, 0] == line_id] if data.size else data.reshape(0, 4)
+    if mine.size == 0 and not required:
+        return None
     if mine.size == 0 or np.any(np.diff(mine[:, 1]) != 1):
         raise CableSchemaError(f"{path.name}: elements of line {line_id} unordered")
     if np.any(np.abs(mine[1:, 2] - mine[:-1, 3]) > 1e-6 * max(1.0, float(mine[-1, 3]))):
@@ -1194,67 +1405,120 @@ def read_cabledyn_sections(
     paths = _discover(root, line_id)
     checks: dict[str, Any] = {"deck_defaults_used": list(deck_obj.defaults_used)}
 
-    arcs = line.node_arc_lengths()
-    if "elements" in paths:
-        element_arcs = _element_arcs(paths["elements"], line_id)
-        if element_arcs.size != arcs.size or not np.allclose(
-            element_arcs, arcs, rtol=0.0, atol=1e-6 * max(1.0, line.length_m)
+    deck_arcs = line.node_arc_lengths()
+    n_deck = int(deck_arcs.size)
+    finite_ei = any(
+        deck_obj.line_type(sec.line_type).ei_Nm2 > 0.0 for sec in line.sections
+    )
+    for name, arc in sections.items():
+        if (
+            not name.strip()
+            or not math.isfinite(arc)
+            or not 0.0 <= arc <= deck_arcs[-1]
         ):
             raise CableSchemaError(
-                f"{paths['elements'].name}: mesh of line {line_id} differs from the "
-                f"deck sections ({element_arcs.size} against {arcs.size} nodes)"
+                f"section {name!r} at {arc} m is outside line {line_id} "
+                f"(0 to {deck_arcs[-1]:.6g} m)"
             )
-        arcs = element_arcs
-        checks["arc_lengths"] = "deck sections, confirmed by .elements.out"
-    elif deck_obj.adaptive_mesh:
-        raise CableSchemaError(
-            "adaptive_mesh may change the mesh; the .elements.out file is needed "
-            "to locate the nodes"
+
+    # The node channels name deck nodes; .static.out, .elements.out and the
+    # per-line files list every node of the line's final mesh, which the static
+    # solve may have refined.
+    heads: list[tuple[_LineHead, int]] = []
+    positions_head: _LineHead | None = None
+    tensions_head: _LineHead | None = None
+    if "positions" in paths:
+        positions_head = _line_head(paths["positions"], "node positions")
+        n_columns = len(positions_head.header) - 1
+        if n_columns < 6 or n_columns % 3:
+            raise CableSchemaError(
+                f"{paths['positions'].name}: expected Time(s) and X, Y, Z columns "
+                "of at least two nodes"
+            )
+        heads.append((positions_head, n_columns // 3))
+    if "tensions" in paths:
+        tensions_head = _line_head(paths["tensions"], "segment tensions")
+        if len(tensions_head.header) < 2:
+            raise CableSchemaError(f"{paths['tensions'].name}: no segment columns")
+        heads.append((tensions_head, len(tensions_head.header)))
+    static_profile = (
+        _static_profile(paths["static"], line_id) if "static" in paths else None
+    )
+    # .elements.out may list the finite-EI lines of the run only.
+    element_arcs = None
+    if "elements" in paths:
+        found = _element_arcs(paths["elements"], line_id, required=finite_ei)
+        if found is not None:
+            element_arcs = (paths["elements"], found)
+    mesh = _line_mesh(
+        line,
+        deck_arcs,
+        finite_ei,
+        element_arcs,
+        None
+        if static_profile is None
+        else (paths["static"], static_profile[0].shape[0], static_profile[1]),
+        heads,
+    )
+    mesh_arcs = mesh.arcs
+    n_mesh = mesh.n_nodes
+    checks["mesh"] = {
+        "deck_nodes": n_deck,
+        "output_nodes": n_mesh,
+        "refined": mesh.refined,
+        "deck_nodes_located_by": mesh.map_source,
+    }
+    if element_arcs is not None:
+        checks["arc_lengths"] = (
+            "refined mesh of .elements.out; deck nodes at the deck-section arcs"
+            if mesh.refined
+            else "deck sections, confirmed by .elements.out"
+        )
+    elif mesh.refined:
+        checks["arc_lengths"] = (
+            "deck sections at the deck nodes; the nodes the refinement added are "
+            "not placed (no .elements.out)"
         )
     else:
         checks["arc_lengths"] = "deck sections"
-    n_nodes = arcs.size
-    for name, arc in sections.items():
-        if not name.strip() or not math.isfinite(arc) or not 0.0 <= arc <= arcs[-1]:
-            raise CableSchemaError(
-                f"section {name!r} at {arc} m is outside line {line_id} "
-                f"(0 to {arcs[-1]:.6g} m)"
-            )
 
     main = _main_table(paths["main"])
     channels = _channel_index(main)
     positions_table = None
-    if "positions" in paths:
-        columns = [f"Node{j}{axis}(m)" for j in range(1, n_nodes + 1) for axis in "XYZ"]
-        positions_table = _line_table(paths["positions"], "node positions", columns)
+    if positions_head is not None:
+        columns = [f"Node{j}{axis}(m)" for j in range(1, n_mesh + 1) for axis in "XYZ"]
+        positions_table = _line_table(positions_head, columns)
     tensions_table = None
-    if "tensions" in paths:
-        columns = [f"Segment{k}Tension(N)" for k in range(1, n_nodes)]
-        tensions_table = _line_table(paths["tensions"], "segment tensions", columns)
-
-    plans = [
-        _Plan(
-            name,
-            float(arc),
-            (e := _element_of(arcs, arc)),
-            _window(e, n_nodes, window_nodes),
-        )
-        for name, arc in sections.items()
-    ]
-    for key in sorted(k for k in channels if k[0] == "curv" and k[1] == line_id):
-        node = key[2] - 1
-        if 0 <= node < n_nodes:
-            element = min(node, n_nodes - 2)
-            plans.append(
-                _Plan(
-                    f"Curv{line_id}N{key[2]}",
-                    float(arcs[node]),
-                    element,
-                    _window(element, n_nodes, window_nodes),
-                    probe=True,
-                    node=node,
+    if tensions_head is not None:
+        columns = [f"Segment{k}Tension(N)" for k in range(1, n_mesh)]
+        tensions_table = _line_table(tensions_head, columns)
+        if mesh_arcs is None:
+            # The segments of a refined mesh cannot be placed along the line.
+            if tension_source == "segments":
+                raise CableSchemaError(
+                    f"tension_source='segments': the segments of "
+                    f"{paths['tensions'].name} lie on the refined mesh of line "
+                    f"{line_id}, which {root.name}.elements.out places; it is missing"
                 )
+            tensions_table = None
+            checks["tension_file_skipped"] = (
+                f"{paths['tensions'].name}: refined mesh without .elements.out"
             )
+
+    # Grid of the node positions: every mesh node of .Line<L>.p.out when the
+    # mesh is placed, the deck nodes otherwise (channels, or the deck-node
+    # columns of .p.out). pos_rows: mesh row of each grid node (.p.out column
+    # and .static.out row).
+    if positions_table is not None and mesh_arcs is not None:
+        pos_arcs = mesh_arcs
+        pos_rows = list(range(n_mesh))
+        pos_on_mesh = True
+    else:
+        pos_arcs = deck_arcs
+        pos_rows = list(mesh.deck_rows)
+        pos_on_mesh = False
+    n_pos = int(pos_arcs.size)
+    pos_l0 = np.diff(pos_arcs)
 
     def has_tangent(node: int) -> bool:
         return all((kind, line_id, node + 1) in channels for kind in ("dec", "azi"))
@@ -1264,34 +1528,77 @@ def read_cabledyn_sections(
             (kind, line_id, node + 1) in channels for kind in ("px", "py", "pz")
         )
 
-    sections_plans = [plan for plan in plans if not plan.probe]
+    # Sections and curvature probes: (name, deck arc, grid arc, deck element,
+    # grid element, deck node of a probe or -1).
+    specs: list[tuple[str, float, float, int, int, int]] = [
+        (
+            name,
+            float(arc),
+            float(arc),
+            _element_of(deck_arcs, arc),
+            _element_of(pos_arcs, arc),
+            -1,
+        )
+        for name, arc in sections.items()
+    ]
+    for key in sorted(k for k in channels if k[0] == "curv" and k[1] == line_id):
+        node = key[2] - 1
+        if 0 <= node < n_deck:
+            row = mesh.deck_rows[node] if pos_on_mesh else node
+            specs.append(
+                (
+                    f"Curv{line_id}N{key[2]}",
+                    float(deck_arcs[node]),
+                    float(pos_arcs[row]),
+                    min(node, n_deck - 2),
+                    min(row, n_pos - 2),
+                    node,
+                )
+            )
+    section_specs = [spec for spec in specs if spec[5] < 0]
     if curvature_source == "auto":
-        tangent_ok = all(has_tangent(j) for plan in sections_plans for j in plan.window)
+        tangent_ok = all(
+            has_tangent(j)
+            for spec in section_specs
+            for j in _window(spec[3], n_deck, window_nodes)
+        )
         source = "tangent" if tangent_ok else "positions"
     else:
         source = curvature_source
     needed_curvature = has_tangent if source == "tangent" else has_position
-    for plan in sections_plans:
-        missing = [j + 1 for j in plan.window if not needed_curvature(j)]
-        if missing:
+    plans: list[_Plan] = []
+    for name, arc_deck, arc_pos, elem_deck, elem_pos, node in specs:
+        window = (
+            _window(elem_deck, n_deck, window_nodes)
+            if source == "tangent"
+            else _window(elem_pos, n_pos, window_nodes)
+        )
+        missing = [j + 1 for j in window if not needed_curvature(j)]
+        if missing and node < 0:
             what = (
                 f"L{line_id}N<J>Dec and L{line_id}N<J>Azi channels"
                 if source == "tangent"
                 else f".Line{line_id}.p.out or L{line_id}N<J>p{{x,y,z}} channels"
             )
             raise CableSchemaError(
-                f"section {plan.name!r}: curvature from {source} needs {what} "
+                f"section {name!r}: curvature from {source} needs {what} "
                 f"at nodes {missing}"
             )
-    plans = [
-        plan
-        for plan in plans
-        if not plan.probe or all(needed_curvature(j) for j in plan.window)
-    ]
+        if missing:
+            continue  # a probe without its window is not checked
+        plans.append(
+            _Plan(
+                name,
+                arc_deck if source == "tangent" else arc_pos,
+                elem_deck,
+                elem_pos,
+                window,
+                probe=node >= 0,
+                node=node,
+            )
+        )
+    sections_plans = [plan for plan in plans if not plan.probe]
     checks["curvature_source"] = source
-    finite_ei = any(
-        deck_obj.line_type(sec.line_type).ei_Nm2 > 0.0 for sec in line.sections
-    )
     if source == "tangent":
         if tangent_placement == "chord":
             checks["tangent_placement"] = (
@@ -1304,17 +1611,17 @@ def read_cabledyn_sections(
         else:
             checks["tangent_placement"] = "chord mid-arc (EI = 0 line)"
 
-    # Nodes whose positions are needed: frame transport (arc), elevation.
+    # Position-grid nodes needed: frame transport (arc), curvature, elevation.
     pos_nodes: set[int] = set()
     if frame == "arc":
-        last = max(plan.element for plan in sections_plans) + 1
+        last = max(plan.elem_pos for plan in sections_plans) + 1
         pos_nodes.update(range(0, last + 1))
     if source == "positions":
         for plan in plans:
             pos_nodes.update(plan.window)
     if pressure == "hydrostatic":
         for plan in sections_plans:
-            pos_nodes.update((plan.element, plan.element + 1))
+            pos_nodes.update((plan.elem_pos, plan.elem_pos + 1))
     missing_positions = [j + 1 for j in sorted(pos_nodes) if not has_position(j)]
     if missing_positions:
         reason = (
@@ -1351,13 +1658,13 @@ def read_cabledyn_sections(
     )
     if not use_segments:
         for plan in sections_plans:
-            for node in (plan.element, plan.element + 1):
+            for node in (plan.elem_deck, plan.elem_deck + 1):
                 if ("ten", line_id, node + 1) not in channels:
                     raise CableSchemaError(
                         f"section {plan.name!r}: tension needs .Line{line_id}.t.out "
                         f"or Ten{line_id}N{node + 1} in the main output"
                     )
-    torsion_nodes = [(plan.element, plan.element + 1) for plan in sections_plans]
+    torsion_nodes = [(plan.elem_deck, plan.elem_deck + 1) for plan in sections_plans]
     twist_available = all(
         ("twist", line_id, n + 1) in channels for pair in torsion_nodes for n in pair
     )
@@ -1389,27 +1696,28 @@ def read_cabledyn_sections(
                 want(kind, node)
     if not use_segments:
         for plan in sections_plans:
-            want("ten", plan.element)
-            want("ten", plan.element + 1)
+            want("ten", plan.elem_deck)
+            want("ten", plan.elem_deck + 1)
     if twist_available:
         for plan in sections_plans:
-            want("twist", plan.element)
-            want("twist", plan.element + 1)
+            want("twist", plan.elem_deck)
+            want("twist", plan.elem_deck + 1)
     if torque_available:
         for plan in sections_plans:
-            want("torq", plan.element)
-            want("torq", plan.element + 1)
+            want("torq", plan.elem_deck)
+            want("torq", plan.elem_deck + 1)
     probe_nodes = [plan.node for plan in plans if plan.probe]
     for node in probe_nodes:
         want("curv", node)
-    tension_check_nodes = []
+    # Interior deck nodes with a Ten channel, paired with their mesh node.
+    tension_check_nodes: list[tuple[int, int]] = []
     if tensions_table is not None:
         tension_check_nodes = [
-            k[2] - 1
+            (k[2] - 1, mesh.deck_rows[k[2] - 1])
             for k in channels
-            if k[0] == "ten" and k[1] == line_id and 1 < k[2] < n_nodes
+            if k[0] == "ten" and k[1] == line_id and 1 < k[2] < n_deck
         ]
-        for node in tension_check_nodes:
+        for node, _ in tension_check_nodes:
             want("ten", node)
 
     streams: list[Generator[FloatArray, None, None]] = [
@@ -1417,39 +1725,62 @@ def read_cabledyn_sections(
     ]
     if positions_table is not None and pos_order:
         pos_cols = [0] + [
-            1 + 3 * node + axis for node in pos_order for axis in range(3)
+            1 + 3 * pos_rows[node] + axis for node in pos_order for axis in range(3)
         ]
         streams.append(_chunks(positions_table, pos_cols, chunk_rows))
     elem_t: FloatArray = np.empty((0, 0))
     ten_slot: dict[int, int] = {}
+    seg_elem: dict[str, int] = {}
+    mesh_l0: FloatArray = np.empty(0)
+    midpoints: FloatArray = np.empty(0)
     if tensions_table is not None:
-        mirror = [n_nodes - 1 - node for node in tension_check_nodes]
+        assert mesh_arcs is not None  # a table on an unplaced mesh was dropped
+        mesh_l0 = np.diff(mesh_arcs)
+        midpoints = 0.5 * (mesh_arcs[:-1] + mesh_arcs[1:])
+        seg_elem = {
+            plan.name: _element_of(mesh_arcs, plan.arc) for plan in sections_plans
+        }
+        mirror = [n_mesh - 1 - row for _, row in tension_check_nodes]
         elements = sorted(
             {
                 e
-                for plan in sections_plans
-                for e in (plan.element - 1, plan.element, plan.element + 1)
-                if 0 <= e < n_nodes - 1
+                for element in seg_elem.values()
+                for e in (element - 1, element, element + 1)
+                if 0 <= e < n_mesh - 1
             }
-            | {e for node in tension_check_nodes + mirror for e in (node - 1, node)}
+            | {
+                e
+                for row in [row for _, row in tension_check_nodes] + mirror
+                for e in (row - 1, row)
+            }
         )
         ten_slot = {e: i for i, e in enumerate(elements)}
         streams.append(
             _chunks(tensions_table, [0] + [1 + e for e in elements], chunk_rows)
         )
 
-    reference_l0 = np.diff(arcs)
-    midpoints = 0.5 * (arcs[:-1] + arcs[1:])
+    deck_l0 = np.diff(deck_arcs)
     # Arc length of each Dec/Azi value: the node's own tangent of a finite-EI
     # line (CableDyn 0.4.2+) at the node; a chord (central, one-sided at the
-    # ends) at its mid-arc, the point of a smooth arc whose tangent it is.
-    if tangent_placement == "auto" and finite_ei:
-        tangent_arcs = arcs
-    else:
+    # ends) at its mid-arc, the point of a smooth arc whose tangent it is. On a
+    # refined line a deck node's chord joins its neighbours on the refined mesh.
+    tangent_arcs = deck_arcs
+    if source == "tangent" and not (tangent_placement == "auto" and finite_ei):
+        if not mesh.refined:
+            chord_arcs, chord_rows = deck_arcs, list(range(n_deck))
+        elif mesh_arcs is not None:
+            chord_arcs, chord_rows = mesh_arcs, list(mesh.deck_rows)
+        else:
+            raise CableSchemaError(
+                f"tangent_placement='chord' on the refined line {line_id} places each "
+                "chord on the refined mesh, which "
+                f"{root.name}.elements.out locates; it is missing"
+            )
+        last_row = int(chord_arcs.size) - 1
         tangent_arcs = np.array(
             [
-                0.5 * (arcs[max(j - 1, 0)] + arcs[min(j + 1, n_nodes - 1)])
-                for j in range(n_nodes)
+                0.5 * (chord_arcs[max(m - 1, 0)] + chord_arcs[min(m + 1, last_row)])
+                for m in chord_rows
             ]
         )
     state_a: FloatArray | None = None
@@ -1504,15 +1835,15 @@ def read_cabledyn_sections(
             if tensions_table is not None:
                 elem_t = chunk[-1][:, 1:]
             if first:
-                if "static" in paths and pos_order:
-                    static = _static_profile(paths["static"], line_id)
-                    if static.shape[0] != n_nodes:
-                        raise CableSchemaError(
-                            f"{paths['static'].name}: {static.shape[0]} nodes, "
-                            f"expected {n_nodes}"
-                        )
+                if static_profile is not None and pos_order:
+                    static = static_profile[0]
                     max_t0_error = float(
-                        np.max(np.abs(static[pos_order] - positions[0]))
+                        np.max(
+                            np.abs(
+                                static[[pos_rows[node] for node in pos_order]]
+                                - positions[0]
+                            )
+                        )
                     )
                     if max_t0_error > 2e-6 * max(1.0, float(np.max(np.abs(static)))):
                         raise CableSchemaError(
@@ -1531,7 +1862,7 @@ def read_cabledyn_sections(
                                 for j in contiguous
                             ]
                         )
-                        stretch = chord / reference_l0[contiguous] - 1.0
+                        stretch = chord / pos_l0[contiguous] - 1.0
                         stretch_range = (float(stretch.min()), float(stretch.max()))
                         if stretch_range[0] < -0.02 or stretch_range[1] > 0.05:
                             raise CableSchemaError(
@@ -1543,16 +1874,16 @@ def read_cabledyn_sections(
                     position_floor = (
                         0.5
                         * 10.0 ** (math.floor(math.log10(max(magnitude, 1e-30))) - 7)
-                        / float(np.min(reference_l0)) ** 2
+                        / float(np.min(pos_l0)) ** 2
                     )
             # Element tension consistency (ordering check).
             if tensions_table is not None and tension_check_nodes:
-                for node in tension_check_nodes:
+                for node, row in tension_check_nodes:
                     channel = values[:, slot[("ten", node)]]
                     scale = np.maximum(np.abs(channel), 1.0)
-                    for j, label in ((node, "match"), (n_nodes - 1 - node, "mirror")):
+                    for j, label in ((row, "match"), (n_mesh - 1 - row, "mirror")):
                         left, right = elem_t[:, ten_slot[j - 1]], elem_t[:, ten_slot[j]]
-                        w_left, w_right = reference_l0[j - 1], reference_l0[j]
+                        w_left, w_right = mesh_l0[j - 1], mesh_l0[j]
                         mean = (w_left * left + w_right * right) / (w_left + w_right)
                         error = np.abs(channel - mean) / scale
                         if label == "match":
@@ -1563,7 +1894,7 @@ def read_cabledyn_sections(
             # Frame transport along the arc (all sections share it).
             arc_e1: dict[int, FloatArray] = {}
             if frame == "arc":
-                last = max(plan.element for plan in sections_plans)
+                last = max(plan.elem_pos for plan in sections_plans)
                 chords = _unit(
                     positions[:, [pos_slot[j + 1] for j in range(last + 1)]]
                     - positions[:, [pos_slot[j] for j in range(last + 1)]],
@@ -1601,8 +1932,8 @@ def read_cabledyn_sections(
                     tangent = _unit(value, "section tangent")
                     kappa = np.cross(tangent, d1)
                 else:
-                    window = positions[:, [pos_slot[j] for j in plan.window]]
-                    value, d1, d2 = _spline(arcs[plan.window], window, plan.arc)
+                    window_xyz = positions[:, [pos_slot[j] for j in plan.window]]
+                    value, d1, d2 = _spline(pos_arcs[plan.window], window_xyz, plan.arc)
                     speed = np.linalg.norm(d1, axis=-1, keepdims=True)
                     tangent = d1 / speed
                     kappa = np.cross(d1, d2) / speed**3
@@ -1614,7 +1945,7 @@ def read_cabledyn_sections(
                     continue
                 if frame == "arc":
                     axis1 = _transport(
-                        arc_e1[plan.element], chords[:, plan.element], tangent
+                        arc_e1[plan.elem_pos], chords[:, plan.elem_pos], tangent
                     )
                 else:
                     axis1, state = _time_transport(
@@ -1625,11 +1956,18 @@ def read_cabledyn_sections(
                     )
                     state_section[plan.name] = state
                 axis2 = np.cross(tangent, axis1)
-                weight = (plan.arc - arcs[plan.element]) / reference_l0[plan.element]
+                # Linear weights between the bracketing deck nodes (node
+                # channels) and position-grid nodes (positions).
+                weight = (plan.arc - deck_arcs[plan.elem_deck]) / deck_l0[
+                    plan.elem_deck
+                ]
+                weight_pos = (plan.arc - pos_arcs[plan.elem_pos]) / pos_l0[
+                    plan.elem_pos
+                ]
                 if twist_available:
                     twist = np.radians(
-                        (1 - weight) * values[:, slot[("twist", plan.element)]]
-                        + weight * values[:, slot[("twist", plan.element + 1)]]
+                        (1 - weight) * values[:, slot[("twist", plan.elem_deck)]]
+                        + weight * values[:, slot[("twist", plan.elem_deck + 1)]]
                     )
                     cos, sin = np.cos(twist)[:, None], np.sin(twist)[:, None]
                     axis1, axis2 = cos * axis1 + sin * axis2, -sin * axis1 + cos * axis2
@@ -1638,28 +1976,28 @@ def read_cabledyn_sections(
                     append(
                         plan,
                         "torque",
-                        (1 - weight) * values[:, slot[("torq", plan.element)]]
-                        + weight * values[:, slot[("torq", plan.element + 1)]],
+                        (1 - weight) * values[:, slot[("torq", plan.elem_deck)]]
+                        + weight * values[:, slot[("torq", plan.elem_deck + 1)]],
                     )
                 append(plan, "kx", np.sum(kappa * axis1, axis=-1))
                 append(plan, "ky", np.sum(kappa * axis2, axis=-1))
                 if (
                     pos_order
-                    and plan.element in pos_slot
-                    and plan.element + 1 in pos_slot
+                    and plan.elem_pos in pos_slot
+                    and plan.elem_pos + 1 in pos_slot
                 ):
                     if source == "positions":
                         z = value[:, 2]
                     else:
-                        z = (1 - weight) * positions[
-                            :, pos_slot[plan.element], 2
-                        ] + weight * positions[:, pos_slot[plan.element + 1], 2]
+                        z = (1 - weight_pos) * positions[
+                            :, pos_slot[plan.elem_pos], 2
+                        ] + weight_pos * positions[:, pos_slot[plan.elem_pos + 1], 2]
                     append(plan, "z", z)
                 if use_segments:
                     if plan.arc <= midpoints[0]:
                         ten = elem_t[:, ten_slot[0]]
                     elif plan.arc >= midpoints[-1]:
-                        ten = elem_t[:, ten_slot[n_nodes - 2]]
+                        ten = elem_t[:, ten_slot[n_mesh - 2]]
                     else:
                         lower = int(
                             np.searchsorted(midpoints, plan.arc, side="right") - 1
@@ -1672,8 +2010,8 @@ def read_cabledyn_sections(
                         ]
                 else:
                     ten = (1 - weight) * values[
-                        :, slot[("ten", plan.element)]
-                    ] + weight * values[:, slot[("ten", plan.element + 1)]]
+                        :, slot[("ten", plan.elem_deck)]
+                    ] + weight * values[:, slot[("ten", plan.elem_deck + 1)]]
                 append(plan, "tension", ten)
             append(plans[0], "time", time)
             n_rows += nt
@@ -1731,14 +2069,14 @@ def read_cabledyn_sections(
         # End nodes and their neighbours: the spline window is one-sided
         # there (and starts from the one-sided end chord on chord output),
         # CableDyn reports the end element's own curvature.
-        end = node <= 2 or node >= n_nodes - 1
+        end = node <= 2 or node >= n_deck - 1
         allowed = atol + (
             curvature_check_end_rtol if end else curvature_check_rtol
         ) * float(np.max(np.abs(channel)))
         # At an end node CableDyn reports the end element's curvature, which
         # carries the end condition (clamped or pinned); the spline
         # extrapolation does not impose it. Reported, not enforced.
-        enforced = 1 < node < n_nodes
+        enforced = 1 < node < n_deck
         curvature_checks[f"N{node}"] = {
             "max_abs_error_1_m": error,
             "max_channel_1_m": float(np.max(np.abs(channel))),

@@ -19,8 +19,9 @@ bend stiffener); the hysteretic two-way element is stage 2 (Section 7).
 
 From the CableDyn manual (`doc/driver_format.md`, `doc/outputs.rst`,
 `doc/theory.rst`) for CableDyn 0.4.x. The genuine runs in `tests/data/cabledyn/`
-were written by the CableDyn 0.1.0 driver; where a later release changed a
-channel, the item says so.
+were written by the CableDyn 0.1.0 driver (`lw24`, `lw128_v010`) and a
+CableDyn 0.4.2 build (`lw128`, and `lw24r` on a mesh the static solve
+refined); where a later release changed a channel, the item says so.
 
 - **Files.** Standalone driver: `<root>.out` (title line, header
   `Time(s)` and the deck `OUTPUTS` tokens, no units row);
@@ -157,8 +158,9 @@ included). `true_tension_N(A_o)` returns `T_e − p_o A_o`.
 OpenFAST units are checked per channel; a missing file or channel raises
 `CableSchemaError` naming it (for example the `Dec`/`Azi` nodes of the spline
 window, `Ten<L>N<J>`, the `p` flag for the arc frame, `Twist` on a restrained
-line). The reader also requires: mesh of `.elements.out` equal to the deck
-sections (an adaptive mesh needs that file); first position row equal to
+line). The reader also requires: every file of the run listing the same
+nodes of the line, and the deck nodes at the arc lengths of the deck
+sections (below); first position row equal to
 the static profile (files of one run); element chord within −2% to +5% of
 its reference length at `t = 0`; uniform output step equal to `dtM`;
 `.t.out` order fitting the `Ten` channels better than its mirror; and the
@@ -167,6 +169,23 @@ largest value (25% at nodes 2 and N−1; end nodes reported only, since there
 CableDyn reports the end element's curvature with its clamped or pinned end
 condition). A mesh too coarse for the curvature fails this check; state a
 tolerance or refine the mesh.
+
+**Refined meshes.** The static solve may refine a finite-EI line
+(`adaptive_mesh`, `tensile_safety` or the automatic refinement). Each deck
+node stays a node of the refined mesh at its own unstretched arc length; the
+`<J>` of every node channel names a deck node, while `.static.out`,
+`.elements.out` and the per-line files list every node of the refined mesh
+(CableDyn `doc/outputs.rst`, node channels on a refined line). The reader
+locates the deck nodes by the `DeckNode` column of `.static.out` or the
+`# DeckNode` line of `.Line<L>.p.out` (failing both, by their arc lengths in
+`.elements.out`); every numbering must name the deck nodes in order and agree
+with the others, and the deck nodes must lie at the deck-section arc lengths
+of `.elements.out`. Positions and segment tensions are read on the refined
+mesh, the node channels at the deck nodes; `checks["mesh"]` records the node
+counts and the source of the numbering. Without `.elements.out` the added
+nodes cannot be placed: the positions are read at the deck nodes,
+`tension_source="auto"` takes the node channels, and
+`tension_source="segments"` or `tangent_placement="chord"` is refused.
 
 **Deck outputs.** `section_channels(deck, sections)` lists the `OUTPUTS`
 channels the tangent source needs for the section frame: `Dec`/`Azi` on the
