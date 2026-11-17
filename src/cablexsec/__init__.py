@@ -56,6 +56,7 @@ from cablexsec.analysis.bending_law import (
     export_bending_law,
 )
 from cablexsec.analysis.capacity_check import (
+    ISO_13628_5_UTILISATION_FACTORS,
     CapacityCheckResult,
     CapacityEnvelope,
     GumbelFit,
@@ -454,6 +455,7 @@ __all__ = [
     "compute_component_response",
     # component limits (0.2 % proof stress, allowable strain) and capacity
     "COMPONENT_UTILISATION_FACTORS",
+    "ISO_13628_5_UTILISATION_FACTORS",
     "ComponentUsageCurve",
     "bending_directions",
     "capacity_utilisation",

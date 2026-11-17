@@ -19,6 +19,15 @@ Conductor      ``σ_conductor / σ_UTS``                       conductor stress
 Components     largest utilisation of the other components  component limits
 ============== ============================================ ==================
 
+The conductor has two mechanisms. **Fracture** (``Conductor``) compares the
+net-section stress with the tensile strength. The **plastic limit** is one of
+the component limits: the largest longitudinal stress of the conductor, at
+its extreme wire fibre and on the strand basis of its bending stiffness, over
+its 0.2 % proof stress (the material's ``sigma_y_Pa``; 120 MPa for the ETP
+copper of the 66 kV template, [Janocha2024] Sec. 2.1, p. 5). It is reported
+as the ``yielding`` mode of the conductor layer in ``governing_component``
+and governs the 66 kV template's tension and bending capacity.
+
 Component limits: the 0.2 % proof stress of the conductor on the strand basis
 of its bending stiffness and the allowable strain of polymers, metallic
 screens and sheaths, wherever the material gives them (the first yield of a

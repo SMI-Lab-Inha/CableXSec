@@ -168,6 +168,35 @@ against the design compression capacity with the armour slipping, the
 mechanism named, and the radial (bird-caging) utilisation with the armour
 stuck beside it.
 
+**Copper plastic limit.** The conductor is checked against its 0.2 % proof
+stress (the material's `sigma_y_Pa`) at its extreme wire fibre, on the strand
+basis of its bending stiffness, with the component factor. It appears in the
+envelope as the `yielding` mode of the conductor layer (`component_governing`),
+separately from conductor fracture, which compares the net-section stress with
+the tensile strength and stays characteristic.
+
+**Umbilical basis.** `cx.build_capacity_envelope(..., basis="iso_13628_5")`
+draws the capacity curve in the form used for umbilicals: one utilisation
+factor `k_u` for every element of the section, the allowable stress
+`k_u σ_y` of every metallic element (armour wires, the conductor's proof
+stress, screens and sheaths) and the allowable strain `k_u ε_allow` of every
+polymer (Skeie, Sødahl and Steinkjer 2012, Sec. 3.1). `k_u` is
+`utilisation_factor`; its default and `cx.ISO_13628_5_UTILISATION_FACTORS` are
+the values MecLim II (Sec. 3.5, p. 19) gives for the practice of API 17E /
+ISO 13628-5 for subsea umbilicals:
+
+| Condition | `k_u` |
+| --- | --- |
+| Normal operation (combined loading) | 0.80 |
+| Installation, load-controlled | 1.00 |
+| Installation, displacement-controlled | 0.75 |
+| Abnormal operation | 1.00 |
+
+The same factor applies to the buckling screen. The standard itself is not
+reproduced: its element stress definitions and load categories are not in a
+public source and are not implemented. The default basis, `"power_cable"`,
+keeps the armour factor of DNV-RP-F401 and the component factor of MecLim II.
+
 ## 5. Use
 
 ```python

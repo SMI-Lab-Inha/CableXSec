@@ -91,6 +91,9 @@ from cablexsec.exceptions import CableInputError
 from cablexsec.provenance import Provenance
 
 __all__ = [
+    "CAPACITY_BASES",
+    "ISO_13628_5_UTILISATION_FACTORS",
+    "CapacityBasis",
     "CapacityCheckResult",
     "CapacityEnvelope",
     "ExceedanceStatistics",
@@ -105,6 +108,26 @@ __all__ = [
 
 FloatArray = NDArray[np.float64]
 TensionKind = Literal["effective", "true", "material"]
+CapacityBasis = Literal["power_cable", "iso_13628_5"]
+#: The utilisation definitions of :func:`build_capacity_envelope`.
+CAPACITY_BASES: tuple[str, ...] = ("power_cable", "iso_13628_5")
+
+#: Utilisation factors of the umbilical basis (``basis="iso_13628_5"``) by
+#: lifecycle phase, one factor for every element of the section. Values as the
+#: OWA MecLim II guideline (July 2025) Sec. 3.5, p. 19, reports the practice of
+#: API 17E / ISO 13628-5 for subsea umbilicals: 1.00 in abnormal operation,
+#: 1.00 in load-controlled installation (0.75 to be considered under
+#: displacement control) and 0.80 in normal operation (combined loading).
+ISO_13628_5_UTILISATION_FACTORS: Mapping[str, float] = {
+    "normal": 0.80,
+    "installation": 1.00,
+    "installation_displacement_controlled": 0.75,
+    "abnormal": 1.00,
+}
+_ISO_FACTOR_SOURCE = (
+    "[MecLim2025] Sec. 3.5, p. 19 (its account of API 17E / ISO 13628-5 "
+    "utilisation factors for subsea umbilicals)"
+)
 OutOfRange = Literal["raise", "clamp"]
 EULER_GAMMA = 0.5772156649015329
 _MECHANISMS = (
@@ -233,6 +256,7 @@ class CapacityEnvelope:
     source: str = ""
     provenance: Provenance | None = None
     component_utilisation_factor: float = 1.0
+    basis: str = "power_cable"
     component_levels_1_m: FloatArray = field(default_factory=lambda: np.zeros((0, 0)))
     component_zero_utilisation: FloatArray = field(default_factory=lambda: np.zeros(0))
     component_governing: tuple[tuple[str, str], ...] = ()
@@ -254,6 +278,10 @@ class CapacityEnvelope:
             0.0 < self.utilisation_factor <= 1.0
         ):
             raise CableInputError("utilisation_factor must lie in (0, 1]")
+        if self.basis not in (*CAPACITY_BASES, "imported"):
+            raise CableInputError(
+                "basis must be 'power_cable', 'iso_13628_5' or 'imported'"
+            )
         if self.mbr_m is not None and not (
             math.isfinite(self.mbr_m) and self.mbr_m > 0
         ):
@@ -302,6 +330,7 @@ class CapacityEnvelope:
             utilisation_factor=utilisation_factor,
             tension_kind=tension_kind,
             governing=("imported",) * tension.size,
+            basis="imported",
             mbr_m=mbr_m,
             mbr_source=mbr_source,
             source=source,
@@ -595,6 +624,7 @@ def build_capacity_envelope(
     component_limits: bool = True,
     curvature_nodes: ArrayLike = (),
     curvatures: bool = True,
+    basis: CapacityBasis = "power_cable",
 ) -> CapacityEnvelope:
     """Capacity envelope with utilisation levels over a tension grid.
 
@@ -641,6 +671,19 @@ sheath_strength_source
         ``False`` computes the components at zero curvature only: an envelope
         to scan the utilisation at zero curvature over tension (the tension
         and compression capacities), not to check a bent section.
+    basis : {"power_cable", "iso_13628_5"}
+        The utilisation definition. ``"power_cable"`` (default): the armour
+        factor of DNV-RP-F401 Table 3-1 and the component factor of the same
+        lifecycle phase of MecLim II Table 5. ``"iso_13628_5"``: the
+        umbilical form of the capacity curve, one utilisation factor ``k_u``
+        for every element of the section, the allowable stress ``k_u sigma_y``
+        of a metallic element (armour wires, the conductor's 0.2 % proof
+        stress, screens and sheaths) and the allowable strain ``k_u
+        epsilon_allow`` of a polymer (Skeie et al. 2012, Sec. 3.1). ``k_u`` is
+        ``utilisation_factor`` (default the normal-operation value of
+        :data:`ISO_13628_5_UTILISATION_FACTORS`, 0.80) and applies to the
+        buckling screen too; ``component_utilisation_factor`` must then be
+        omitted or equal to it.
     """
     from cablexsec.analysis import capacity as cap  # noqa: PLC0415
     from cablexsec.analysis.component_limits import (  # noqa: PLC0415
@@ -657,13 +700,26 @@ sheath_strength_source
         _screen,
     )
 
-    eta = (
-        ARMOUR_UTILISATION_FACTORS["normal"]
-        if utilisation_factor is None
-        else float(utilisation_factor)
+    if basis not in CAPACITY_BASES:
+        raise CableInputError("basis must be 'power_cable' or 'iso_13628_5'")
+    iso = basis == "iso_13628_5"
+    default_factor = (
+        ISO_13628_5_UTILISATION_FACTORS["normal"]
+        if iso
+        else ARMOUR_UTILISATION_FACTORS["normal"]
     )
+    eta = default_factor if utilisation_factor is None else float(utilisation_factor)
+    if (
+        iso
+        and component_utilisation_factor is not None
+        and float(component_utilisation_factor) != eta
+    ):
+        raise CableInputError(
+            "basis 'iso_13628_5' applies one utilisation factor to every element: "
+            "omit component_utilisation_factor or set it to utilisation_factor"
+        )
     eta_c = (
-        component_factor_for(eta)
+        (eta if iso else component_factor_for(eta))
         if component_utilisation_factor is None
         else float(component_utilisation_factor)
     )
@@ -867,6 +923,7 @@ sheath_strength_source
         mbr_source=mbr_note,
         source=f"CableXSec envelope of {cable.cable.name}",
         component_utilisation_factor=eta_c,
+        basis=basis,
         component_levels_1_m=c_levels if assessed else np.zeros((0, 0)),
         component_zero_utilisation=c_zero if assessed else np.zeros(0),
         component_governing=tuple(c_governing) if assessed else (),
@@ -876,7 +933,15 @@ sheath_strength_source
         wire_beyond_slope=beyond,
         provenance=Provenance(
             method=(
-                "capacity envelope with utilisation levels: largest armour "
+                (
+                    "umbilical (ISO 13628-5) form of the capacity curve: one "
+                    f"utilisation factor k_u = {eta:g} for every element, "
+                    "allowable stress k_u sigma_y, allowable polymer strain "
+                    "k_u epsilon_allow; "
+                    if iso
+                    else ""
+                )
+                + "capacity envelope with utilisation levels: largest armour "
                 "wire stress over the yield stress, from the common slip-front "
                 "stress, at design utilisation levels "
                 f"{', '.join(f'{v:g}' for v in level_values)} (design "
@@ -895,13 +960,17 @@ sheath_strength_source
             ),
             citations=(
                 "[Skeie2012] Sec. 3.1, Fig. 11",
-                "[DNV-RP-F401] Sec. 3.8.1, Table 3-1, p. 13",
+                *(
+                    (_ISO_FACTOR_SOURCE,)
+                    if iso
+                    else ("[DNV-RP-F401] Sec. 3.8.1, Table 3-1, p. 13",)
+                ),
                 "[SaevikThorsen2017]",
                 "[LiVaz2021a]",
             )
             + (
                 ("[MecLim2025] Table 5, p. 19 (components other than the armour)",)
-                if assessed
+                if assessed and not iso
                 else ()
             )
             + ((polymer_crush_source,) if polymer_crush_source else ()),
@@ -910,11 +979,19 @@ sheath_strength_source
                 "tests/test_capacity_check.py",
             ),
             limitations=(
-                "the design utilisation factor is applied to the armour wire "
-                "stress and "
-                "buckling capacities, the component factor to the limits of the "
-                "other components; conductor fracture and polymer crushing "
-                "are characteristic",
+                (
+                    "umbilical basis: the utilisation factor follows the "
+                    "published account of ISO 13628-5 practice; the "
+                    "standard's own clauses (element stress definitions, load "
+                    "categories) are not reproduced; conductor fracture and "
+                    "polymer crushing are characteristic"
+                    if iso
+                    else "the design utilisation factor is applied to the armour "
+                    "wire stress and "
+                    "buckling capacities, the component factor to the limits of "
+                    "the other components; conductor fracture and polymer "
+                    "crushing are characteristic"
+                ),
                 "a component without a limit in its material is not checked; "
                 "layers outside the load path (loose screens) are left out, "
                 "their kinematic stress being an upper bound",

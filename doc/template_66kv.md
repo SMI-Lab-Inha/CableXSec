@@ -556,9 +556,12 @@ and the mass carry the template's known differences (Section 5, items 1 and
    are not published; the designed stranding of Section 4.5 resolves them
    under stated assumptions for conductor fatigue, while the radial solvers
    still need the area-equivalent solid.
-3. **Capacity mechanisms.** The envelope has no copper plastic-limit or
-   conductor bending mechanism; the source capacity (0.5 1/m, about 600 kN at
-   100 % utilisation, Fig. 21) is governed by copper. In compression the
+3. **Capacity mechanisms.** The copper plastic limit is a mechanism of the
+   envelope (Section 4.6): the conductor's 0.2 % proof stress at its extreme
+   wire fibre, on the strand basis of the assumed 5 GPa bending modulus. It
+   governs, as copper governs the source capacity (0.5 1/m, about 600 kN at
+   100 % utilisation, Fig. 21), but its bending part rests on that assumed
+   modulus, not on resolved wires. In compression the
    armour screen ([uls_guide.md](uls_guide.md), Section 6) gives a cable
    capacity of 6.9 kN, set by lateral buckling of the 10° outer armour once
    the wires slip (4.6 kN at the DNV-RP-F401 normal-operation factor 0.67);
