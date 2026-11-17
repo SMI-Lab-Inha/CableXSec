@@ -34,6 +34,7 @@ KERNEL_TESTS = (
     "tests/test_friction_kernels.py",
     "tests/test_friction_law.py",
     "tests/test_friction_pressure.py",
+    "tests/test_distributed_slide.py",
 )
 
 

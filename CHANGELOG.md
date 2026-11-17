@@ -187,6 +187,30 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Fixed
 
+- The slip of the distributed friction model over a full-slip increment (every helix node on its
+  bound) is now unique. The equations fix the forces, the tractions and `u − p` there, but not a
+  slide common to the displacement `u` and the slip `p` of all nodes; the solver left one node
+  exactly on its bound, chosen between candidate nodes at round-off, so the kept slip field
+  (`DistributedFrictionHistory.kinematic_field`) and the armour slip of
+  `kinematic_history(..., friction_model="distributed")` (`slip_m`, built from `p`; `slipping`,
+  from the step slip) could move with any round-off change. On a 32-node helix in full slip a
+  relative change of 1e-15 in the curvature moved the slip by 12 % of the largest step slip
+  (uniform bound), and the pitch-mean slip jumped by up to 2.7 % of the step slip from one
+  full-slip step to the next. The increment now takes the slide that gives the step slip a zero
+  pitch mean, or the admissible slide nearest to it (every node keeps slipping in the direction
+  of its traction): a uniform curvature puts no net axial force on a wire over a pitch and slides
+  no wire as a whole, the convention of the pointwise laws in `kinematic_history`, which keep the
+  pitch mean of the slip over a step in which no station sticks. Partial slip is unchanged (the
+  stick nodes fix the slide). Measured on the 66 kV template with `kinematic_history`
+  (`friction_model="distributed"`, planar and rotating bending at 0.01 and 0.05 1/m, 121 and 601
+  samples, 0–100 % of the samples in full slip): the armour slip changes by at most 4.9 µm, 0.3 %
+  of the station slip amplitudes of 0.3–2.0 mm; no `slipping` flag changes; the pitch-mean slip
+  no longer moves over full-slip steps in planar bending (it moved by up to 0.024 µm per step);
+  wire stresses and friction work change by at most 1.7e-15 relative (round-off). The Menard
+  2023 cable does not reach full slip in these histories and is unchanged. No validation row
+  and no documentation example output changes (the examples use the direction-tied law). Tests:
+  tests/test_distributed_slide.py.
+
 - Provenance of the default armour coefficient `mu_on_hdpe = 0.20` (and `mu_on_steel = 0.20` of
   `steel_saevik2011`); the values are unchanged. The source is Dai, Sævik and Ye, Marine
   Structures 55 (2017) 137–161, Sec. 4.3.1, p. 156 (cited as Sec. 4.3 before): an estimate

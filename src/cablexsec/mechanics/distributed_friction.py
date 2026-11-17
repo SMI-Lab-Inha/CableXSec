@@ -63,6 +63,23 @@ point on the bound. Both converge to the same equations (tolerance
 interpolation of curvature and pressure; an increment that fails to converge is
 repeated with twice as many substeps.
 
+Full slip: when every node of an increment is on its bound, the equations fix
+the forces, the tractions and ``u - p``, but not a slide ``c`` common to the
+displacement and the slip of every node. Any ``c`` that keeps each node
+slipping in the direction of its traction is in equilibrium and does the same
+friction work (the tractions sum to zero over the pitch, so ``sum h t c = 0``);
+the solver alone would leave one node exactly on its bound, a choice made at
+round-off between candidate nodes. The increment takes the slide that gives
+the step slip a zero pitch mean, or the admissible slide nearest to it. A
+uniform curvature, which puts no net axial force on the wire over a pitch,
+then slides no wire as a whole; this is the convention of the pointwise laws
+in :mod:`cablexsec.analysis.kinematics`, where the pitch mean of the slip keeps
+its value over a step in which no station sticks. In partial slip the stick
+nodes fix the slide and nothing changes. The kept displacement ``u``, slip
+``p`` and step slip are then unique. Forces, stresses and energies do not
+depend on the slide, except through the healing of a friction law, where a
+node counts as slipping when its traction is on the bound.
+
 Energy (normalised per pitch, per wire): with
 ``U = h sum n^2/2 + h sum t^2/(2 k_hat)``, the identity
 ``W_be - D - U - R = 0`` holds every increment, ``W_be = sum h n . de``,
@@ -126,6 +143,10 @@ DEFAULT_MAX_INCREMENT = 0.1
 _MAX_NEWTON = 60
 _MAX_FIXED_POINT = 100
 _MAX_HALVINGS = 12
+#: Relative margin within which a node counts as on its bound for the slide
+#: of a full-slip increment (:func:`_full_slip_slide`); the node that takes
+#: the stick row in full slip sits on its bound to round-off.
+_ON_BOUND = 1e-9
 
 
 # --------------------------------------------------------------------------- #
@@ -538,6 +559,65 @@ def _solve_fixed_bound(
 
 
 @njit(cache=True)
+def _full_slip_slide(
+    z0: FloatArray,
+    v: FloatArray,
+    nseg: FloatArray,
+    mfac: FloatArray,
+    rho: float,
+    gnode: FloatArray,
+    khat: float,
+    lam: float,
+) -> None:
+    """Fix the common slide of ``u`` and ``p`` of a full-slip increment.
+
+    With every node on its bound (none sticks clear of it, by the relative
+    margin ``_ON_BOUND``) the equations fix the segment forces ``nseg`` and
+    the tractions, but not a slide ``c`` added to the increment ``v`` (and so
+    to the step slip ``dp``) at every node: any ``c`` that keeps each node
+    slipping in the direction of its traction is in equilibrium and does the
+    same friction work, the tractions summing to zero over the pitch. ``v``
+    takes the ``c`` that gives the step slip a zero pitch mean, or the
+    admissible ``c`` nearest to it (module notes). No change when a node
+    sticks.
+    """
+    n = z0.size
+    lo = -math.inf
+    hi = math.inf
+    mean = 0.0
+    for j in range(n):
+        jm = j - 1 if j > 0 else n - 1
+        bj = mfac[j] * (rho * gnode[j] + lam * 0.5 * (nseg[j] + nseg[jm]))
+        if bj < 0.0:
+            bj = 0.0
+        r = z0[j] + v[j]
+        kr = khat * r
+        if abs(kr) < bj * (1.0 - _ON_BOUND):
+            return  # a node sticks: it fixes the slide
+        t = kr
+        if t > bj:
+            t = bj
+        elif t < -bj:
+            t = -bj
+        dp = r - t / khat
+        mean += dp
+        if bj > 0.0:
+            # Slip in the direction of the traction: dp + c >= 0 where t > 0.
+            if kr > 0.0:
+                lo = max(lo, -dp)
+            else:
+                hi = min(hi, -dp)
+    # lo <= 0 <= hi (the solved slide is admissible) to round-off.
+    c = -mean / n
+    if c < lo:
+        c = lo
+    if c > hi:
+        c = hi
+    for j in range(n):
+        v[j] += c
+
+
+@njit(cache=True)
 def _advance(
     ax: float,
     ay: float,
@@ -682,6 +762,7 @@ def _advance(
                     changed = True
         if not changed:
             break
+    _full_slip_slide(z0, v, ncur, meff, rho, gnode, khat, lam)
     w_be = 0.0
     diss = 0.0
     rem = 0.0
