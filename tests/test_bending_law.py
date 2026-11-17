@@ -58,7 +58,7 @@ def test_export_reproduces_compute_mkappa(menard, tmp_path):
     )
     assert record["hysteresis_rule"] == "masing_iwan" and record["planar_only"]
     table = export.backbone_table_kNm(10e3)
-    assert table[0] == (0.0, 0.0) and len(table) == 120
+    assert table[0] == (0.0, 0.0) and len(table) == export.kappa_1_m.size
     with pytest.raises(CableInputError, match="outside"):
         export.law_at(30e3)
     assert export.to_csv(tmp_path / "law.csv").read_text().startswith("kappa_1_m,")
@@ -120,8 +120,71 @@ def test_export_checks(kwargs, match):
 
 def test_single_tension_and_linear_spacing():
     cable = cx.load_cable(cx.menard2023_yaml_path(), geometry_override=None)
-    export = export_bending_law(
-        cable, tensions_N=[2e4], kappa_max_1_m=0.1, n_points=11, spacing="linear"
-    )
-    np.testing.assert_allclose(np.diff(export.kappa_1_m), 0.01, rtol=1e-12)
+    # The 0.01 1/m step is wider than the stick-to-slip transition at 20 kN:
+    # the export adds a stick point and the slip points and warns.
+    with pytest.warns(UserWarning, match="linear step"):
+        export = export_bending_law(
+            cable, tensions_N=[2e4], kappa_max_1_m=0.1, n_points=11, spacing="linear"
+        )
+    assert np.isin(np.linspace(0.0, 0.1, 11), export.kappa_1_m).all()
+    extra = np.setdiff1d(export.kappa_1_m, np.linspace(0.0, 0.1, 11))
+    assert extra.size >= 3 and np.all(extra < 0.01)
+    stick = cx.compute_mkappa(cable, np.zeros(2), tension_N=2e4).EI_max_Nm2
+    assert export.laws[0].ei_stick_Nm2 == pytest.approx(stick, rel=1e-12)
     assert export.law_at(2e4) is export.laws[0]
+
+
+@pytest.fixture(scope="module")
+def iea66_stick():
+    """66 kV template at 10-200 kN: its slip onsets at 10 kN (7.3e-6 and
+    2.3e-5 1/m) lie below the base grid floor 1e-4 kappa_max = 4e-5 1/m."""
+    cable = cx.load_cable(cx.iea_task49_66kv_yaml_path(), geometry_override=None)
+    tensions = [10e3, 25e3, 50e3, 100e3, 200e3]
+    props = cx.compute_section_properties(
+        cable, [cx.SectionLoadCase(f"T{t:g}", tension_N=t) for t in tensions]
+    )
+    export = export_bending_law(
+        cable,
+        tensions_N=tensions,
+        kappa_max_1_m=0.4,
+        n_points=200,
+        slip_scale=True,
+    )
+    return cable, tensions, props, export
+
+
+@pytest.mark.filterwarnings("error:the exported law:UserWarning")
+def test_export_starts_at_the_section_stick_stiffness(iea66_stick):
+    cable, tensions, props, export = iea66_stick
+    table = export.slip_scale
+    assert table is not None and table.reference_tension_N == tensions[0]
+    onsets = [a.onset_curvature_1_m for c in props.cases for a in c.armour]
+    assert min(onsets) < 0.4 * 1e-4  # below the base grid floor
+    assert export.kappa_1_m[1] < 0.5 * min(onsets)
+    for i, case in enumerate(props.cases):
+        stick = case.ei_stick_Nm2
+        assert export.laws[i].ei_stick_Nm2 == pytest.approx(stick, rel=1e-12)
+        assert table.law_at(tensions[i]).ei_stick_Nm2 == pytest.approx(stick, rel=1e-12)
+        for slip in case.armour:
+            for value in (slip.onset_curvature_1_m, slip.full_slip_curvature_1_m):
+                assert np.min(np.abs(export.kappa_1_m - value)) <= 1e-9 * value
+
+
+def test_exported_and_scaled_laws_match_compute_mkappa_off_the_grid(iea66_stick):
+    # Before the grid carried the slip curvatures the 10 kN law started at
+    # 0.46 of the stick stiffness and every scaled tension inherited it.
+    cable, tensions, _, export = iea66_stick
+    table = export.slip_scale
+    assert table is not None
+    grid = export.kappa_1_m[1:]
+    between = np.sqrt(grid[:-1] * grid[1:])
+    between = between[(between > 1e-6) & (between < 0.05)]
+    for i, tension in enumerate(tensions):
+        direct = np.asarray(
+            cx.compute_mkappa(
+                cable, np.concatenate([[0.0], between]), tension_N=tension
+            ).moment_Nm
+        )[1:]
+        for law in (export.laws[i], table.law_at(tension)):
+            error = np.max(np.abs(law.backbone(between) - direct) / direct)
+            assert error < 2e-3, (tension, error)
