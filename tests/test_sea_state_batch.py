@@ -294,6 +294,23 @@ def test_worker_cap(cable):
         SeaStateBatchOptions(workers=99)
 
 
+def test_tangent_placement_reaches_the_reader(tmp_path, cable):
+    """CableDyn 0.4.2 output read as chord tangents fails the curvature check."""
+    data = os.path.join(os.path.dirname(__file__), "data", "cabledyn")
+    run = SeaStateRun(
+        "lw128", os.path.join(data, "lw128"), os.path.join(data, "lw128.dat"), 1.0
+    )
+    options = SeaStateBatchOptions(
+        frame="section", tension_basis="true", allow_property_mismatch=True
+    )
+    sections = [SectionRequest("hangoff", 0.25)]
+    result = run_sea_state_batch(cable, [run], sections, options=options)
+    assert result.manifest["options"]["tangent_placement"] == "auto"
+    chord = replace(options, tangent_placement="chord")
+    with pytest.raises(CableSchemaError, match="needs the default tangent_placement"):
+        run_sea_state_batch(cable, [run], sections, options=chord)
+
+
 @needs_numba
 def test_json_specification_and_command_line(tmp_path, cable, stiffness):
     runs = _runs(tmp_path, stiffness)

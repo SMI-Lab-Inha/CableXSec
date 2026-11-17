@@ -4,10 +4,13 @@
 
 Synthetic files follow the layouts of CableDyn's standalone driver
 (doc/outputs.rst): known centrelines with analytic curvature vectors are
-written as node positions, chord tangents (``Dec``/``Azi``), element tensions
-and curvature magnitudes. ``tests/data/cabledyn`` holds two compact runs of
-the CableDyn v0.1.0 driver on the ``lazy_wave_vessel_rao`` example cable
-(JONSWAP Hs 4 m, Tp 10 s, 30 deg; RAO-driven hang-off).
+written as node positions, node or chord tangents (``Dec``/``Azi``), element
+tensions and curvature magnitudes. ``tests/data/cabledyn`` holds compact runs
+on the ``lazy_wave_vessel_rao`` example cable (JONSWAP Hs 4 m, Tp 10 s,
+30 deg; RAO-driven hang-off): ``lw128`` of the CableDyn 0.4.2 driver (node
+tangents; development build 4b94321), ``lw128_v010`` of the v0.1.0 driver
+on the same deck (chord tangents) and ``lw24`` of the v0.1.0 driver (no
+tangent channels).
 """
 
 from __future__ import annotations
@@ -46,7 +49,10 @@ def _deck(
     ea=5.0e8,
     ei=2.0e4,
     t_max=1.0,
+    sections=None,
 ):
+    """A one-line deck; ``sections`` lists (length, NumSegs) from End A."""
+    sections = [(length, n_elements)] if sections is None else sections
     ends = ""
     if torsion:
         ends = (
@@ -71,8 +77,8 @@ def _deck(
         f"1 1 2 {outputs}\n"
         "--------------------- SECTIONS ---\n"
         "LineID LineType Length NumSegs\n(-) (-) (m) (-)\n"
-        f"1 cable {length} {n_elements}\n"
-        f"{ends}"
+        + "".join(f"1 cable {sec_len} {sec_n}\n" for sec_len, sec_n in sections)
+        + f"{ends}"
         "--------------------- OPTIONS ---\n"
         "9.81 g - gravity\n1025.0 rhoW - density\n"
         f"{dt} dtM - step\n{t_max} TMax - duration\n{extra_options}"
@@ -172,28 +178,56 @@ def _arc(curvature, normal, binormal, s, origin=(0.0, 0.0, -10.0), t0=(1.0, 0.0,
     return np.asarray(origin) + r / curvature
 
 
-def _chord_tangent_channels(positions, line=1):
-    """Dec/Azi of CableDyn's chord tangents (central; one-sided at the ends)."""
-    nn = positions.shape[1]
+def _angle_channels(tangents, line=1):
+    """Dec/Azi channels [deg] of unit tangents (nt, nn, 3)."""
     out = {}
-    for j in range(nn):
-        a, b = max(j - 1, 0), min(j + 1, nn - 1)
-        t = positions[:, b] - positions[:, a]
-        t /= np.linalg.norm(t, axis=-1, keepdims=True)
+    for j in range(tangents.shape[1]):
+        t = tangents[:, j]
         out[f"L{line}N{j + 1}Dec"] = np.degrees(np.arccos(np.clip(t[:, 2], -1, 1)))
         out[f"L{line}N{j + 1}Azi"] = np.degrees(np.arctan2(t[:, 1], t[:, 0])) % 360.0
     return out
 
 
-def _bending_case(kappa, phi, nt):
+def _chord_tangent_channels(positions, line=1):
+    """Dec/Azi of chord tangents: an EI = 0 line, or CableDyn 0.4.1 and earlier.
+
+    Central difference of the node positions; one-sided at the ends.
+    """
+    nn = positions.shape[1]
+    tangents = np.empty_like(positions)
+    for j in range(nn):
+        a, b = max(j - 1, 0), min(j + 1, nn - 1)
+        t = positions[:, b] - positions[:, a]
+        tangents[:, j] = t / np.linalg.norm(t, axis=-1, keepdims=True)
+    return _angle_channels(tangents, line)
+
+
+def _bending_case(kappa, phi, nt, s=None):
     """Arc of curvature kappa(t) whose binormal turns by phi(t) about t0 = +x."""
-    s = _arcs()
+    s = _arcs() if s is None else s
     positions = np.empty((nt, s.size, 3))
     for k in range(nt):
         b = np.array([0.0, math.cos(phi[k]), math.sin(phi[k])])
         n = np.cross(b, [1.0, 0.0, 0.0])
         positions[k] = _arc(kappa[k], n, b, s)
     return positions
+
+
+def _node_tangent_channels(kappa, phi, nt, s=None, line=1):
+    """Dec/Azi of the exact node tangents of ``_bending_case``.
+
+    What a finite-EI line writes since CableDyn 0.4.2: the tangent at the
+    node itself, ``dr/ds = cos(kappa s) t0 + sin(kappa s) n``.
+    """
+    s = _arcs() if s is None else s
+    tangents = np.empty((nt, s.size, 3))
+    x0 = np.array([1.0, 0.0, 0.0])
+    for k in range(nt):
+        b = np.array([0.0, math.cos(phi[k]), math.sin(phi[k])])
+        n = np.cross(b, x0)
+        theta = kappa[k] * s
+        tangents[k] = np.cos(theta)[:, None] * x0 + np.sin(theta)[:, None] * n
+    return _angle_channels(tangents, line)
 
 
 # --------------------------------------------------------------------------- #
@@ -208,7 +242,11 @@ def test_pure_bending_about_each_axis(tmp_path, source, frame):
     kappa = 0.03 + 0.01 * np.sin(np.arange(nt))
     for phi, expected in ((0.0, (0.0, 1.0)), (math.pi / 2, (-1.0, 0.0))):
         positions = _bending_case(kappa, np.full(nt, phi), nt)
-        channels = _chord_tangent_channels(positions) if source == "tangent" else {}
+        channels = (
+            _node_tangent_channels(kappa, np.full(nt, phi), nt)
+            if source == "tangent"
+            else {}
+        )
         root, deck = _write_case(
             tmp_path, positions, channels=channels, root=f"c{int(phi * 100)}"
         )
@@ -229,6 +267,96 @@ def test_pure_bending_about_each_axis(tmp_path, source, frame):
                 history.rotation_curvature_y_1_m, expected[1] * kappa, atol=2e-6
             )
             assert np.allclose(history.curvature_norm_1_m, kappa, atol=2e-6)
+
+
+# A non-uniform mesh: 0.2 m elements over the first metre, then 0.3 m.
+NONUNIFORM = ((1.0, 5), (9.0, 30))
+NONUNIFORM_ARCS = np.concatenate(
+    ([0.0], 0.2 * np.arange(1, 6), 1.0 + 0.3 * np.arange(1, 31))
+)
+PLACEMENT_SECTIONS = {"end_a": 0.0, "junction": 1.0, "mid": 4.37, "end_b": 10.0}
+
+
+@pytest.mark.analytical_sanity
+def test_node_tangents_of_a_finite_ei_line_sit_at_the_nodes(tmp_path):
+    """CableDyn 0.4.2+: a finite-EI line writes each node's own tangent.
+
+    On a non-uniform mesh, at End A, at the mesh junction and at End B the
+    node tangents give the arc curvature. Placed at the chord mid-arcs (the
+    reading of CableDyn 0.4.1 output) the End-A tangent sits half an element
+    inside the line and the curvature there comes out about twice too large.
+    """
+    nt = 4
+    kappa = 0.05 + 0.01 * np.arange(nt)
+    phi = np.zeros(nt)
+    s = NONUNIFORM_ARCS
+    positions = _bending_case(kappa, phi, nt, s)
+    channels = _node_tangent_channels(kappa, phi, nt, s)
+    root, deck = _write_case(
+        tmp_path, positions, channels=channels, deck_kwargs={"sections": NONUNIFORM}
+    )
+    read = read_cabledyn_sections(
+        root, deck, PLACEMENT_SECTIONS, curvature_source="tangent", pressure="none"
+    )
+    assert read.checks["tangent_placement"].startswith("node (finite-EI line")
+    assert (
+        "tangents placed at the node"
+        in read.histories["end_a"].provenance.limitations[0]
+    )
+    for history in read.histories.values():
+        assert np.allclose(history.rotation_curvature_x_1_m, 0.0, atol=1e-6)
+        assert np.allclose(history.rotation_curvature_y_1_m, kappa, rtol=1e-4)
+    chord = read_cabledyn_sections(
+        root,
+        deck,
+        PLACEMENT_SECTIONS,
+        curvature_source="tangent",
+        tangent_placement="chord",
+        pressure="none",
+    )
+    assert chord.checks["tangent_placement"].startswith("chord mid-arc")
+    end_a = chord.histories["end_a"].curvature_norm_1_m
+    assert np.all(end_a > 1.5 * kappa)
+
+
+@pytest.mark.analytical_sanity
+@pytest.mark.parametrize(("ei", "placement"), [(0.0, "auto"), (2.0e4, "chord")])
+def test_chord_tangents_sit_at_the_chord_mid_arcs(tmp_path, ei, placement):
+    """An EI = 0 line (every version) and finite-EI output of CableDyn <= 0.4.1.
+
+    Both write the chord between the neighbouring nodes (one-sided at the
+    ends), the tangent of the arc at the chord's mid-arc.
+    """
+    nt = 4
+    kappa = 0.05 + 0.01 * np.arange(nt)
+    s = NONUNIFORM_ARCS
+    positions = _bending_case(kappa, np.zeros(nt), nt, s)
+    root, deck = _write_case(
+        tmp_path,
+        positions,
+        channels=_chord_tangent_channels(positions),
+        deck_kwargs={"sections": NONUNIFORM, "ei": ei},
+    )
+    read = read_cabledyn_sections(
+        root,
+        deck,
+        PLACEMENT_SECTIONS,
+        curvature_source="tangent",
+        tangent_placement=placement,
+        pressure="none",
+    )
+    expected = "chord mid-arc (EI = 0" if ei == 0.0 else "chord mid-arc (tangent_"
+    assert read.checks["tangent_placement"].startswith(expected)
+    for history in read.histories.values():
+        assert np.allclose(history.rotation_curvature_x_1_m, 0.0, atol=1e-6)
+        assert np.allclose(history.rotation_curvature_y_1_m, kappa, rtol=1e-4)
+
+
+def test_tangent_placement_is_checked(tmp_path):
+    positions = _bending_case(np.full(3, 0.02), np.zeros(3), 3)
+    root, deck = _write_case(tmp_path, positions)
+    with pytest.raises(CableSchemaError, match="tangent_placement"):
+        read_cabledyn_sections(root, deck, {"s": 5.0}, tangent_placement="node")
 
 
 @pytest.mark.analytical_sanity
@@ -460,7 +588,7 @@ def test_missing_tension_source_is_named(tmp_path):
 
 def test_missing_positions_for_arc_frame(tmp_path):
     positions = _bending_case(np.full(3, 0.02), np.zeros(3), 3)
-    channels = _chord_tangent_channels(positions)
+    channels = _node_tangent_channels(np.full(3, 0.02), np.zeros(3), 3)
     root, deck = _write_case(tmp_path, positions, outputs="t", channels=channels)
     with pytest.raises(CableSchemaError, match="frame transport needs node positions"):
         read_cabledyn_sections(root, deck, {"s": 5.0}, pressure="none")
@@ -583,8 +711,7 @@ def test_output_step_must_match_the_deck(tmp_path):
 
 def test_openfast_units_row_is_checked(tmp_path):
     nt = 3
-    positions = _bending_case(np.full(nt, 0.02), np.zeros(nt), nt)
-    channels = _chord_tangent_channels(positions)
+    channels = _node_tangent_channels(np.full(nt, 0.02), np.zeros(nt), nt)
     names = [f"L1N{j}{kind}" for j in range(48, 56) for kind in ("Dec", "Azi")]
     names += ["Ten1N51", "Ten1N52"]
     channels["Ten1N51"] = channels["Ten1N52"] = np.full(nt, 1000.0)
@@ -646,7 +773,15 @@ def test_deck_reader_applies_the_anchor_first_swap(tmp_path):
 # --------------------------------------------------------------------------- #
 @pytest.mark.full_scale
 def test_real_cabledyn_run_from_channels():
-    """128 elements, tangent and position channels only (no per-line files)."""
+    """128 elements, tangent and position channels only (no per-line files).
+
+    CableDyn 0.4.2 output: node tangents on a mesh of 0.2 m elements over the
+    first 6 m, then 1.24 m. Placed at their nodes, the tangents give
+    CableDyn's own curvature at the hang-off nodes N2 to N4 and in the sag
+    bend to 2.5e-4 of its largest value. Placed at the chord mid-arcs, the
+    End-A tangent sits 0.1 m inside the line and N2 comes out 52 % off,
+    N3 15 %.
+    """
     read = read_cabledyn_sections(
         DATA / "lw128",
         DATA / "lw128.dat",
@@ -654,10 +789,21 @@ def test_real_cabledyn_run_from_channels():
         frame="section",
     )
     assert read.checks["curvature_source"] == "tangent"
+    assert read.checks["tangent_placement"].startswith("node")
     assert read.checks["first_row_vs_static_m"] == 0.0
     assert read.checks["time_step_s"] == pytest.approx(0.1)
-    for node, record in read.checks["curvature_vs_channels"].items():
-        assert record["max_abs_error_1_m"] <= 0.025 * record["max_channel_1_m"], node
+    records = read.checks["curvature_vs_channels"]
+    assert {"N2", "N3", "N4", "N71", "N75"} <= set(records)
+    for node, record in records.items():
+        assert record["max_abs_error_1_m"] <= 1e-3 * record["max_channel_1_m"], node
+    with pytest.raises(CableSchemaError, match="needs the default tangent_placement"):
+        read_cabledyn_sections(
+            DATA / "lw128",
+            DATA / "lw128.dat",
+            {"hangoff": 0.25, "sag": 58.4},
+            frame="section",
+            tangent_placement="chord",
+        )
     sag = read.histories["sag"]
     # Sag bend of the lazy wave: centre of curvature above, rotation about -e2.
     assert np.all(sag.rotation_curvature_y_1_m < -0.08)
@@ -670,6 +816,30 @@ def test_real_cabledyn_run_from_channels():
     assert 8e3 < hang.effective_tension_N.mean() < 1.1e4
     roles = {f.role for f in read.files}
     assert roles == {"main", "static", "elements", "deck"}
+
+
+@pytest.mark.full_scale
+def test_real_cabledyn_v010_run_with_chord_tangents():
+    """The same deck run by CableDyn v0.1.0, whose tangents are chords.
+
+    ``tangent_placement="chord"`` reads it: the near-end nodes N2 and N3 agree
+    with CableDyn's curvature to 1.5 %; the node placement of 0.4.2
+    output is 5 to 11 times further off there.
+    """
+    sections = {"hangoff": 0.25, "sag": 58.4}
+    root, deck = DATA / "lw128_v010", DATA / "lw128_v010.dat"
+    read = read_cabledyn_sections(
+        root, deck, sections, frame="section", tangent_placement="chord"
+    )
+    assert read.checks["tangent_placement"].startswith("chord mid-arc")
+    records = read.checks["curvature_vs_channels"]
+    for node, record in records.items():
+        assert record["max_abs_error_1_m"] <= 0.025 * record["max_channel_1_m"], node
+    assert np.all(read.histories["sag"].rotation_curvature_y_1_m < -0.08)
+    node = read_cabledyn_sections(root, deck, sections, frame="section")
+    for name in ("N2", "N3"):
+        error = node.checks["curvature_vs_channels"][name]["max_abs_error_1_m"]
+        assert error > 4.0 * records[name]["max_abs_error_1_m"], name
 
 
 @pytest.mark.full_scale
