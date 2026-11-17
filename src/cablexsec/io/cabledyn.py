@@ -20,11 +20,14 @@ curvature *vector* from the solved geometry and uses ``Curv`` as a check:
 
 * ``curvature_source="tangent"``: node tangents from the ``L<L>N<J>Dec`` and
   ``L<L>N<J>Azi`` channels (written with 8 significant digits of the angle).
-  Up to CableDyn 0.4.1 these are the chord between the neighbouring nodes, so
-  each value is placed at the mid-arc of that chord (an end node at the
-  mid-arc of its element). From 0.4.2 a finite-EI line writes the node's own
-  tangent: at an interior node of a uniform mesh the chord mid-arc is the
-  node, but an end tangent is then taken half an element inside the line.
+  Since CableDyn 0.4.2 a finite-EI line (any section with ``EI > 0``) writes
+  the node's own tangent, the cubic-Hermite tangent degree of freedom (at an
+  end clamped by a ``Rigid`` row, the direction the clamp holds), and each
+  value is placed at its node. An ``EI = 0`` line writes the chord between
+  the neighbouring nodes (one-sided at the ends), placed at the mid-arc of
+  that chord (an end node at the mid-arc of its element). Up to CableDyn
+  0.4.1 a finite-EI line also wrote chords; ``tangent_placement="chord"``
+  reads such output (the files carry no version marker).
   A cubic spline through the tangents of a few nodes on either
   side of the section gives :math:`\mathbf{t}` and
   :math:`\boldsymbol{\kappa}=\mathbf{t}\times\mathrm{d}\mathbf{t}/\mathrm{d}s`.
@@ -117,6 +120,7 @@ FloatArray = NDArray[np.float64]
 Frame = Literal["arc", "section"]
 CurvatureSource = Literal["auto", "tangent", "positions"]
 PressureModel = Literal["hydrostatic", "none"]
+TangentPlacement = Literal["auto", "chord"]
 
 __all__ = [
     "CableDynDeck",
@@ -1095,6 +1099,7 @@ def read_cabledyn_sections(
     line_id: int = 1,
     frame: Frame = "arc",
     curvature_source: CurvatureSource = "auto",
+    tangent_placement: TangentPlacement = "auto",
     reference_vector: Sequence[float] = (0.0, 0.0, 1.0),
     pressure: PressureModel = "hydrostatic",
     window_nodes: int = 3,
@@ -1122,6 +1127,12 @@ def read_cabledyn_sections(
     curvature_source : {"auto", "tangent", "positions"}
         ``"auto"`` uses the tangent channels when every section has them and
         positions otherwise; the choice is recorded.
+    tangent_placement : {"auto", "chord"}
+        Where the ``Dec``/``Azi`` values sit along the line. ``"auto"``
+        (CableDyn 0.4.2 and later): at the node on a finite-EI line, at the
+        mid-arc of the chord on an ``EI = 0`` line. ``"chord"``: at the
+        mid-arc of the chord on every line, for the output of CableDyn 0.4.1
+        and earlier. The placement is recorded in ``checks``.
     reference_vector : sequence of 3 floats
         Seed vector ``a`` of the frame (default global +z).
     pressure : {"hydrostatic", "none"}
@@ -1149,6 +1160,8 @@ def read_cabledyn_sections(
         raise CableSchemaError("frame must be 'arc' or 'section'")
     if curvature_source not in ("auto", "tangent", "positions"):
         raise CableSchemaError("curvature_source must be auto, tangent or positions")
+    if tangent_placement not in ("auto", "chord"):
+        raise CableSchemaError("tangent_placement must be 'auto' or 'chord'")
     if tension_source not in ("auto", "segments", "nodes"):
         raise CableSchemaError("tension_source must be auto, segments or nodes")
     if pressure not in ("hydrostatic", "none"):
@@ -1276,6 +1289,20 @@ def read_cabledyn_sections(
         if not plan.probe or all(needed_curvature(j) for j in plan.window)
     ]
     checks["curvature_source"] = source
+    finite_ei = any(
+        deck_obj.line_type(sec.line_type).ei_Nm2 > 0.0 for sec in line.sections
+    )
+    if source == "tangent":
+        if tangent_placement == "chord":
+            checks["tangent_placement"] = (
+                "chord mid-arc (tangent_placement='chord': CableDyn 0.4.1 and earlier)"
+            )
+        elif finite_ei:
+            checks["tangent_placement"] = (
+                "node (finite-EI line: node tangent, CableDyn 0.4.2 and later)"
+            )
+        else:
+            checks["tangent_placement"] = "chord mid-arc (EI = 0 line)"
 
     # Nodes whose positions are needed: frame transport (arc), elevation.
     pos_nodes: set[int] = set()
@@ -1413,12 +1440,18 @@ def read_cabledyn_sections(
 
     reference_l0 = np.diff(arcs)
     midpoints = 0.5 * (arcs[:-1] + arcs[1:])
-    chord_mid = np.array(
-        [
-            0.5 * (arcs[max(j - 1, 0)] + arcs[min(j + 1, n_nodes - 1)])
-            for j in range(n_nodes)
-        ]
-    )
+    # Arc length of each Dec/Azi value: the node's own tangent of a finite-EI
+    # line (CableDyn 0.4.2+) at the node; a chord (central, one-sided at the
+    # ends) at its mid-arc, the point of a smooth arc whose tangent it is.
+    if tangent_placement == "auto" and finite_ei:
+        tangent_arcs = arcs
+    else:
+        tangent_arcs = np.array(
+            [
+                0.5 * (arcs[max(j - 1, 0)] + arcs[min(j + 1, n_nodes - 1)])
+                for j in range(n_nodes)
+            ]
+        )
     state_a: FloatArray | None = None
     state_section: dict[str, FloatArray | None] = {
         plan.name: None for plan in sections_plans
@@ -1564,7 +1597,7 @@ def read_cabledyn_sections(
                         ),
                         axis=-1,
                     )
-                    value, d1, _ = _spline(chord_mid[plan.window], samples, plan.arc)
+                    value, d1, _ = _spline(tangent_arcs[plan.window], samples, plan.arc)
                     tangent = _unit(value, "section tangent")
                     kappa = np.cross(tangent, d1)
                 else:
@@ -1695,8 +1728,9 @@ def read_cabledyn_sections(
         mine = np.concatenate(plan.data["norm"])
         channel = np.concatenate(plan.data["channel"])
         error = float(np.max(np.abs(mine - channel)))
-        # End nodes and their neighbours: the spline uses the one-sided end
-        # chord, CableDyn the end element's own curvature.
+        # End nodes and their neighbours: the spline window is one-sided
+        # there (and starts from the one-sided end chord on chord output),
+        # CableDyn reports the end element's own curvature.
         end = node <= 2 or node >= n_nodes - 1
         allowed = atol + (
             curvature_check_end_rtol if end else curvature_check_rtol
@@ -1730,12 +1764,27 @@ def read_cabledyn_sections(
         worst_name = max(failed, key=lambda name: share(failed[name]))
         worst = failed[worst_name]
         percent = 100.0 * share(worst)
+        rtol = curvature_check_end_rtol if worst["near_end"] else curvature_check_rtol
+        placement = ""
+        if source == "tangent" and finite_ei:
+            placement = (
+                f" The tangents were placed at the {checks['tangent_placement']}; "
+                + (
+                    "output of CableDyn 0.4.2 and later needs the default "
+                    "tangent_placement='auto'."
+                    if tangent_placement == "chord"
+                    else "output of CableDyn 0.4.1 and earlier needs "
+                    "tangent_placement='chord'."
+                )
+            )
         raise CableSchemaError(
-            "the curvature reconstructed from the node positions differs from "
+            "the curvature reconstructed from the node "
+            f"{'tangents' if source == 'tangent' else 'positions'} differs from "
             f"CableDyn's own curvature output (channel Curv{line_id}{worst_name}, "
             "and the other curvature channels) by more than the curvature check "
-            f"tolerance ({100.0 * curvature_check_rtol:g} % of the largest "
-            "curvature, plus the resolution of the positions) at "
+            f"tolerance ({100.0 * rtol:g} % of the largest "
+            "curvature there, plus the resolution of the "
+            f"{'angles' if source == 'tangent' else 'positions'}) at "
             f"{len(failed)} of {checked} checked nodes; at node "
             f"{worst_name.removeprefix('N')} by {worst['max_abs_error_1_m']:.3g} "
             f"1/m, {percent:.0f} % of its largest value "
@@ -1744,7 +1793,8 @@ def read_cabledyn_sections(
             "resolve the curvature there (CableDyn reports the larger one-sided "
             "element value, which on a coarse mesh departs from the curvature of "
             "the deformed line): refine the mesh, or raise the curvature check "
-            f"tolerance if a difference of {percent:.0f} % is acceptable"
+            f"tolerance if a difference of {percent:.0f} % is acceptable."
+            f"{placement}"
         )
     checks["curvature_vs_channels"] = curvature_checks
 
@@ -1787,7 +1837,12 @@ def read_cabledyn_sections(
                 ),
                 limitations=(
                     "curvature vector reconstructed from the solved centreline; "
-                    f"source: {source}",
+                    f"source: {source}"
+                    + (
+                        f"; tangents placed at the {checks['tangent_placement']}"
+                        if source == "tangent"
+                        else ""
+                    ),
                     f"twist-free {frame} frame seeded by e2 = a x t, "
                     f"a = {tuple(float(v) for v in reference)}; hang-off roll about "
                     "its own tangent is not represented",

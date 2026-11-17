@@ -91,6 +91,7 @@ from cablexsec.io.cabledyn import (
     CableDynSectionHistory,
     CurvatureSource,
     Frame,
+    TangentPlacement,
     read_cabledyn_deck,
     read_cabledyn_sections,
 )
@@ -199,6 +200,9 @@ class SeaStateBatchOptions:
     wire_positions: WirePositions | None = None
     frame: Frame = "arc"
     curvature_source: CurvatureSource = "auto"
+    #: ``"chord"`` reads finite-EI output of CableDyn 0.4.1 and earlier
+    #: (:func:`~cablexsec.io.cabledyn.read_cabledyn_sections`).
+    tangent_placement: TangentPlacement = "auto"
     reference_vector: tuple[float, float, float] = (0.0, 0.0, 1.0)
     tension_basis: TensionBasis = "auto"
     external_diameter_m: float | None = None
@@ -493,6 +497,7 @@ def _evaluate(task: _Task) -> dict[str, Any]:
         line_id=run.line_id,
         frame=opts.frame,
         curvature_source=opts.curvature_source,
+        tangent_placement=opts.tangent_placement,
         reference_vector=opts.reference_vector,
         pressure="hydrostatic" if task.basis == "true" else "none",
         chunk_rows=opts.chunk_rows,

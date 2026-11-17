@@ -244,6 +244,23 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Changed
 
+- `read_cabledyn_sections` places the `Dec`/`Azi` tangents of a finite-EI line (any section
+  with `EI > 0`) at their nodes, as CableDyn 0.4.2 and later write them: the node's own
+  cubic-Hermite tangent. Every value was placed at the mid-arc of the chord between the
+  neighbouring nodes, so an end node's tangent (the hang-off) sat half an element inside the
+  line, and on a non-uniform mesh the interior tangents near a change of element length were
+  shifted too. On the 128-element lazy-wave test run of CableDyn 0.4.2 (0.2 m elements at the
+  hang-off) the curvature at node 2 departed from CableDyn's `Curv` by 52 % and at node 3 by
+  15 %, so the read failed its curvature check where `Curv` channels were written near the
+  hang-off; without them it returned a largest curvature 0.25 m from the hang-off 14.5 % high
+  (9.59e-3 against 8.37e-3 1/m). Now all checked nodes agree to 2.5e-4. Chords of an `EI = 0`
+  line stay at their mid-arcs. `run_sea_state_batch` takes the option as
+  `SeaStateBatchOptions.tangent_placement`. The output files carry no version marker; `tangent_placement="chord"` reads
+  finite-EI output of CableDyn 0.4.1 and earlier, the placement is recorded in
+  `checks["tangent_placement"]` and the provenance, and a failed curvature check names the
+  option. The test run `tests/data/cabledyn/lw128` is now CableDyn 0.4.2 output (its nodal
+  tension recovery moves the mean sag-bend `Te` of how-to 10 from 1.75 to 1.33 kN); the v0.1.0
+  run is kept as `lw128_v010`.
 - Templates whose source describes a layer as a yarn serving now declare it as one. The Chae,
   Nam and Shim (2023) coiling cable's two yarn layers: full-slip EI 47.3 to 30.6 kN·m², stick EI
   876 to 860 kN·m², fixed-end EA 631 to 626 MN, solved torsional secant under the source's
@@ -374,8 +391,7 @@ All notable changes to CableXSec are recorded in this file. The format follows
   describe CableDyn 0.4.x: node tension, curvature and bend moment recovered from nodal
   equilibrium (since CableDyn 0.2.0), the signed section-axis components `CurvX`/`CurvY` and
   torsion of lines restrained at one end (since 0.4.0), and the node tangent of finite-EI lines
-  in the `Dec`/`Azi` channels (since 0.4.2; the tangent reader places an end node's tangent half
-  an element inside the line on such output). The `compute_mkappa` docstring states that
+  in the `Dec`/`Azi` channels (since 0.4.2; see Changed). The `compute_mkappa` docstring states that
   `tension_N` is the true wall tension, as in `compute_fatigue`.
 - The slip of the distributed friction model over a full-slip increment (every helix node on its
   bound) is now unique. The equations fix the forces, the tractions and `u − p` there, but not a

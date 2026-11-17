@@ -314,7 +314,7 @@ ASCII time history.
 ```text
 curvature from tangent channels
 hangoff  201 samples, dt 0.1 s, Te mean 9.28 kN, true mean 6.40 kN, |kappa| max 0.0084 1/m
-sag      201 samples, dt 0.1 s, Te mean 1.75 kN, true mean -11.20 kN, |kappa| max 0.0984 1/m
+sag      201 samples, dt 0.1 s, Te mean 1.33 kN, true mean -11.61 kN, |kappa| max 0.0990 1/m
 riflex   240 samples, 59.8 s, effective tension 65.25 kN mean, kappa_x -0.0155 to 0.0156 1/m
 ```
 

@@ -50,10 +50,10 @@ channel, the item says so.
   (one-sided at the ends). From CableDyn 0.4.2 a finite-EI line writes the
   node's own tangent, the cubic-Hermite tangent degree of freedom (at an end
   clamped by a `Rigid` row, the direction the clamp holds); an `EI = 0` line
-  keeps the chord. The reader places every value at the mid-arc of the chord
-  (Section 2): at an interior node of a uniform mesh that is the node itself,
-  but the tangent of an end node of 0.4.2 output is then taken half an
-  element inside the line.
+  keeps the chord. The output files carry no version marker. The reader
+  (Section 2) places a node tangent at its node and a chord at its mid-arc;
+  `tangent_placement="chord"` reads finite-EI output of CableDyn 0.4.1 and
+  earlier.
 - **Tension.** Effective tension of a solid line without contents
   (`T_e = EA ε`). On a finite-EI line `Ten<L>N<J>` is the axial component of
   the section force recovered from nodal equilibrium (since CableDyn 0.2.0;
@@ -78,11 +78,20 @@ returns, per section at unstretched arc length `s` from End A:
 curvature source and tension source, and a provenance record. The read also
 returns the digests of every file read and the consistency checks.
 
-**Curvature vector.** `curvature_source="tangent"` splines the chord tangents
-of the `Dec`/`Azi` channels (each placed at the mid-arc of its chord) through a
-few nodes on either side (`window_nodes`, default 3) and forms
-`κ = t × dt/ds`. `"positions"` splines node positions and forms
-`κ = r' × r'' / |r'|³`; the 8-digit position format limits its resolution to
+**Curvature vector.** `curvature_source="tangent"` splines the tangents of
+the `Dec`/`Azi` channels through a few nodes on either side (`window_nodes`,
+default 3) and forms `κ = t × dt/ds`. With the default
+`tangent_placement="auto"` (CableDyn 0.4.2 and later) the tangent of a
+finite-EI line (any section with `EI > 0`) sits at its node and the chord of an
+`EI = 0` line at the mid-arc of the chord (an end node at the mid-arc of its
+element); `tangent_placement="chord"` places every value at the mid-arc of its
+chord, for finite-EI output of CableDyn 0.4.1 and earlier. The placement is
+recorded in `checks["tangent_placement"]`. Reading one version's output as the
+other's moves the End-A tangent by half an element: 0.4.2 output of the
+128-element lazy-wave test run (0.2 m elements at the hang-off) read with
+`"chord"` puts the curvature at node 2 52 % away from CableDyn's `Curv`, and
+the curvature check fails with a message that names the option.
+`"positions"` splines node positions and forms `κ = r' × r'' / |r'|³`; the 8-digit position format limits its resolution to
 about `δ/h²` (`δ` the last printed digit, `h` the element length: 2.2e-4 1/m
 for the 0.15 m elements of the 80 m lazy-wave example), recorded in the checks.
 `"auto"` uses tangents when all needed channels are present.
@@ -303,6 +312,7 @@ Paths are relative to the JSON file; unknown keys are rejected.
 | Rigid heading rotation of the configuration | components unchanged (1e-9) |
 | Bending plane turning about the hang-off tangent by `φ(t)` (arc frame) | `κ(−sin φ, cos φ)` within 5e-6 1/m |
 | Material twist of a restrained line | axes turned by the `Twist` channel; components `κ(sin φ, cos φ)` |
+| Tangent placement on a non-uniform mesh (0.2 m then 0.3 m elements): node tangents of a finite-EI line; chords of an `EI = 0` line and, with `tangent_placement="chord"`, of a finite-EI line | curvature within 1e-4 of `κ` at End A, the mesh junction and End B; node tangents read as chords give more than 1.5 `κ` at End A |
 | Tension between element mid-arcs, hydrostatic pressure, `T_e − p_o A_o` | exact for a linear field; elevation within 1e-7 m |
 | Round trip through the time-history CSV path: section history written as a CSV export (`x curvature`, `y curvature`, `Wall tension`) and read with `read_time_history_csv` | identical `LoadCaseSeries` (1e-12) and identical fixed-fibre damage |
 | Batch annual damage against `Σ p_i s_year D_i/T_i` from direct `compute_fatigue` | equal to 1e-12 at every fibre |
@@ -336,6 +346,16 @@ Hs 3 m/Tp 9 s/30°, weights 0.5/0.3/0.2, first 20 s discarded):
   curved elements), and that mesh also fails the curvature check by default.
 - Run time: 4 sections × 3 runs (2401 rows each; reading about 2 s per run
   including file digests), 10.4 s on one worker, 8.4 s on two.
+
+CableDyn 0.4.2 output (the 128-element run `lw128` in `tests/data/cabledyn`:
+the same cable with 0.2 m elements over the first 6 m and 1.24 m beyond,
+Hs 4 m/Tp 10 s/30°, 20 s): the curvature from the node tangents agrees with
+`Curv1N<J>` at the hang-off nodes 2 to 4 and the sag-bend nodes 71 to 75 to
+2.5e-4 of each node's largest value. Read with `tangent_placement="chord"`,
+nodes 2 and 3 depart by 52 % and 15 %, the largest hang-off curvature at
+0.25 m is 14.5 % higher (9.59e-3 against 8.37e-3 1/m), and the read fails
+the curvature check. The v0.1.0 run of the same deck (`lw128_v010`) read
+with `tangent_placement="chord"` agrees to 1.5 % at nodes 2 and 3.
 
 The IEA Task 49 66 kV template stood in for the local section; its `EA` and
 `EI` differ from the Lozon cable of the deck, so these runs check the
