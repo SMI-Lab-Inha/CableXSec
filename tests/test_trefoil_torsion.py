@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 
 from cablexsec.mechanics.concentric_section import ElasticAnnulus
+from cablexsec.mechanics.tendon_section import rectangle_torsion_constant
 from cablexsec.mechanics.trefoil_section import (
     SECTOR,
     SYMMETRY_FACTOR,
@@ -44,9 +45,8 @@ def _rectangle(a: float, b: float, nx: int, ny: int) -> tuple[np.ndarray, np.nda
 
 
 def _rectangle_series(a: float, b: float) -> float:
-    """Saint-Venant torsion constant of an a x b rectangle (a >= b), series."""
-    total = sum(math.tanh(n * math.pi * a / (2 * b)) / n**5 for n in range(1, 400, 2))
-    return a * b**3 / 3 * (1 - 192 / math.pi**5 * b / a * total)
+    """Saint-Venant torsion constant of an a x b rectangle (series)."""
+    return rectangle_torsion_constant(a, b)
 
 
 @pytest.mark.analytical_sanity

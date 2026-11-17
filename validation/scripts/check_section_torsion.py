@@ -10,9 +10,9 @@ through frictionless contacts, so its lobes twist as separate bodies with
 their own warping (``saint_venant_rigidity``). The warping solver is checked
 against two closed forms:
 
-* the Saint-Venant torsion constant of a solid rectangle, series solution
+* the Saint-Venant torsion constant of a solid rectangle, the exact series
   ``J = a b^3 / 3 [1 - 192 b / (pi^5 a) sum_odd tanh(n pi a / 2b) / n^5]``
-  (Timoshenko and Goodier, Theory of Elasticity, 3rd ed., Sec. 109), for an
+  of ``cablexsec.mechanics.tendon_section.rectangle_torsion_constant``, for an
   aspect ratio of 2;
 * a bonded annulus meshed as the 60 degree sector of the trefoil model with
   the mirror conditions, whose warping vanishes, so its rigidity is the polar
@@ -25,6 +25,7 @@ import math
 
 import numpy as np
 
+from cablexsec.mechanics.tendon_section import rectangle_torsion_constant
 from cablexsec.mechanics.trefoil_section import SECTOR, saint_venant_rigidity
 
 
@@ -51,9 +52,8 @@ def _t6(grid: np.ndarray, cells: tuple[int, int]) -> tuple[np.ndarray, np.ndarra
 
 
 def rectangle_series(a: float, b: float) -> float:
-    """Torsion constant of an ``a x b`` rectangle, ``a >= b`` (series)."""
-    total = sum(math.tanh(n * math.pi * a / (2 * b)) / n**5 for n in range(1, 400, 2))
-    return a * b**3 / 3 * (1 - 192 / math.pi**5 * b / a * total)
+    """Torsion constant of an ``a x b`` rectangle (series, tendon_section)."""
+    return rectangle_torsion_constant(a, b)
 
 
 def rectangle_error(a: float = 2.0, b: float = 1.0, nx: int = 16) -> float:
