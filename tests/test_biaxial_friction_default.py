@@ -160,7 +160,7 @@ def test_out_of_plane_ratio():
     assert curvature_path_out_of_plane_ratio(rx, ry) < PLANAR_PATH_TOLERANCE
     # Six significant digits round a mantissa near 1 by up to 5e-6 of the
     # value: the worst case stays planar too, at any angle.
-    for angle in np.linspace(0.0, math.pi, 181):
+    for angle in (0.347, *np.linspace(0.0, math.pi, 181)):
         for radius in (0.015, 0.0100001, 0.0999999):
             noisy = radius * np.array([1.0, 1.000001, 0.999999])
             rx = np.array([float(f"{v * math.cos(angle):.6g}") for v in noisy])
