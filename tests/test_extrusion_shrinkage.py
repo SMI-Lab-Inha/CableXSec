@@ -299,3 +299,22 @@ def test_other_bounded_consumers_refuse_a_shrinkage():
     with pytest.raises(CableInputError, match="crush"):
         _crush_uf(shrunk, 1.0e4, 5.0e6)
     assert math.isnan(_crush_uf(shrunk, 1.0e4, None))
+
+
+def test_qp_section_state_recovers_the_shrink_fit_stresses():
+    cable = cx.load_cable(
+        cx.inter_array_single_core_yaml_path(), geometry_override=None
+    )
+    shrunk = _with_shrinkage(cable, "hdpe_outer_sheath")
+    base = cx.solve_section_state(cable, tension_N=1.0e4, contact_model="qp")
+    state = cx.solve_section_state(shrunk, tension_N=1.0e4, contact_model="qp")
+    # The recovered layer forces balance the section force (checked inside),
+    # and the shrunk sheath is in hoop tension that the base sheath is not.
+    sheath = state.layers["hdpe_outer_sheath"]
+    a = (
+        sheath.radial_stress_constant_Pa
+        + sheath.radial_stress_inverse_Pa_m2 / 0.0335**2
+    )
+    plain = base.layers["hdpe_outer_sheath"]
+    b = plain.radial_stress_constant_Pa + plain.radial_stress_inverse_Pa_m2 / 0.0335**2
+    assert a > b + 1.0e6
