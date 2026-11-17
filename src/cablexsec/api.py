@@ -75,6 +75,7 @@ from cablexsec.analysis.conductor_fatigue import (
 )
 from cablexsec.analysis.electrical_life import LifeResult, compute_electrical_life
 from cablexsec.analysis.fatigue import (
+    DEFAULT_FRICTION_MODEL,
     CopperContactModel,
     DistributedBound,
     FatigueLayer,
@@ -2189,7 +2190,7 @@ def compute_fatigue(
     require_finite(ky, "kappa_y")
     if friction_model is None:
         # The default law, with a warning on a non-planar path (once per call).
-        friction_model = "direction_tied"
+        friction_model = DEFAULT_FRICTION_MODEL
         # stacklevel 3: this function, its material-scope wrapper, the caller.
         _warn_default_direction_tied(
             curvature_path_out_of_plane_ratio(kx, ky), stacklevel=3

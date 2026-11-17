@@ -56,7 +56,10 @@ from cablexsec.mechanics.distributed_friction import (
 )
 from cablexsec.mechanics.friction_law import FrictionLaw
 from cablexsec.mechanics.papailiou import slip_onset_curvature, wire_slip_history
-from cablexsec.provenance import DirectionTiedFrictionWarning
+from cablexsec.provenance import (
+    DirectionTiedFrictionWarning,
+    FrictionModelFallbackWarning,
+)
 
 compiled = pytest.mark.skipif(
     not HAVE_NUMBA, reason="long friction histories need the compiled kernels"
@@ -136,6 +139,34 @@ def test_out_of_plane_ratio():
     assert curvature_path_out_of_plane_ratio(np.sin(th), 2e-3 * np.cos(th)) > (
         PLANAR_PATH_TOLERANCE
     )
+    # A static bend with cycles normal to its plane is judged against the
+    # cycles (or 1e-3 of the bend, if smaller), not against the bend: cycles
+    # of 8e-4 and 8e-3 of the bend give 0.8 and 1.
+    static = np.full(th.size, 0.05)
+    cycles = 4e-5 * np.sin(th)
+    for factor, expected in ((1.0, 0.8), (10.0, 1.0)):
+        assert curvature_path_out_of_plane_ratio(
+            static, factor * cycles
+        ) == pytest.approx(expected, rel=1e-6)
+        assert curvature_path_out_of_plane_ratio(
+            -factor * cycles, static
+        ) == pytest.approx(expected, rel=1e-6)
+    # Rounded to six significant digits, a static bend in an oblique plane
+    # stays planar.
+    oblique = [float(f"{v:.6g}") for v in (0.05 * math.cos(0.4), 0.05 * math.sin(0.4))]
+    noisy = np.array([1.0, 1.0 + 1e-6, 1.0 - 1e-6]) * 0.05
+    rx = np.array([float(f"{v * math.cos(0.4):.6g}") for v in noisy] + oblique[:1])
+    ry = np.array([float(f"{v * math.sin(0.4):.6g}") for v in noisy] + oblique[1:])
+    assert curvature_path_out_of_plane_ratio(rx, ry) < PLANAR_PATH_TOLERANCE
+    # The same cycles in the plane of the bend stay planar, in any plane.
+    for angle in (0.0, 0.4, 2.0):
+        s = static + cycles
+        value = curvature_path_out_of_plane_ratio(
+            s * math.cos(angle), s * math.sin(angle)
+        )
+        assert value < 1e-10
+    # A constant curvature keeps one plane.
+    assert curvature_path_out_of_plane_ratio(np.full(5, 0.01), np.full(5, 0.02)) < 1e-9
 
 
 # --------------------------------------------------------------------------- #
@@ -283,7 +314,9 @@ def _fallback_case(result, explicit, reason):
 def test_rigid_interface_keeps_direction_tied(inner):
     rigid = _with_xi(inner, 1.0)
     kx, ky = _short_rotation(rigid)
-    result = compute_fatigue([rigid], kx, ky, friction_model="auto")
+    with pytest.warns(FrictionModelFallbackWarning, match="rigid") as calls:
+        result = compute_fatigue([rigid], kx, ky, friction_model="auto")
+    assert len(calls) == 1 and calls[0].filename == __file__
     explicit = compute_fatigue([rigid], kx, ky, friction_model="direction_tied")
     _fallback_case(result, explicit, "rigid")
 
@@ -292,9 +325,15 @@ def test_rate_dependent_law_keeps_direction_tied(inner):
     kx, ky = _short_rotation(inner)
     law = FrictionLaw(rate_coefficient=0.05)
     time = np.linspace(0.0, 10.0, kx.size)
-    result = compute_fatigue(
-        [inner], kx, ky, friction_law=law, time_s=time, friction_model="auto"
-    )
+    with pytest.warns(FrictionModelFallbackWarning, match="rate dependent"):
+        result = compute_fatigue(
+            [inner], kx, ky, friction_law=law, time_s=time, friction_model="auto"
+        )
+    with pytest.warns(FrictionModelFallbackWarning, match="rate dependent") as calls:
+        wire_stress_field(
+            inner, kx, ky, friction_law=law, time_s=time, friction_model="auto"
+        )
+    assert len(calls) == 1 and calls[0].filename == __file__
     explicit = compute_fatigue(
         [inner], kx, ky, friction_law=law, time_s=time, friction_model="direction_tied"
     )
@@ -304,9 +343,10 @@ def test_rate_dependent_law_keeps_direction_tied(inner):
 def test_varying_stick_modulus_keeps_direction_tied(inner):
     kx, ky = _short_rotation(inner)
     stick = {"inner_armour": inner.spec.k_f * np.linspace(1.0, 0.9, kx.size)}
-    result = compute_fatigue(
-        [inner], kx, ky, stick_modulus_Pa=stick, friction_model="auto"
-    )
+    with pytest.warns(FrictionModelFallbackWarning, match="stick modulus changes"):
+        result = compute_fatigue(
+            [inner], kx, ky, stick_modulus_Pa=stick, friction_model="auto"
+        )
     explicit = compute_fatigue(
         [inner], kx, ky, stick_modulus_Pa=stick, friction_model="direction_tied"
     )
@@ -336,6 +376,40 @@ def test_constant_stick_modulus_is_the_yun_coefficient(inner):
         [inner], kx, ky, stick_modulus_Pa=stick, friction_model="distributed"
     )
     _damage_equal(explicit, reference)
+
+
+@pytest.mark.filterwarnings("error::cablexsec.provenance.FrictionModelFallbackWarning")
+def test_no_fallback_warning_on_planar_paths_or_explicit_models(inner):
+    on = slip_onset_curvature(inner.spec)
+    kx, _ = _orbit(3.0 * on, 0.0, revolutions=1)
+    law = FrictionLaw(rate_coefficient=0.05)
+    time = np.linspace(0.0, 10.0, kx.size)
+    # Planar: 'auto' is the direction-tied law, no fallback to report.
+    compute_fatigue(
+        [inner], kx, 0.0 * kx, friction_law=law, time_s=time, friction_model="auto"
+    )
+    rx, ry = _short_rotation(inner)
+    t = np.linspace(0.0, 10.0, rx.size)
+    compute_fatigue(
+        [inner], rx, ry, friction_law=law, time_s=t, friction_model="direction_tied"
+    )
+
+
+@compiled
+def test_auto_sees_cycles_normal_to_a_static_bend(inner):
+    # Cycles at twice the slip onset normal to a static bend 2500 times
+    # larger: against the largest curvature they are 8e-4 out of plane (below
+    # the tolerance), against their own range fully out of plane.
+    on = slip_onset_curvature(inner.spec)
+    th = np.linspace(0.0, 4.0 * math.pi, 241)
+    kx = np.full(th.size, 2500.0 * 2.0 * on)
+    ky = 2.0 * on * np.sin(th)
+    assert float(np.max(np.abs(ky))) / float(np.max(np.hypot(kx, ky))) < (
+        PLANAR_PATH_TOLERANCE
+    )
+    auto = wire_stress_field(inner, kx, ky, friction_model="auto")
+    helix = wire_stress_field(inner, kx, ky, friction_model="distributed")
+    assert np.array_equal(auto.mean_Pa, helix.mean_Pa)
 
 
 def test_progressive_settings_still_need_progressive(inner):

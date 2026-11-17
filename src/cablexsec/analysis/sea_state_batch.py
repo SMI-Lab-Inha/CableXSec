@@ -51,8 +51,10 @@ import hashlib
 import json
 import math
 import os
+import pickle
 import platform
 import sys
+import warnings
 from collections.abc import Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import asdict, dataclass, field, fields
@@ -69,7 +71,11 @@ from cablexsec.analysis.capacity_check import (
     check_capacity,
     gumbel_fit,
 )
-from cablexsec.analysis.fatigue import FatigueResult, FrictionModel
+from cablexsec.analysis.fatigue import (
+    DEFAULT_FRICTION_MODEL,
+    FatigueResult,
+    FrictionModel,
+)
 from cablexsec.analysis.long_term import (
     FatigueLoadCase,
     LongTermFatigueResult,
@@ -175,12 +181,18 @@ class SectionRequest:
 
 @dataclass(frozen=True)
 class SeaStateBatchOptions:
-    """Reader and fatigue options shared by every run and section."""
+    """Reader and fatigue options shared by every run and section.
+
+    ``friction_model`` ``None`` (default) takes the default armour friction
+    model of :func:`cablexsec.compute_fatigue`, with its notice on non-planar
+    paths (:class:`~cablexsec.provenance.DirectionTiedFrictionWarning`); the
+    manifest and the assessment digests record the model it resolves to.
+    """
 
     n_fibres: int = 32
     mu: float | None = None
     contact_model: str | None = None
-    friction_model: FrictionModel = "direction_tied"
+    friction_model: FrictionModel | None = None
     frame: Frame = "arc"
     curvature_source: CurvatureSource = "auto"
     reference_vector: tuple[float, float, float] = (0.0, 0.0, 1.0)
@@ -431,6 +443,33 @@ def _fretting_summary(result: Any) -> dict[str, dict[str, Any]]:
             "D_plain_per_year": np.asarray(face.D_plain_per_year).tolist(),
         }
     return out
+
+
+def _evaluate_in_worker(task: _Task) -> dict[str, Any]:
+    """:func:`_evaluate` in a worker process, with its warnings recorded.
+
+    A spawned worker shows warnings on its own standard error, out of the
+    caller's reach; they travel back with the outcome (``"warnings"``) and the
+    caller issues them again.
+    """
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        outcome = _evaluate(task)
+    outcome["warnings"] = [
+        _portable_warning(w.category, str(w.message)) for w in caught
+    ]
+    return outcome
+
+
+def _portable_warning(
+    category: type[Warning], message: str
+) -> tuple[type[Warning], str]:
+    """A warning that survives the return from a worker process."""
+    try:
+        pickle.loads(pickle.dumps(category))
+    except Exception:  # noqa: BLE001 (a category that does not pickle)
+        return UserWarning, f"{category.__name__}: {message}"
+    return category, message
 
 
 def _evaluate(task: _Task) -> dict[str, Any]:
@@ -861,7 +900,7 @@ def run_sea_state_batch(
                 mp_context=context,
                 initializer=_limit_threads,
             ) as pool:
-                outcomes = list(pool.map(_evaluate, tasks))
+                outcomes = list(pool.map(_evaluate_in_worker, tasks))
         finally:
             for name, value in saved.items():
                 if value is None:
@@ -869,9 +908,17 @@ def run_sea_state_batch(
                 else:
                     os.environ[name] = value
 
+    for outcome in outcomes:
+        for category, message in outcome.pop("warnings", ()):
+            warnings.warn(message, category, stacklevel=2)
+
     digest_cable = cable_digest(cable)
     option_record = asdict(opts)
     option_record.pop("workers")  # does not change results
+    if option_record["friction_model"] is None:
+        # The model the default resolves to: the digests of existing
+        # assessments are unchanged, and follow a change of the default.
+        option_record["friction_model"] = DEFAULT_FRICTION_MODEL
     results: dict[str, SectionBatchResult] = {}
     histories: dict[str, dict[str, CableDynSectionHistory]] = {}
     for section in sections:

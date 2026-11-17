@@ -47,6 +47,7 @@ from cablexsec.exceptions import PhysicalRangeError
 
 __all__ = [
     "DirectionTiedFrictionWarning",
+    "FrictionModelFallbackWarning",
     "ExtrapolationWarning",
     "MissingClampingStateWarning",
     "Provenance",
@@ -84,6 +85,21 @@ class DirectionTiedFrictionWarning(FutureWarning):
     unchanged. Pass ``friction_model`` explicitly to keep the current
     behaviour (``"direction_tied"``) or to take the coming one (``"auto"``)
     without the warning.
+    """
+
+
+class FrictionModelFallbackWarning(UserWarning):
+    """``friction_model="auto"`` kept the direction-tied law on a non-planar path.
+
+    Emitted by :func:`cablexsec.analysis.fatigue.compute_fatigue` (and so by
+    :func:`cablexsec.api.compute_fatigue`) and by
+    :func:`cablexsec.analysis.fatigue.wire_stress_field` once for every layer
+    that ``"auto"`` would solve with the distributed helix model on a
+    non-planar curvature path but cannot: a rigid interface (``xi >= 1``), a
+    stick modulus that changes over the record or a rate-dependent friction
+    law. That layer keeps the direction-tied cap, whose friction-stress
+    ranges fall below the distributed ones under rotating curvature; the
+    provenance limitations record the same reason.
     """
 
 
