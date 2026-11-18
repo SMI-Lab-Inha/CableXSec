@@ -64,6 +64,7 @@ from numpy.typing import NDArray
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "validation" / "paper_data"
 FloatArray = NDArray[np.float64]
+LF = "\n"  # written line ending on every platform
 
 #: Series colours (default line colours of the plotting library) and labels.
 SERIES = {
@@ -321,7 +322,7 @@ def main(thesis_pdf: str, paper_pdf: str) -> None:
                 f"{i},{k:.7f},{m:.3f}\n" for i, (k, m) in enumerate(data)
             )
             (OUT / f"zeidan2025_fig{fig}_{name}.csv").write_text(
-                head + body, encoding="utf-8"
+                head + body, encoding="utf-8", newline=LF
             )
     record["paper_fig17_vs_thesis_fig5_6"] = _fig17_cross_check(
         paper[PAPER_FIG17_PAGE - 1], figures["5_6"]
@@ -352,10 +353,12 @@ def main(thesis_pdf: str, paper_pdf: str) -> None:
         ]
     )
     (OUT / "zeidan2026_fig18_deflection.csv").write_text(
-        head + "amplitude_mm,x_m,deflection_m\n" + "".join(rows), encoding="utf-8"
+        head + "amplitude_mm,x_m,deflection_m\n" + "".join(rows),
+        encoding="utf-8",
+        newline=LF,
     )
     (OUT / "zeidan2025_digitisation.json").write_text(
-        json.dumps(record, indent=2) + "\n", encoding="utf-8"
+        json.dumps(record, indent=2) + "\n", encoding="utf-8", newline=LF
     )
     print(json.dumps(record, indent=2))
 

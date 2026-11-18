@@ -60,8 +60,11 @@ afterwards: a comparison that misses its target is reported as failed.
 | **TQ-KL** | Torque-balance helix angle, seven strand pairs | Kim and Lee (2017), beam FE | −0.26 to −0.06 deg | ≤0.3 deg | Pass |
 | **TQ-UJ** | Fixed-end torque per tension, six strands | Utting and Jones (1987), Table 1 | theory 1.051–1.059; test 1.067–1.136 | 1.04–1.07; 1.00–1.15 | Pass |
 | **BM1** | Full-slip bending stiffness EI_min, no calibration | Ménard and Cartraud (2023), Table 3 | 0.6 % (3571 N·m²) | <15 % | Pass |
-| **BM1-loop** | ±0.10 m⁻¹ moment–curvature loop after the published ±0.05 calibration, four-point arrangement | Ménard and Cartraud (2023), Fig. 16b | ordered RMSE 2.71 %; cycle work 67.8 vs 62.3 J/m (8.8 %) | RMSE <5 %; work within 10 % | Pass |
-| **BM1-loop-uniform** | Same comparison at uniform curvature | Ménard and Cartraud (2023), Fig. 16b | as BM1-loop | as BM1-loop | Pass |
+| **BM1-loop** | ±0.10 m⁻¹ moment–curvature loop after the published ±0.05 calibration, four-point arrangement | Ménard and Cartraud (2023), Fig. 16b | ordered RMSE 2.71 %; cycle work 67.8 vs 62.3 J/m (8.8 %) | RMSE <5 %; work within 10 % | Info (unreliable reference; target met) |
+| **BM1-loop-uniform** | Same comparison at uniform curvature | Ménard and Cartraud (2023), Fig. 16b | as BM1-loop | as BM1-loop | Info (unreliable reference; target met) |
+| **BM1-ID** | Laid cores, wedged trefoil and filler profiles: initial pressure identified on range (b), five ranges predicted | Ménard and Cartraud (2023), Fig. 16 | (a) +26.0 %, (c) +23.7 %, (d)–(f) within 13 % | work ±20 %, RMSE <10 % | Info (unreliable reference; target not met) |
+| **Z-EI** | Measured stick secant against the no-slip EI_max; slip slope against EI_min, 112 mm three-core cable, zero tension | Zeidan (2025), thesis Figs 5.5–5.6 | stick 141–240 kN·m² vs EI_max 12.0 kN·m² (plane-section 335) | stick ≤ EI_max; slip ≥ EI_min | **Fail** |
+| **Z-ID** | Four-point loops at 30–60 mm in the test arrangement: pressure identified on 40 mm, three amplitudes predicted | Zeidan (2025), Fig. 5.6 | no pressure reaches the 40 mm work (41.9 vs 445.1 J/m) | work ±20 %, RMSE <10 %, range ±10 % | **Fail** |
 | **HU-3PB** | Conductor loop, third cycle, three-point arrangement | Hu et al. (2022) | loop area +36.7 % (Papailiou), +64.4 % (KH); transition share 32.8 % / 39.4 % | area ±15 %; share 34 ± 10 points | **Fail** |
 | **HU-uniform** | Same loop at uniform curvature | Hu et al. (2022) | area +4.9 % (Papailiou) | — | Not comparable |
 | **WITZ-EI** | Full-slip EI_min of a 2.5-inch flexible pipe, 0 bar, parameter-free | Witz (1996), measured gradients 1190 / 1014 N·m² | 1007 N·m² | 913–1309 N·m² | Pass |
@@ -90,10 +93,12 @@ quantities are those of the passing rows. In particular:
 
 - The full-slip bending stiffness and the analytical limits of the slip model are confirmed
   against published data without calibration (BM1, WITZ-EI).
-- The friction work of the measured Ménard ±0.10 m⁻¹ loop is overestimated by 9 % (within
-  its 10 % target), and the 300-bar Witz loop is too narrow after identification at 0 bar;
-  absolute dissipation predictions therefore carry the uncertainty shown by BM1-loop and
-  WITZ-ID.
+- The Ménard and Cartraud (2023) loops are an unreliable reference (stated, not gated; the
+  benchmark register gives the evidence). The 300-bar Witz loop is too narrow after
+  identification at 0 bar, and on the Zeidan (2025) cable, whose cores have a soft EPR
+  insulation, the armour stick coefficient of the section is far too low to reproduce the
+  measured loops (Z-EI, Z-ID); absolute dissipation predictions therefore carry the uncertainty
+  shown by WITZ-ID and Z-ID.
 - The termination-corrected (anchored-wire) armour stress is an upper estimate that the
   published near-termination measurements do not support (SV11-PLANE, SV11-GJ); the sectional
   result is the one that matches them.

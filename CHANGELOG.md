@@ -10,6 +10,21 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Added
 
+- Validation rows Z-EI and Z-ID (targets registered before the runs): the four-point loops of
+  Zeidan (2025, PhD thesis, Ch. 5) and Zeidan et al. (2026, IJSS 338, 114089) on a 112 mm
+  three-core cable (`cables/zeidan2025.yaml`, 75 + 82 armour wires of 3.5 mm, zero tension),
+  digitised in plotted order from the native PDF polylines
+  (`validation/scripts/digitise_zeidan2025.py`) and simulated in the test's arrangement with
+  its own reduction (`validation/scripts/check_zeidan2025.py`). The plotted curvature is the
+  loading-point formula applied to the mid-span deflection, 26–29 % above the central
+  curvature of the source's Fig. 18. Both rows FAIL: the measured stick secant (141–240 kN m²)
+  is 12–20 times the packaged no-slip EI_max (12.0 kN m², armour ξ 0.009/0.016, because the
+  series shear stack counts the 8.75 mm EPR of the cores), and no initial pressure reaches the
+  measured 40 mm work (largest 41.9 against 445.1 J/m). In a diagnostic with the armour ξ from
+  the bedding alone the work of all four amplitudes is within ±11 %, the moment range 33–48 %
+  short (slipping slope near EI_min), and the laid cores change the work by less than 0.2 %.
+  The laid-core law stays off by default (registered rule not met).
+
 - Su et al. (2026) 35 kV torsion checked term by term against the source's analytical model
   (targets registered before the run): armour torque 193.3 / 170.8 kN m² clockwise /
   anticlockwise against its Fig. 19 shares 193.0 / 172.3 (band 2 %), and at 1000 N m the
@@ -284,6 +299,14 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Changed
 
+- The rows that compare with the measured loops of Ménard and Cartraud (2023), BM1-loop,
+  BM1-loop-uniform and BM1-ID, are stated, not gated (status INFO, the verdict against the
+  registered target kept): the test is an unreliable reference. The benchmark register states the
+  evidence: the source's own limits (one specimen, end effects not investigated, achieved
+  curvature ranges off target), its table and figure disagreeing on equal-span ranges (−15 %
+  against +4 and +11 %), and an independent FE reconstruction (Kwon et al. 2026) that does not
+  match. Targets and results are unchanged.
+
 - `read_cabledyn_sections` places the `Dec`/`Azi` tangents of a finite-EI line (any section
   with `EI > 0`) at their nodes, as CableDyn 0.4.2 and later write them: the node's own
   cubic-Hermite tangent. Every value was placed at the mid-arc of the chord between the
@@ -366,6 +389,11 @@ All notable changes to CableXSec are recorded in this file. The format follows
   was refused; a stick modulus that changes over the record still is.
 
 ### Fixed
+
+- `SectionLaw.from_cable` reads the cable's own materials (its `materials:` block) when the law
+  is built and every time it is evaluated. Outside `simulate_bending_test` it read the library
+  instead, and a layer whose material the library lacks silently dropped out of the stiffness
+  (the Zeidan cable: a small-curvature secant of 4.48 instead of 6.99 kN m²).
 
 - The capacity documentation states the copper plastic-limit mechanism: the conductor's 0.2 %
   proof stress at its extreme wire fibre, on the strand basis of its bending stiffness, is a
