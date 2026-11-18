@@ -9,9 +9,12 @@ targets or a silent change of the result (VALIDATION_POLICY Rules 2 and 9).
 
 from __future__ import annotations
 
+import math
+
 import check_dai2020 as dai
 import numpy as np
 import pytest
+import run_validation
 
 pytestmark = pytest.mark.full_scale
 
@@ -55,3 +58,52 @@ def test_bellmouth_surface_starts_at_the_gap_without_an_inlet_tube():
     s = beam.x[(beam.x > 0) & (beam.x <= 3.0)]
     upper = beam.upper[(beam.x > 0) & (beam.x <= 3.0)]
     assert upper == pytest.approx(dai.GAP_M + 0.05 * s**2)
+
+
+def test_coulomb_range_is_the_source_2d_formula():
+    # The sectional full-slip range equals the source's Eq. 14 with the same
+    # line loads, apart from the wire-axis projection cos(alpha) and the
+    # third-order capstan term of the signed bound.
+    cou = dai.coulomb_check()
+    alpha = math.radians(dai.LAY_DEG)
+    for model, forces in dai.LINE_FORCE_N_M.items():
+        for tube, (_n, radius, od, t) in dai.TUBES.items():
+            area = math.pi * (od - t) * t
+            eq14 = (
+                math.pi
+                * radius
+                * dai.MU
+                * forces[tube]
+                / (dai.E_STEEL_PA * area * math.sin(alpha))
+            )
+            got = cou[model][tube]["microstrain"] * 1e-6
+            assert got == pytest.approx(eq14, rel=2e-3)
+
+
+def test_beam_curvature_is_mesh_converged():
+    # with the tight solve tolerance the identified stiffness and the two
+    # predicted angles move by less than 0.05 deg from 20 to 2.5 mm
+    reg = dai.kappa_check()
+    for v in dai.mesh_study().values():
+        assert abs(v["error_s2_deg"] - reg["error_s2_deg"]) < 0.05
+        assert abs(v["error_s3_deg"] - reg["error_s3_deg"]) < 0.05
+        assert v["EI_Nm2"] == pytest.approx(reg["EI_Nm2"], rel=0.05)
+
+
+def test_registered_rows_are_pinned():
+    rows = {r.ident: r for r in run_validation._dai2020_rows()}
+    kap = rows["DAI20-KAPPA"]
+    assert kap.target == "both within +-1.0 deg of the measured 7.03 and 14.57 deg"
+    assert kap.value == (
+        "EI 59.1 kN m2; S2 6.16 deg (-0.87), S3 13.69 deg (-0.89); finer beam "
+        "meshes S2/S3 error 10 mm -0.89/-0.89; 5 mm -0.91/-0.90; 2.5 mm "
+        "-0.91/-0.90 deg"
+    )
+    assert kap.status == "PASS"
+    cou = rows["DAI20-COULOMB"]
+    assert cou.target == "stated, not gated (measured 200 / 158 microstrain)"
+    assert cou.value == (
+        "radial 378 / 71 (+89 / -55 %); radial plus hoop 428 / 416 "
+        "(+114 / +163 %); the source's 2D values reproduced within 1.1 %"
+    )
+    assert cou.status == "INFO"

@@ -42,6 +42,7 @@ import json
 import math
 import os
 import sys
+from dataclasses import replace
 from functools import lru_cache
 from pathlib import Path
 
@@ -74,6 +75,12 @@ UMBILICAL_M = 9.0  # umbilical between the end fittings (Fig. 14 axis 0-9 m)
 RIGID_RIGHT_M = 2.2  # adapter to the tensioner pin, Fig. 1 sketch (assumed)
 X_S2 = 0.675  # from the entrance (Sec. 2.3)
 X_S3 = BELL_LENGTH_M - 0.352  # 0.352 m from the bellmouth end (Sec. 2.3)
+# Projected-gradient tolerance of the beam solves, relative to the initial
+# gradient. The harness default (1e-9) leaves the curvature unconverged by up
+# to 5 % on meshes finer than 20 mm (EI/h^4 grows the initial gradient); 1e-13
+# converges it to the mesh (S2 at 4 deg: 0.03986, 0.03972, 0.03965 and
+# 0.03968 1/m on 20, 10, 5 and 2.5 mm at EI = 60 kN m2).
+SOLVE_TOL = 1e-13
 
 RIG = sv.Rig(
     x_anchor_m=-INLET_M,
@@ -178,16 +185,16 @@ def measured_targets() -> dict[str, float]:
     }
 
 
-def _elastic_beam(ei: float, h: float = 0.02) -> sv.Beam:
+def _elastic_beam(ei: float, h: float = 0.02, rig: sv.Rig = RIG) -> sv.Beam:
     k = np.linspace(0.0, 1.0, 5)
-    return sv.Beam(PchipInterpolator(k, ei * k), ei, TENSION_N, h=h, rig=RIG)
+    return sv.Beam(PchipInterpolator(k, ei * k), ei, TENSION_N, h=h, rig=rig)
 
 
 def station_curvature(
-    ei: float, angles_deg: np.ndarray, h: float = 0.02
+    ei: float, angles_deg: np.ndarray, h: float = 0.02, rig: sv.Rig = RIG
 ) -> tuple[np.ndarray, np.ndarray, float]:
     """|kappa| at S2 and S3 along a monotonic rocking sweep (elastic: path free)."""
-    beam = _elastic_beam(ei, h)
+    beam = _elastic_beam(ei, h, rig)
     w = None
     s2, s3 = [], []
     residual = 0.0
@@ -195,7 +202,12 @@ def station_curvature(
     for a in angles_deg:
         steps = max(1, int(math.ceil(abs(a - previous) / 0.25)))
         for j in range(1, steps + 1):
-            w, k = beam.solve(math.radians(previous + (a - previous) * j / steps), w)
+            w, k = beam.solve(
+                math.radians(previous + (a - previous) * j / steps),
+                w,
+                tol=SOLVE_TOL,
+                max_iter=500,
+            )
         previous = float(a)
         residual = max(residual, beam.residual)
         s2.append(abs(float(np.interp(X_S2, beam.x, k))))
@@ -203,19 +215,39 @@ def station_curvature(
     return np.array(s2), np.array(s3), residual
 
 
-@lru_cache(maxsize=1)
-def kappa_check(h: float = 0.02) -> dict:
-    """DAI20-KAPPA: identify EI on S2 at 4 deg, predict the two contact angles."""
+@lru_cache(maxsize=16)
+def kappa_check(h: float = 0.02, rig: sv.Rig = RIG) -> dict:
+    """DAI20-KAPPA: identify EI on S2 at 4 deg, predict the two contact angles.
+
+    ``h`` and ``rig`` other than the defaults are the sensitivities of
+    :func:`kappa_sensitivity`; the registered row uses the defaults.
+    """
     meas = measured_targets()
 
     def miss(log_ei: float) -> float:
-        s2, _s3, _r = station_curvature(10.0**log_ei, np.array([IDENTIFY_ANGLE_DEG]), h)
+        s2, _s3, _r = station_curvature(
+            10.0**log_ei, np.array([IDENTIFY_ANGLE_DEG]), h, rig
+        )
         return float(s2[0]) - meas["s2_kappa_at_4deg"]
 
+    if miss(3.0) * miss(7.0) > 0:
+        # no stiffness in 1-10 000 kN m2 gives the S2 curvature at 4 deg
+        nan = math.nan
+        return {
+            "EI_Nm2": nan,
+            "measured": meas,
+            "s2_angle_90": nan,
+            "s3_angle_50": nan,
+            "error_s2_deg": nan,
+            "error_s3_deg": nan,
+            "beam_residual": nan,
+            "gate": False,
+            "curve": {},
+        }
     log_ei = brentq(miss, 3.0, 7.0, xtol=1e-4)
     ei = 10.0**log_ei
     angles = np.arange(0.25, 20.0 + 1e-9, 0.25)
-    s2, s3, residual = station_curvature(ei, angles, h)
+    s2, s3, residual = station_curvature(ei, angles, h, rig)
     a2 = _crossing(angles, s2, S2_LEVEL * KAPPA_BELL)
     a3 = _crossing(angles, s3, S3_LEVEL * KAPPA_BELL)
     err2 = a2 - meas["s2_angle_90"]
@@ -235,6 +267,47 @@ def kappa_check(h: float = 0.02) -> dict:
             "S3": s3.tolist(),
         },
     }
+
+
+MESH_STUDY_M = (0.01, 0.005, 0.0025)
+
+
+def mesh_study() -> dict[float, dict[str, float]]:
+    """DAI20-KAPPA on finer beam meshes (reported beside the registered row)."""
+    out = {}
+    for h in MESH_STUDY_M:
+        r = kappa_check(h)
+        out[h] = {
+            "EI_Nm2": r["EI_Nm2"],
+            "error_s2_deg": r["error_s2_deg"],
+            "error_s3_deg": r["error_s3_deg"],
+        }
+    return out
+
+
+def kappa_sensitivity() -> dict[str, dict[str, float]]:
+    """Rig-assumption and mesh sensitivities of DAI20-KAPPA (reported only)."""
+    variants = {
+        "registered": (0.02, RIG),
+        "mesh 10 mm": (0.01, RIG),
+        "pivot at S2": (0.02, replace(RIG, x_rotation_m=X_S2)),
+        "pivot at the end fitting": (0.02, replace(RIG, x_rotation_m=-INLET_M)),
+        "no rigid arrangement": (0.02, replace(RIG, rigid_right_m=0.0)),
+        "rigid arrangement 3.9 m": (0.02, replace(RIG, rigid_right_m=3.9)),
+        "gap 1 mm": (0.02, replace(RIG, gap_m=0.001)),
+        "gap 8 mm": (0.02, replace(RIG, gap_m=0.008)),
+        "inlet 1.6 m": (0.02, replace(RIG, x_anchor_m=-1.6)),
+        "inlet 2.6 m": (0.02, replace(RIG, x_anchor_m=-2.6)),
+    }
+    out = {}
+    for label, (h, rig) in variants.items():
+        r = kappa_check(h, rig)
+        out[label] = {
+            "EI_Nm2": r["EI_Nm2"],
+            "error_s2_deg": r["error_s2_deg"],
+            "error_s3_deg": r["error_s3_deg"],
+        }
+    return out
 
 
 def coulomb_check() -> dict:
@@ -298,6 +371,12 @@ def main() -> None:
     args = parser.parse_args()
     kap = kappa_check()
     cou = coulomb_check()
+    sens = kappa_sensitivity()
+    for label, v in sens.items():
+        print(
+            f"DAI20-KAPPA {label}: EI {v['EI_Nm2'] / 1e3:.1f} kN m2, S2 "
+            f"{v['error_s2_deg']:+.2f} deg, S3 {v['error_s3_deg']:+.2f} deg"
+        )
     print(
         f"DAI20-KAPPA EI {kap['EI_Nm2'] / 1e3:.1f} kN m2; S2 90 %: "
         f"{kap['s2_angle_90']:.2f} vs {kap['measured']['s2_angle_90']:.2f} deg; "
@@ -313,7 +392,8 @@ def main() -> None:
             )
     if args.json is not None:
         args.json.write_text(
-            json.dumps({"kappa": kap, "coulomb": cou}, indent=1), encoding="utf-8"
+            json.dumps({"kappa": kap, "coulomb": cou, "sensitivity": sens}, indent=1),
+            encoding="utf-8",
         )
 
 

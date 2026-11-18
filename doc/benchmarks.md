@@ -2000,6 +2000,63 @@ helical tubes (Fig. 13, bottom; the small tube reads 22% above and 33% below
 the bellmouth curvature, a sensor-offset error of that order by the source's
 own account); results at 5, 100 and 300 kN (not reported).
 
+**Results.**
+
+| ID | Class | Quantity | Target | Result | Status |
+| --- | --- | --- | --- | --- | --- |
+| DAI20-KAPPA | M | S2 at 90 % and S3 at 50 % of the bellmouth curvature, rig beam with `EI` identified on S2 at 4° | both within ±1.0° of 7.03° and 14.57° | `EI` 59.1 kN m²; S2 6.16° (−0.87°), S3 13.69° (−0.89°) | PASS |
+| — | I | same on 10, 5 and 2.5 mm beam meshes (20 mm registered) | reported | −0.89/−0.89°, −0.91/−0.90°, −0.91/−0.90° | converged |
+| DAI20-COULOMB | M | sectional full-slip range, large / small tube, source's line forces | stated, not gated (200 / 158 microstrain) | radial 378 / 71 (+89 / −55 %); radial plus hoop 428 / 416 (+114 / +163 %) | INFO |
+| — | I | same against the source's own 2D values (Table 4) | reported | within 1.1 % (378 / 71 / 428 / 416 against 374 / 70.4 / 424 / 414) | reproduced |
+
+Beam against the measurement (|κ| [1/m], measured −/+ side): S2 at 2°, 3°,
+4°, 5°, 6°: 0.014, 0.025, 0.040, 0.059, 0.085 against 0.012/0.018,
+0.024/0.030, 0.035/0.045, 0.047/0.059, 0.067/0.080; S3 at 14° and 15°: 0.058
+and 0.092 against 0.035/0.044 and 0.054/0.063.
+
+- *The rig beam carries the bellmouth curvature field within about 1°.* With
+  one stiffness identified at one point, the angle at which the contact front
+  reaches each station is predicted to −0.9° at both stations, 0.7 m and
+  2.6 m into the bellmouth. The identified 59 kN m² is a plausible slipped
+  stiffness for a 9 m steel-tube umbilical; it is not a measured value. The
+  beam enters contact about 0.9° early at both stations, and its approach to
+  the plateau is steeper than the measured one (S3 at 15°: 0.092 against
+  0.059); the source's own global model (its Fig. 9) also reaches the plateau
+  before the measurement. A linear elastic beam has no stick-slip hysteresis,
+  which would delay the approach on the loading branch.
+- *Dependence on the assumed rig* (reported, `check_dai2020.kappa_sensitivity`,
+  S2/S3 error): registered −0.87/−0.89°; gap 1 mm −0.83/−0.89°, 8 mm
+  −1.05/−0.90°; inlet 1.6 m −0.89/−0.76°, 2.6 m −0.95/−1.05°; no rigid
+  arrangement −0.77/−1.69°, 3.9 m −0.93/−0.51°; pivot at the end fitting
+  +0.04/−3.14° (`EI` 287 kN m²); pivot at S2: no stiffness between 1 and
+  10 000 kN m² gives the measured S2 curvature at 4°. The pass holds for the
+  entrance gap and inlet lengths near the declared ones and not for every
+  conceivable rig; the pivot position, which the source sketches but does not
+  dimension, is the largest unknown. Gate status unchanged by these
+  sensitivities.
+- *Solver tolerance.* The SV11 harness solves to a projected gradient of
+  1e-9 relative to the initial gradient. On meshes finer than 20 mm this
+  leaves the curvature unconverged by up to 5 % (EI/h⁴ inflates the initial
+  gradient; one 2.5 mm solve stopped on a spurious contact state); the Dai
+  harness solves to 1e-13, which converges the curvature to the mesh (S2 at
+  4° within 0.5 % from 20 to 2.5 mm). For the registered SV11 rows (20 mm)
+  the tolerance matters little; see the SV11 section.
+- *Coulomb ranges: the documented radial-only limit.* With the source's
+  radial line forces the sectional range is 1.89 times the measured one for
+  the large tube and 0.45 times for the small tube; with the hoop forces both
+  are too large (2.1 and 2.6 times). The package's full-slip law and the
+  source's Eq. 14 agree to 1 % on the same inputs, so the gap is in the
+  contact forces and in the two-dimensional assumption, which the source
+  closes only with its 3D hoop-contact model (Table 5: 215 / 151
+  microstrain). CableXSec has no hoop contact between helical tubes and
+  fillers; this row documents that limit, it does not test a prediction.
+- *Relevance to the termination route.* The same rig beam supplies the SV11
+  curvature profile. In the one bellmouth where the curvature was measured it
+  is right to about 1° of rocking angle with a stiffness that fits one
+  measured point, so the profile itself is a credible input; the SV11
+  over-prediction comes from what the one-way anchored chain does with it
+  (SV11-SPLIT), not from the profile.
+
 ## Torque balance and twist under tension (gap 3.5: TQ, TQ-KL, TQ-UJ)
 
 Script `validation/scripts/check_torque_balance.py`, tests `tests/test_torque_balance.py`, rows TQ,

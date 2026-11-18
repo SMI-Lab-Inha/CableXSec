@@ -72,6 +72,8 @@ afterwards: a comparison that misses its target is reported as failed.
 | **SV11-REACH** | Small-angle slip demand and the cases outside the band whatever the correction does | Sævik (2011) | a_max below 1 at 0.5° and 1°; sectional outside: LC 4, 7, 8 | stated, not gated | Info |
 | **AW-DONG25** | Armour wire anchored at both ends of one pitch at uniform curvature: stress at the anchor and peak, code-to-code | Dong et al. (2025), FE, Figs 14 and 25 | anchor 156.4 vs 156.9 MPa (source theory 147.8); peak 207.8 vs 204.5 MPa | stated, not gated | Info |
 | **AW-ZT14** | Same at a = 4.92: normalised anchor and peak stress, code-to-code | Zhu and Tan (2014), FE, Figs 4–8 | 1.19 / 1.70 vs 2.22 (the FE far field is not in slip) | stated, not gated | Info |
+| **DAI20-KAPPA** | Curvature at two stations inside a bellmouth against the rocking angle, steel-tube umbilical at 200 kN: contact angles predicted after identifying the bending stiffness on one curvature value | Dai, Sævik and Ye (2020), Fig. 9 | −0.87° (S2), −0.89° (S3); 59.1 kN m² identified | both within ±1.0° | Pass |
+| **DAI20-COULOMB** | Sectional full-slip friction strain range of two helical steel tubes with the source's contact line forces | Dai, Sævik and Ye (2020), Tables 3–5 | radial +89 / −55 %; radial plus hoop +114 / +163 % | stated, not gated | Info |
 | **DAI18-DIG** | Digitised friction loops of armour wire on anti-wear tape, Test 1: loop maximum against the printed static coefficient | Dai, Sævik and Ye (2018), Fig. 4a, p. 428 | 0.2237 / 0.2405 / 0.3786 vs 0.22 / 0.24 / 0.38 | within 0.005 + 0.0021 | Pass |
 | **DAI18-RS** | Re-stick peak at every reversal, seven loops; spring-slider with `stick_time_s = 0` against the default `inf` | Dai, Sævik and Ye (2018), Figs 4a, 4c | measured 14 of 14 strokes; `0`: 14 of 14; `inf`: 0 of 14 | all; all; none | Pass |
 | **DAI18-T1** | Test 1 loops (8, 4, 1 MPa) against the spring-slider with the printed coefficients | Dai, Sævik and Ye (2018), Fig. 4a | peak −1.8 to +1.0 %; level −3.3 to +12.3 %; work −1.9 to −2.6 %; no gradual decay after the peak | stated, not gated | Info |
@@ -104,6 +106,11 @@ quantities are those of the passing rows. In particular:
   the correction; the excess comes from the curvature gradients at the bellmouth contact on a
   one-way curvature field (SV11-SPLIT), and SV11-PLANE cannot pass through any termination
   correction because its small-angle cases stick (SV11-REACH).
+- The rig-beam curvature that drives a bellmouth calculation is checked against the one
+  published curvature history inside a bellmouth (DAI20-KAPPA: contact angles within 1° with
+  one identified stiffness, under declared rig assumptions); the sectional Coulomb range of
+  helical umbilical tubes with radial contact forces is off by +89 / −55 % (DAI20-COULOMB),
+  the source's own two-dimensional result, because hoop contacts are not modelled.
 - The static/dynamic friction law is compared with measured friction loops of armour wire on
   anti-wear tape on one spring-slider, not on a cable section (DAI18 rows): the loops re-stick
   at every reversal (`stick_time_s = 0`), the dynamic level is rate independent at 0.01–0.2 Hz,

@@ -648,6 +648,72 @@ def _anchored_wire_fe_rows() -> list[Row]:
     ]
 
 
+def _dai2020_rows() -> list[Row]:
+    """Steel-tube umbilical in a bellmouth, Dai, Sævik and Ye (2020).
+
+    DAI20-KAPPA (registered): the SV11 rig beam in the measured bellmouth,
+    bending stiffness identified on one curvature value, two contact angles
+    predicted; the finer-mesh results beside it. DAI20-COULOMB (stated): the
+    sectional full-slip tube range with the source's contact line forces.
+    scripts/check_dai2020.py.
+    """
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    import check_dai2020 as dai  # noqa: PLC0415
+
+    k = dai.kappa_check()
+    m = k["measured"]
+    mesh = dai.mesh_study()
+    mesh_text = "; ".join(
+        f"{1000 * h:g} mm {v['error_s2_deg']:+.2f}/{v['error_s3_deg']:+.2f}"
+        for h, v in mesh.items()
+    )
+    c = dai.coulomb_check()
+    meas = dai.MEASURED_MICROSTRAIN
+    worst_2d = max(
+        abs(v["vs_source_2d"]) for tubes in c.values() for v in tubes.values()
+    )
+
+    def pair(model: str) -> str:
+        lg, sm = c[model]["large"], c[model]["small"]
+        return (
+            f"{lg['microstrain']:.0f} / {sm['microstrain']:.0f} "
+            f"({100 * lg['vs_measured']:+.0f} / {100 * sm['vs_measured']:+.0f} %)"
+        )
+
+    return [
+        Row(
+            "2",
+            "DAI20-KAPPA",
+            "Dai et al. (2020) Fig. 9: centre-tube curvature in a bellmouth "
+            "(0.1 1/m, 3 m, 200 kN) at S2 and S3, rig beam with the bending "
+            "stiffness identified on the S2 curvature at 4 deg "
+            f"({m['s2_kappa_at_4deg']:.5f} 1/m): angle where S2 reaches 90 % and "
+            "S3 50 % of the bellmouth curvature",
+            f"both within +-{dai.ANGLE_BAND_DEG:.1f} deg of the measured "
+            f"{m['s2_angle_90']:.2f} and {m['s3_angle_50']:.2f} deg",
+            f"EI {k['EI_Nm2'] / 1e3:.1f} kN m2; S2 {k['s2_angle_90']:.2f} deg "
+            f"({k['error_s2_deg']:+.2f}), S3 {k['s3_angle_50']:.2f} deg "
+            f"({k['error_s3_deg']:+.2f}); finer beam meshes S2/S3 error "
+            f"{mesh_text} deg",
+            "PASS" if k["gate"] else "FAIL",
+        ),
+        Row(
+            "2",
+            "DAI20-COULOMB",
+            "Dai et al. (2020) Tables 3-5: sectional full-slip friction strain "
+            "range of the large / small helical steel tube at S2 with the "
+            "source's contact line forces (radial; radial plus hoop), mu = 0.2 "
+            "as assumed by the source",
+            f"stated, not gated (measured {meas['large']:.0f} / "
+            f"{meas['small']:.0f} microstrain)",
+            f"radial {pair('radial')}; radial plus hoop {pair('hoop')}; the "
+            f"source's 2D values reproduced within {100 * worst_2d:.1f} %",
+            "INFO",
+        ),
+    ]
+
+
 def _dai2018_rows() -> list[Row]:
     """Static/dynamic friction law against the measured wire-on-tape loops of
     Dai, Sævik and Ye (2018), Fig. 4; scripts/check_dai2018_friction.py.
@@ -2010,6 +2076,7 @@ def _rows() -> list[Row]:
     rows.extend(_saevik_rows())
     rows.extend(_saevik_split_rows())
     rows.extend(_anchored_wire_fe_rows())
+    rows.extend(_dai2020_rows())
     rows.extend(_dai2018_rows())
 
     theta_bm5 = _bm5_conductor_temperature()  # paper tabulated network, λ1' only
@@ -2242,6 +2309,7 @@ def main() -> None:
         "| BM6 | `copper_poon2022` SWT constants (cited registry) + representative contact | curve YES (registry); cable-level contact driver is representative, not from a cable |",
         "| WITZ | `witz1996.yaml` geometry + material library + digitised Witz Figs 5-6 | EI_min YES (parameter-free); WITZ-ID: initial pressure identified on the Fig. 5 width (declared `identified`), Fig. 6 predicted without refitting |",
         "| SV11 | `saevik2011.yaml` geometry (Table 1; outer armour, tapes and sheath assumed) + material library (polymer modulus identified on the Table 1 EI) + rig constants in `validation/scripts/check_saevik2011.py` + digitised Sævik Figs 17-23 and Gjøsteen Figs 27-35 | PARTIAL — section from the cable definition; the curvature profile along the pipe comes from a harness beam model with an assumed rotation point |",
+        "| DAI20 | digitised Dai et al. (2020) Fig. 9 + rig constants in `validation/scripts/check_dai2020.py` (end-fitting distance, pivot and rigid length assumed) + tube data of its Tables 1 and 3 | PARTIAL — rig beam with one identified bending stiffness; the umbilical section is not built (its Table 1 is inconsistent) |",
         "",
         "Engine note (RESOLVED): the Kim/Coulomb cross-sectional loop assumes "
         "extreme-fibre full slip and is NOT a valid absolute-dissipation "
