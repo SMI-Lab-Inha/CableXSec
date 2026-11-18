@@ -418,6 +418,106 @@ the small ranges, and a cable without a declared clamping state has almost
 no core friction at low tension, so switching the law on would change
 results without a validated gain.
 
+## Zeidan (2025) four-point loops of a 112 mm three-core cable (Z-EI, Z-ID)
+
+Sources: L. Zeidan, PhD thesis, École Centrale de Nantes (defended
+8 December 2025), Chapter 5 (Sec. 5.2–5.5, Tables 5.2–5.4, Eq. 5.1,
+Figs 5.5–5.10); L. Zeidan, P. Cartraud, G. Marckmann, L. Stainier, Int. J.
+Solids Struct. 338 (2026) 114089, Sec. 5 (Tables 3–5, Figs 15–21). Cable
+input `cablexsec/cables/zeidan2025.yaml`; digitised records and their
+provenance in `validation/paper_data/zeidan2025_*` and
+`zeidan2026_fig18_deflection.csv` (`validation/scripts/digitise_zeidan2025.py`).
+
+### The test (read from the sources)
+
+- **Specimen.** Three-core 12/20 kV dynamic cable, 112 mm, two armour layers of
+  75 and 82 galvanised wires of 3.5 mm (pitches +913 and −1233 mm), core lay
+  −800 mm, EPR cores in MDPE sheaths, LDPE filler, HDPE bedding and sheath
+  (paper Table 3). It is not the Ménard and Cartraud (2023) cable (101 mm,
+  55 + 63 wires of 4 mm): a different specimen, laboratory and campaign. The
+  two tables disagree on the core build-up (thesis: EPR to 25 mm, screens to
+  27 mm and a metallic screen of unstated size; paper: one EPR layer from 14
+  to 31.5 mm); the paper's layers are used.
+- **Arrangement.** Supports 2.000 m apart (pin and roller), loading points
+  1.050 m apart through articulated saddles, shear span `a` = 0.475 m;
+  specimens about 2.2 m long; displacement control, period 50 s; zero axial
+  tension (thesis Sec. 5.3).
+- **Reduction.** `M = F a` and `κ = 6 y / (a (3 L_t − 4 a))` (thesis Eq. 5.1,
+  the elastic deflection formula of the loading point); the paper instead
+  states a circle fitted through camera-tracked points. The plotted curvature
+  amplitudes, 0.0925, 0.1233, 0.1542 and 0.1850 1/m, are Eq. 5.1 with
+  y = 30, 40, 50 and 60 mm to four digits.
+- **Which displacement.** Paper Fig. 18 (measured and computed deflection along
+  the half span) puts 30.0, 40.0, 50.0 and 60.0 mm at mid-span and 19.9, 26.9,
+  33.6 and 40.6 mm at the loading points. A parabola through the Fig. 18
+  deflection between x = 0.5 and 1.0 m gives a central curvature of 0.073,
+  0.098, 0.120 and 0.143 1/m, 0.77–0.79 of the plotted amplitudes: the
+  plotted curvature is the loading-point formula applied to the mid-span
+  deflection. Reading R2 (primary): `y` is the mid-span deflection. Reading R1
+  (reported): `y` is the loading-point deflection, as Eq. 5.1 states.
+- **Records.** Thesis Fig. 5.5 (first series) and Fig. 5.6 (the same specimen
+  after more than 1000 cycles at ±60 mm; paper Fig. 17 shows the same record:
+  its outlines lie within 0.23–0.32 pt median, 0.57 pt at the 95th
+  percentile, of the thesis polylines against a 0.54 pt half-thickness),
+  five cycles per amplitude, native PDF polylines.
+- **Measured loops, Fig. 5.6** (mean over the complete cycles; spread in
+  brackets; centre = mean of the moments at the two reversals):
+
+  | Amplitude | Work [J/m] | Moment range [kN·m] | Centre [kN·m] | Half-height at κ = 0 [kN·m] |
+  | --- | --- | --- | --- | --- |
+  | 30 mm (0.0925 1/m) | 297.9 (291.4–301.0) | 3.49 | +0.71 | 0.92 |
+  | 40 mm (0.1233 1/m) | 445.1 (442.9–447.3) | 4.14 | +0.66 | 1.01 |
+  | 50 mm (0.1542 1/m) | 592.1 (590.5–593.8) | 4.68 | +0.66 | 1.05 |
+  | 60 mm (0.1850 1/m) | 751.1 (747.6–753.2) | 5.16 | +0.69 | 1.11 |
+
+  The first series (Fig. 5.5) dissipates 20–37 % more (400.7–414.5,
+  564.4–581.7, 731.7–754.1 and 885.4–917.8 J/m) with centres +0.82 to
+  +0.90 kN·m. Reading resolution of the polylines: 1.2e-5 1/m and 0.29 N·m.
+
+### Registered targets (registered before any run of this cable)
+
+Registered on 2026-11-18 in the first commit that adds the cable and the
+data, before `zeidan2025.yaml` was evaluated by any analysis.
+
+**Model.** `zeidan2025.yaml`, bounded contact chain, zero tension, armour
+μ 0.2, the laid-core law with the trefoil wedge and the filler profiles
+(`CoreFrictionSpec(filler_profiles=True)`, μ 0.2 on every core and profile
+contact; the source gives 0.20–0.24 for all interfaces). The test is
+simulated in its arrangement (`simulate_bending_test`, `FourPoint(2.0, 1.05)`):
+reading R2, the mid-span deflection driven to ±y, three cycles, the last
+retained; `M = F a` per loading point and `κ = 6 w_mid / (a (3 L_t − 4 a))`,
+the test's own reduction. Reading R1 drives the loading-point deflection to
+±y and reduces it with Eq. 5.1.
+
+**Clamping states.** S0: none (no initial pressure; zero tension). ST: the
+source's FE calibration transferred, 3.5 MPa external pressure
+(`published_calibration`, scope `all_contacts`). SI: the initial external
+pressure `P0` identified so that the model's cycle work at 40 mm (the
+amplitude on which the paper calibrated its FE pressure) equals the measured
+445.1 J/m (bisection to 0.1 %).
+
+**Comparison metrics.** Last measured complete cycle against the model's last
+cycle; ascending and descending branches compared at the measured curvature
+samples; the measured centre moment is removed before the moment comparison
+(the record starts from a bent, loaded state, thesis Sec. 5.4; the work is
+unaffected). Branch RMSE is normalised by the measured moment range.
+
+| ID | Quantity | Target | Gated |
+| --- | --- | --- | --- |
+| Z-EI | Bounds, parameter-free: the measured stick secant (from each reversal over 30 % of the moment range), converted to the true central curvature by the elastic factor of reading R2 (1.425), does not exceed the section's no-slip EI_max; the measured slip slope (ascending branch, κ from 0 to 0.8 of the amplitude) is not below EI_min | both hold at every amplitude | yes |
+| Z-ID | SI, full accounting: 40 mm branch RMSE (identified; shape check); 30, 50 and 60 mm predicted | 40 mm RMSE < 5 %; 30, 50, 60 mm: work within ±20 %, branch RMSE < 10 %, moment range within ±10 % | yes |
+| — | SI with the armour law alone; reading R1; μ 0.24; S0; ST; the first series (Fig. 5.5) predicted with the stabilised P0 | the same metrics | reported |
+| — | Model central curvature at the 60 mm reversal and ratio of loading-point to mid-span deflection against Fig. 18 (0.143 1/m; 40.6/60.0 = 0.677) | — | reported |
+| — | Stick secant and slip slope, model against measured; the source's bilinear fit (K1 106 kN·m², K2 9.00 kN·m², M_y 1.83 kN·m) against the measured loops | — | reported |
+
+**Default of the laid-core law (decision rule, registered with the
+targets).** The law is recommended for default-on only if (i) Z-ID passes
+with the full accounting, (ii) the full accounting is not worse than the armour
+law alone on the mean absolute work error of the three predicted amplitudes,
+and (iii) with no declared clamping state and zero tension (S0) the cores
+carry no friction moment, so that the default changes nothing where it has no
+input.
+
 ## Out and von Morgen (1997), frictionless slip bounds (OvM, Out89)
 
 Sources: Out and von Morgen, Eng. Struct. 19(6) (1997) 507–515, Eqs. 20–30
