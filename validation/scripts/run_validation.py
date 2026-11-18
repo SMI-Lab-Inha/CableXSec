@@ -517,6 +517,65 @@ def _saevik_rows() -> list[Row]:
     ]
 
 
+def _anchored_wire_fe_rows() -> list[Row]:
+    """Anchored wire at uniform curvature against two published FE studies.
+
+    Code-to-code, reported (doc/benchmarks.md, "Anchored wire at uniform
+    curvature against published FE"): the clamp-layer solver against the FE of
+    Dong et al. (2025) and of Zhu and Tan (2014). scripts/check_anchored_wire_fe.py.
+    """
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    import check_anchored_wire_fe as aw  # noqa: PLC0415
+
+    r = aw.report()
+    dong, zt = r["dong"], r["zt"]
+    d90 = dong["cablexsec"][90]
+    fe14, th14 = dong["fig14_fe"], dong["fig14_theory"]
+    fe25 = dong["fig25_fe"]
+    rise = "/".join(
+        f"{dong['cablexsec'][t]['anchor']:.1f}" for t in (0, 45, 90, 135, 180)
+    )
+    rise_fe = "/".join(
+        f"{fe25[t]['start']:.1f}" for t in ("0", "45", "90", "135", "180")
+    )
+    z90, f90 = zt["cablexsec"][90.0], zt["fea"][90.0]
+    z45, f45 = zt["cablexsec"][45.0], zt["fea"][45.0]
+    rms = zt["fea_far_field_rms"]
+    return [
+        Row(
+            "2",
+            "AW-DONG25",
+            "Dong et al. (2025) Figs 14 and 25: armour wire anchored at both ends "
+            "of one pitch, pipe bent to a uniform 0.005 1/m (a = "
+            f"{dong['parameters']['a']:.2f}), clamp-layer solver against the "
+            "source's FE: neutral-axis wire (Fig. 14) and anchor stress for "
+            "theta0 = 0, 45, 90, 135, 180 deg (Fig. 25) [MPa]",
+            "stated, not gated (code-to-code)",
+            f"Fig. 14 anchor {d90['anchor']:.1f} vs FE {fe14['start']:.1f} (source "
+            f"theory {th14['start']:.1f}); peak {d90['peak']:.1f} at X/P "
+            f"{d90['peak_X']:.3f} vs {fe14['peak']:.1f} at {fe14['peak_x']:.3f}; "
+            f"Fig. 25 anchors {rise} vs {rise_fe}",
+            "INFO",
+        ),
+        Row(
+            "2",
+            "AW-ZT14",
+            "Zhu and Tan (2014) Figs 4-8: normalised anchor / peak stress of an "
+            f"anchored wire at a = {zt['a']:.2f} (from their Table 2), clamp-layer "
+            "solver against the source's FE, wires starting at 45 and 90 deg; FE "
+            "far field against the full-slip triangle",
+            "stated, not gated (code-to-code)",
+            f"90 deg {z90['anchor']:.2f} / {z90['peak']:.2f} vs FE "
+            f"{f90['start']:.2f} / {f90['peak']:.2f}; 45 deg {z45['anchor']:.2f} / "
+            f"{z45['peak']:.2f} vs {f45['start']:.2f} / {f45['peak']:.2f}; FE far "
+            f"field RMS distance to a cosine {rms['cosine']:.3f}, to the full-slip "
+            f"triangle {rms['triangle']:.3f} (the FE wire is not in slip)",
+            "INFO",
+        ),
+    ]
+
+
 def _dai2018_rows() -> list[Row]:
     """Static/dynamic friction law against the measured wire-on-tape loops of
     Dai, Sævik and Ye (2018), Fig. 4; scripts/check_dai2018_friction.py.
@@ -1877,6 +1936,7 @@ def _rows() -> list[Row]:
     rows.extend(_hu_rows())
     rows.extend(_witz_rows())
     rows.extend(_saevik_rows())
+    rows.extend(_anchored_wire_fe_rows())
     rows.extend(_dai2018_rows())
 
     theta_bm5 = _bm5_conductor_temperature()  # paper tabulated network, λ1' only

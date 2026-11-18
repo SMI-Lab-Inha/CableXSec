@@ -159,3 +159,25 @@ def test_digitised_files_name_their_sources():
     ):
         head = path.read_text(encoding="utf-8").split("\n", 20)
         assert any(digest in line for line in head)
+
+
+@pytest.mark.independent_method
+def test_report_rows_are_pinned():
+    import run_validation  # noqa: PLC0415
+
+    rows = {r.ident: r for r in run_validation._anchored_wire_fe_rows()}
+    dong = rows["AW-DONG25"]
+    assert dong.target == "stated, not gated (code-to-code)"
+    assert dong.value == (
+        "Fig. 14 anchor 156.4 vs FE 156.9 (source theory 147.8); peak 207.8 at "
+        "X/P 0.217 vs 204.5 at 0.223; Fig. 25 anchors "
+        "81.8/117.6/156.4/191.9/200.0 vs 89.3/121.2/164.8/199.1/195.0"
+    )
+    assert dong.status == "INFO"
+    zt = rows["AW-ZT14"]
+    assert zt.value == (
+        "90 deg 1.19 / 1.70 vs FE 2.22 / 2.23; 45 deg 0.05 / 1.32 vs 0.97 / 1.59; "
+        "FE far field RMS distance to a cosine 0.028, to the full-slip triangle "
+        "0.154 (the FE wire is not in slip)"
+    )
+    assert zt.status == "INFO"
