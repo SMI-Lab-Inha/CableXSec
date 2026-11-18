@@ -377,6 +377,28 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Fixed
 
+- The public 66 kV template (`iea_task49_66kv.yaml`) and its derived 300 mm² section model the
+  core screens as the source's section model does (Janocha et al. 2024, Table 3), not as solid
+  copper annuli. Table 1 labels the 2.00 mm conductor screen copper tape and the 3.15 mm
+  insulation screen copper; read as solid copper, the insulation screen alone held 602 mm² of
+  copper per core and the cable weighed 76.33 kg/m against the published 55.76 kg/m
+  ([IEATask49] Table 13; 547 N/m in air, the source's Table 5), +36.9 %. Table 3 merges the
+  conductor screen into the 630 mm² conductor body and the insulation screen into the XLPE
+  insulation. The layers `cu_conductor_screen` and `cu_wire_screen` become `conductor_screen`
+  (loose, semiconducting, XLPE properties), `insulation_screen` (semiconducting, XLPE
+  properties, carries load with the core) and `cu_tape_screen` (a loose 0.10 mm copper tape of
+  assumed thickness, the metallic screen of the electrical and thermal analyses). Against the
+  published values: mass 55.41 kg/m (−0.6 %; 300 mm²: 40.45 against 36.66 kg/m, earlier +55 %),
+  EA 638.5 MN (−3.0 %, was 636.8), full-slip EI 21.74 kN·m² (−49 %, was 20.98; the source's own
+  figures disagree on this value and no component bending of its section reaches 42 kN·m²),
+  armour no-slip EI 1215 kN·m² (was 1260; the insulation screens add shear compliance to the
+  armour support). The semiconducting screens are thermal resistance: the conductor reaches
+  95.3 °C at 1093 A (88.9 °C with the copper annuli), and the solved armour contact at 50 kN
+  rises (Fig. 6 half-height 0.115 against 0.081 kN·m armour only). The energised tables of
+  doc/template_66kv.md Section 4.2 keep the earlier values as a record, with the regenerated
+  reported state; benchmark TQ6 now differs by 1.5 % (band 1 %, FAIL), because the
+  fixed-radius model now carries the insulation screens that the solved section already did.
+
 - The capacity documentation states the copper plastic-limit mechanism: the conductor's 0.2 %
   proof stress at its extreme wire fibre, on the strand basis of its bending stiffness, is a
   component limit of the envelope (the `yielding` mode of the conductor layer), separate from

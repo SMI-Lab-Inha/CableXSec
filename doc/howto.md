@@ -32,9 +32,9 @@ tension each layer carries with the twist held or free.
 <!-- howto-output: howto_01_load_sharing_mass.py -->
 ```text
 outer diameter        184.0 mm
-mass                  76.33 kg/m
-weight in water       491.7 N/m
-  (voids sealed)      481.2 N/m
+mass                  55.41 kg/m
+weight in water       286.6 N/m
+  (voids sealed)      276.1 N/m
 share of 200 kN, twist held (solved route)
   cu_conductor        0.312
   mdpe_filler         0.006
@@ -67,12 +67,12 @@ radial section, from a cable definition or from layers given directly.
 
 <!-- howto-output: howto_02_contact_state.py -->
 ```text
-T 100 kN, sealed p_ext 0 MPa: strain 114 ue, open gaps 1
-  inner_armour  P1+P2  0.062 MPa, wire stress   21.0 MPa
-  outer_armour  P1+P2  0.016 MPa, wire stress   21.7 MPa
-T 100 kN, sealed p_ext 2 MPa: strain 177 ue, open gaps 0
-  inner_armour  P1+P2  4.329 MPa, wire stress   27.9 MPa
-  outer_armour  P1+P2  4.107 MPa, wire stress   31.0 MPa
+T 100 kN, sealed p_ext 0 MPa: strain 163 ue, open gaps 1
+  inner_armour  P1+P2  0.089 MPa, wire stress   29.9 MPa
+  outer_armour  P1+P2  0.023 MPa, wire stress   31.0 MPa
+T 100 kN, sealed p_ext 2 MPa: strain 259 ue, open gaps 0
+  inner_armour  P1+P2  4.337 MPa, wire stress   40.6 MPa
+  outer_armour  P1+P2  4.087 MPa, wire stress   45.3 MPa
 single-core cable at 200 kN: 7 contacts closed
   r =   9.8 mm:  2.110 MPa
   r =  10.8 mm:  2.074 MPa
@@ -170,7 +170,7 @@ Longitudinal stress over the section; the plotting code is in the script.
 
 The fields reproduce the extremes and utilisations of
 `compute_component_response` at the same inputs, in one {term}`core slip state`
-(`core_state`). The copper wire screen is outside the load path of the model.
+(`core_state`). The copper tape screen is outside the load path of the model.
 Its stress is its modulus times the strain it follows.
 
 ### Coiling into a tank
@@ -265,10 +265,10 @@ without the heat of armour friction.
 ```text
 coupling none
   friction heat 0.00 W/m at start, 0.00 W/m at 6 h
-  after 6 h: conductor 30.3 C, outer armour 24.7 C
+  after 6 h: conductor 31.9 C, outer armour 24.7 C
 coupling two_way
-  friction heat 7.89 W/m at start, 11.62 W/m at 6 h
-  after 6 h: conductor 32.1 C, outer armour 26.6 C
+  friction heat 9.90 W/m at start, 18.22 W/m at 6 h
+  after 6 h: conductor 34.7 C, outer armour 27.7 C
 ```
 
 This cable declares no manufacturing clamping, so the friction rests on the

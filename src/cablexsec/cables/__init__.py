@@ -196,7 +196,7 @@ def iea_task49_66kv_stranded(
                     ),
                 }
             )
-        elif layer.name == "cu_conductor_screen":
+        elif layer.name == "conductor_screen":
             layer = layer.model_copy(update={"r_inner_m": r_env})
         layers.append(layer)
     return CableData.model_validate(

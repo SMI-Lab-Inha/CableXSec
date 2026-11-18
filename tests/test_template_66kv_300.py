@@ -50,9 +50,10 @@ def test_conductor_is_300_mm2(cable) -> None:
 @pytest.mark.parametrize(
     ("inner", "outer"),
     [
-        ("cu_conductor_screen", "xlpe_insulation"),
-        ("xlpe_insulation", "cu_wire_screen"),
-        ("cu_wire_screen", "mdpe_core_sheath"),
+        ("conductor_screen", "xlpe_insulation"),
+        ("xlpe_insulation", "insulation_screen"),
+        ("insulation_screen", "cu_tape_screen"),
+        ("cu_tape_screen", "mdpe_core_sheath"),
         ("ppy_bedding_inner", "mdpe_inner_sheath"),
     ],
 )
@@ -102,9 +103,9 @@ def test_outer_diameter_and_axial_stiffness_against_table_13(cable) -> None:
 
 
 def test_slipping_bending_stiffness_is_recorded_low(cable) -> None:
-    """Full-slip EI at 50 kN is 14.0 kN m2 against 19.92 (630 mm2 template: 21.0 against 42.47)."""
+    """Full-slip EI at 50 kN is 14.5 kN m2 against 19.92 (630 mm2 template: 21.7 against 42.47)."""
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         res = cx.compute_mkappa(cable, np.linspace(0.0, 0.15, 200), tension_N=50e3)
-    assert res.EI_min_Nm2 == pytest.approx(14.01e3, rel=0.01)
+    assert res.EI_min_Nm2 == pytest.approx(14.47e3, rel=0.01)
     assert res.EI_min_Nm2 < EI_SLIP_TABLE_NM2

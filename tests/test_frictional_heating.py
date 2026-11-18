@@ -282,7 +282,8 @@ def test_steady_friction_heat_leaves_through_the_surface() -> None:
     steady = np.linalg.solve(k, s + q)
     assert np.max(np.abs(result.node_temperature_C[-1] - steady)) < 1e-3
     surface = (steady[-1] - 20.0) / net.external_resistance_Km_W
-    assert surface == pytest.approx(sum(heat.values()), rel=1e-9)
+    # To the conditioning of the 0.10 mm copper tape screens.
+    assert surface == pytest.approx(sum(heat.values()), rel=1e-8)
 
 
 def test_heater_holds_the_set_point_until_friction_takes_over() -> None:

@@ -214,8 +214,8 @@ def test_kinematic_layer_takes_the_strain_of_its_neighbours():
         assert state is not None
         moduli = state.youngs_modulus_Pa
         for loose, inside, outside in (
-            ("cu_conductor_screen", "cu_conductor", "xlpe_insulation"),
-            ("cu_wire_screen", "xlpe_insulation", "mdpe_core_sheath"),
+            ("conductor_screen", "cu_conductor", "xlpe_insulation"),
+            ("cu_tape_screen", "insulation_screen", "mdpe_core_sheath"),
         ):
             screen = field.layer(loose)
             assert (

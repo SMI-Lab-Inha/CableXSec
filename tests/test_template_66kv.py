@@ -53,9 +53,9 @@ def cable() -> CableData:
 # --------------------------------------------------------------------------- #
 # Outer diameters of [Janocha2024] Table 1, 66 kV column [mm].
 _TABLE1_OD_MM = {
-    "cu_conductor_screen": 33.90,
+    "conductor_screen": 33.90,
     "xlpe_insulation": 57.70,
-    "cu_wire_screen": 64.00,
+    "cu_tape_screen": 64.00,
     "mdpe_core_sheath": 70.40,
     "mdpe_filler": 151.80,
     "ppy_bedding_inner": 152.60,
@@ -69,6 +69,27 @@ _TABLE1_OD_MM = {
 def test_layer_outer_diameters_follow_table_1(cable, name, od_mm) -> None:
     layer = cable.get_layer(name)
     assert 2e3 * layer.r_outer_m == pytest.approx(od_mm, abs=1e-9)
+
+
+def test_screens_follow_the_source_section_model(cable) -> None:
+    """Janocha Table 3 merges the screens into the conductor and the insulation.
+
+    Read as solid copper, the screen walls of Table 1 gave 76.3 kg/m against
+    the published 55.76 kg/m (IEA Table 13; 547 N/m in air, Janocha Table 5).
+    """
+    conductor_screen = cable.get_layer("conductor_screen")
+    insulation_screen = cable.get_layer("insulation_screen")
+    tape = cable.get_layer("cu_tape_screen")
+    assert conductor_screen.material == insulation_screen.material == "xlpe_janocha2024"
+    assert not conductor_screen.structural and insulation_screen.structural
+    assert not tape.structural and tape.material == "copper_tape_screen"
+    assert 1e3 * (tape.r_outer_m - tape.r_inner_m) == pytest.approx(0.10, abs=1e-12)
+    mass = cx.compute_mass_properties(cable)
+    assert mass.mass_kg_per_m == pytest.approx(55.76, rel=0.01)
+    assert mass.weight_in_air_N_per_m == pytest.approx(547.0, rel=0.01)
+    copper = sum(v for k, v in mass.layer_mass_kg_per_m.items() if k.startswith("cu_"))
+    # The conductors and the assumed tape: 17.06 + 0.55 kg/m.
+    assert copper == pytest.approx(17.61, abs=0.01)
 
 
 def test_armour_and_conductor_follow_the_source(cable) -> None:
@@ -302,7 +323,9 @@ def test_thermal_rating_is_consistent_with_published_power(cable) -> None:
         conductor_material="copper_janocha2024",
     )
     # 125 MW (Table 13) is a 90 degC XLPE rating; the lumped ladder with the
-    # equal-filler-area annulus and the assumed seabed T4 lands close to it.
-    assert 75.0 < th.T_conductor_C < 95.0
+    # equal-filler-area annulus and the assumed seabed T4 lands close to it
+    # (95.4 degC: the semiconducting screens count with the insulation, and
+    # the stranding voids of the area-equivalent conductor add about 1 K).
+    assert 85.0 < th.T_conductor_C < 100.0
     limitations = " ".join(th.provenance.limitations)
     assert "equal-filler-area annulus" in limitations

@@ -297,9 +297,9 @@ def test_component_conductor_role_comes_from_the_schema() -> None:
     cable = load_cable(cx.iea_task49_66kv_yaml_path())
     layers = {layer.name: layer for layer in cable.layers}
     conductor = layers["cu_conductor"].model_copy(update={"name": "core_centre"})
-    tape = layers["cu_conductor_screen"].model_copy(update={"name": "conductor_tape"})
+    tape = layers["cu_tape_screen"].model_copy(update={"name": "copper_tape"})
     assert _component_type(conductor) == "conductor"
     assert _component_type(tape) == "screen"
-    assert _component_type(layers["cu_conductor_screen"]) == "screen"
+    assert _component_type(layers["conductor_screen"]) == "screen"
     insulation = layers["xlpe_insulation"].model_copy(update={"name": "dielectric"})
     assert _component_type(insulation) == "insulation"
