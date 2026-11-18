@@ -87,6 +87,7 @@ from cablexsec.analysis.thermal_coupling import ThermalHistory, ThermalState
 from cablexsec.cables.schema import CableData
 from cablexsec.exceptions import CableInputError, CableSchemaError
 from cablexsec.io.cabledyn import (
+    CableDynLineType,
     CableDynRead,
     CableDynSectionHistory,
     CurvatureSource,
@@ -189,6 +190,17 @@ class SeaStateBatchOptions:
     model of :func:`cablexsec.compute_fatigue`, with its notice on non-planar
     paths (:class:`~cablexsec.provenance.DirectionTiedFrictionWarning`); the
     manifest and the assessment digests record the model it resolves to.
+
+    The property check compares the deck's ``EA`` with ``EA_fixed`` and its
+    ``EI`` with the full-slip to no-slip range within ``property_rtol``, and,
+    on a 14-column ``LINE TYPES`` row, its ``GJ`` with the lay torsional
+    stiffness ``K_tt`` and its torque-tension coupling ``K`` with ``K_et``
+    within ``torsion_rtol``: ``GJ`` relative to ``K_tt``, ``K`` as the
+    coupling ratio ``c = K/sqrt(EA GJ)`` (``|c| < 1``; the free-twist axial
+    stiffness is ``EA (1 - c^2)``), against ``K_et/sqrt(EA_fixed K_tt)``.
+    ``K_tt`` leaves out the components' own torsion and the radial relaxation
+    of the layers, which move a section's torsional stiffness by tens of
+    percent either way, hence the wider default.
     """
 
     n_fibres: int = 32
@@ -209,6 +221,7 @@ class SeaStateBatchOptions:
     exposure_years: float = 1.0
     design_fatigue_factor: float = 1.0
     property_rtol: float = 0.05
+    torsion_rtol: float = 0.25
     allow_property_mismatch: bool = False
     workers: int = 1
     chunk_rows: int = 4096
@@ -228,6 +241,8 @@ class SeaStateBatchOptions:
             raise CableInputError("external_diameter_m must be positive")
         if not math.isfinite(self.property_rtol) or self.property_rtol <= 0:
             raise CableInputError("property_rtol must be positive")
+        if not math.isfinite(self.torsion_rtol) or self.torsion_rtol <= 0:
+            raise CableInputError("torsion_rtol must be positive")
         object.__setattr__(
             self, "reference_vector", tuple(float(v) for v in self.reference_vector)
         )
@@ -644,20 +659,76 @@ def _property_check(
                     "local_EI_range_Nm2": [stiffness.ei_min_Nm2, stiffness.ei_max_Nm2],
                     "EA_match": ea_ok,
                     "EI_within_bounds": ei_ok,
+                    **_torsion_check(line_type, stiffness, options.torsion_rtol),
                 }
             )
-    bad = [r for r in records if not (r["EA_match"] and r["EI_within_bounds"])]
+    bad = [r for r in records if _mismatches(r)]
     if bad and not options.allow_property_mismatch:
         first = bad[0]
         raise CableInputError(
             "the global line properties do not describe the local section "
-            f"({first['run']}/{first['section']}: EA {first['global_EA_N']} N "
-            f"against {first['local_EA_fixed_N']:.4g} N, EI {first['global_EI_Nm2']} "
-            f"N·m² against [{first['local_EI_range_Nm2'][0]:.4g}, "
-            f"{first['local_EI_range_Nm2'][1]:.4g}]); set allow_property_mismatch "
-            "only for a documented comparison"
+            f"({first['run']}/{first['section']}: {'; '.join(_mismatches(first))}); "
+            "set allow_property_mismatch only for a documented comparison"
         )
     return records
+
+
+def _torsion_check(
+    line_type: CableDynLineType, stiffness: Any, rtol: float
+) -> dict[str, Any]:
+    """``GJ`` and coupling ``K`` of a 14-column row against ``K_tt`` and ``K_et``.
+
+    ``None`` matches where the deck gives no ``GJ`` (a 10-column row, or a
+    14-column row without the finite-EI columns) or CableXSec computes no
+    lay torsional stiffness.
+    """
+    gj, k = line_type.gj_Nm2, line_type.torque_tension_coupling_Nm
+    local_gj = float(stiffness.gj_Nm2)
+    local_k = float(stiffness.axial_torsion_coupling_Nm)
+    record: dict[str, Any] = {
+        "global_GJ_Nm2": gj,
+        "local_GJ_Nm2": local_gj,
+        "global_K_Nm": k if gj is not None else None,
+        "local_K_Nm": local_k,
+        "global_coupling_ratio": None,
+        "local_coupling_ratio": None,
+        "GJ_match": None,
+        "K_match": None,
+    }
+    if gj is None or not gj > 0.0 or not local_gj > 0.0:
+        return record
+    record["GJ_match"] = math.isclose(gj, local_gj, rel_tol=rtol)
+    ea = line_type.ea_N
+    local_ratio = local_k / math.sqrt(float(stiffness.ea_fixed_N) * local_gj)
+    # CableDyn takes K only with a linear-elastic EA, so K = 0 elsewhere.
+    ratio = 0.0 if k == 0.0 or ea is None or not ea > 0.0 else k / math.sqrt(ea * gj)
+    record["global_coupling_ratio"] = ratio
+    record["local_coupling_ratio"] = local_ratio
+    record["K_match"] = abs(ratio - local_ratio) <= rtol
+    return record
+
+
+def _mismatches(record: Mapping[str, Any]) -> list[str]:
+    """The quantities of a property-check record that do not match."""
+    out = []
+    if not record["EA_match"]:
+        out.append(
+            f"EA {record['global_EA_N']} N against {record['local_EA_fixed_N']:.4g} N"
+        )
+    if not record["EI_within_bounds"]:
+        low, high = record["local_EI_range_Nm2"]
+        out.append(f"EI {record['global_EI_Nm2']} N·m² against [{low:.4g}, {high:.4g}]")
+    if record["GJ_match"] is False:
+        out.append(
+            f"GJ {record['global_GJ_Nm2']} N·m² against {record['local_GJ_Nm2']:.4g}"
+        )
+    if record["K_match"] is False:
+        out.append(
+            f"K {record['global_K_Nm']} N·m (coupling ratio "
+            f"{record['global_coupling_ratio']:.3g}) against "
+            f"{record['local_K_Nm']:.4g} N·m ({record['local_coupling_ratio']:.3g})"
+        )
+    return out
 
 
 _SPEC_KEYS = {"cable", "runs", "sections", "options"}

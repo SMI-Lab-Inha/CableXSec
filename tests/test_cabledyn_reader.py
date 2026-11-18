@@ -28,7 +28,11 @@ import numpy as np
 import pytest
 
 from cablexsec.exceptions import CableSchemaError
-from cablexsec.io.cabledyn import read_cabledyn_deck, read_cabledyn_sections
+from cablexsec.io.cabledyn import (
+    read_cabledyn_deck,
+    read_cabledyn_sections,
+    section_channels,
+)
 from cablexsec.io.time_history_csv import read_time_history_csv
 
 DATA = Path(__file__).parent / "data" / "cabledyn"
@@ -1097,17 +1101,89 @@ def test_real_cabledyn_run_with_damped_coupled_line_types(tmp_path):
         twist, np.radians((1 - weight) * channel[:, 0] + weight * channel[:, 1])
     )
     assert np.all(twist < 0.0)
-    # Without the Twist channels the coupled line cannot be read; with K = 0
-    # its twist-free frame is read as for any line restrained at one end.
+    assert read.checks["torsion"] == {
+        "restrained_ends": ["a"],
+        "solved": True,
+        "not_solved_because": "",
+        "material_twist": "Twist channels",
+    }
+    # Without the Twist channels the coupled line cannot be read, and with
+    # K = 0 neither can its dynamics (lw24k).
     (tmp_path / "k").mkdir()
     (tmp_path / "plain").mkdir()
     with pytest.raises(CableSchemaError, match="couples torque and tension"):
         read_cabledyn_sections(
             *_without_twist(tmp_path / "k"), sections, curvature_check_rtol=0.5
         )
-    plain = read_cabledyn_sections(
-        *_without_twist(tmp_path / "plain", coupling=False),
-        sections,
-        curvature_check_rtol=0.5,
+    with pytest.raises(CableSchemaError, match="in the dynamics the line twists"):
+        read_cabledyn_sections(
+            *_without_twist(tmp_path / "plain", coupling=False),
+            sections,
+            curvature_check_rtol=0.5,
+        )
+
+
+@pytest.mark.full_scale
+def test_real_run_of_a_line_restrained_at_one_end_twists_dynamically(tmp_path):
+    """``lw24k``: ``lw24g`` without the coupling (``GJ|0|Bt``), CableDyn 0.4.2.
+
+    End A, clamped and restrained in torsion on the vessel, rolls with it;
+    End B is free in torsion. The statics are twist-free (a free end carries
+    no torque), but in the dynamics the polar inertia carries torsional waves
+    and the line twists (``Twist1N<J>`` up to -1.7e-3 deg in this 1 s run,
+    0.18 deg in a 30 s run of the deck): without the channels it is refused,
+    with them read as written. The same deck read as a static run
+    (``TMax 0``) needs no channels.
+    """
+    deck = read_cabledyn_deck(DATA / "lw24k.dat")
+    line = deck.line(1)
+    assert line.torsion_solved and line.torsion_restrained_ends == {"a"}
+    assert deck.line_type("bare").torque_tension_coupling_Nm == 0.0
+    rows = (DATA / "lw24k.out").read_text(encoding="utf-8").splitlines()
+    header = rows[1].split("\t")
+    channel = np.array(
+        [
+            [float(row.split("\t")[header.index(f"Twist1N{j}")]) for j in (9, 10)]
+            for row in rows[2:]
+        ]
     )
-    assert plain.histories["sag"].twist_rad is None
+    assert np.all(channel[0] == 0.0) and np.all(channel[1:] < 0.0)
+    sections = {"upper": 10.0, "sag": 58.4}
+    read = read_cabledyn_sections(
+        DATA / "lw24k", deck, sections, curvature_check_rtol=0.5
+    )
+    weight = (58.4 - 8 * 68.114 / 10) / (68.114 / 10)
+    np.testing.assert_allclose(
+        read.histories["sag"].twist_rad,
+        np.radians((1 - weight) * channel[:, 0] + weight * channel[:, 1]),
+    )
+    assert set(section_channels(deck, sections)) >= {"Twist1N9", "Torq1N10"}
+    for suffix in ("Line1.p.out", "Line1.t.out", "static.out", "elements.out"):
+        name = f"lw24k.{suffix}"
+        (tmp_path / name).write_bytes((DATA / name).read_bytes())
+    out = (DATA / "lw24k.out").read_text(encoding="utf-8").splitlines()
+    keep = [i for i, name in enumerate(out[1].split("\t")) if "Twist" not in name]
+    (tmp_path / "lw24k.out").write_text(
+        "\n".join(
+            [out[0], *("\t".join(r.split("\t")[i] for i in keep) for r in out[1:])]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    text = (DATA / "lw24k.dat").read_text(encoding="utf-8")
+    (tmp_path / "lw24k.dat").write_text(text, encoding="utf-8")
+    with pytest.raises(CableSchemaError, match="CableDyn solves its torsion"):
+        read_cabledyn_sections(
+            tmp_path / "lw24k",
+            tmp_path / "lw24k.dat",
+            sections,
+            curvature_check_rtol=0.5,
+        )
+    (tmp_path / "lw24k.dat").write_text(
+        text.replace("1.0      TMax", "0.0      TMax"), encoding="utf-8"
+    )
+    static = read_cabledyn_sections(
+        tmp_path / "lw24k", tmp_path / "lw24k.dat", sections, curvature_check_rtol=0.5
+    )
+    assert static.histories["sag"].twist_rad is None
+    assert static.checks["torsion"]["material_twist"] == "none (twist-free)"
