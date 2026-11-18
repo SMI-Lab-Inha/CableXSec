@@ -1,0 +1,174 @@
+---
+# Three-core 12/20 kV dynamic power cable tested in four-point bending by
+# Zeidan (2025) and Zeidan et al. (2026) — PUBLIC.
+#
+# Sources:
+#   [Zeidan2025]  L. Zeidan, PhD thesis, Ecole Centrale de Nantes (defended
+#                 8 December 2025), Chapter 5, Tables 5.2 and 5.3.
+#   [Zeidan2026]  L. Zeidan, P. Cartraud, G. Marckmann, L. Stainier, Int. J.
+#                 Solids Struct. 338 (2026) 114089, Tables 3 and 4.
+#
+# This is not the cable of Menard and Cartraud (2023) (101 mm, 55 + 63 armour
+# wires of 4 mm); it is a 112 mm cable with 75 + 82 armour wires of 3.5 mm,
+# tested at IFREMER (supports 2.0 m, loads 1.05 m apart, zero tension).
+#
+# Geometry: [Zeidan2026] Table 3 (OD, wire count x diameter or thickness,
+# pitch). The thesis table splits the 8.75 mm "insulation" of the paper into
+# EPR to 25 mm, an insulation screen to 27 mm and a metallic screen of
+# unstated material and size; the paper's single EPR layer (Table 4,
+# E = 6 MPa) is used, so the metallic screen carries no axial stiffness here
+# (a lower bound on the core stiffness). Positive pitch = right-hand lay
+# ([Zeidan2025] Sec. 5.2).
+#
+# Interpretations (the tables do not close every radius):
+#   * Cores touch in a trefoil: lay radius 17.25 / sin 60 deg = 19.919 mm.
+#   * The filler (LDPE, tabulated OD 82 mm) fills the interstices up to the
+#     bedding; the bedding's inner diameter, 89 - 2 x 2.5 = 84 mm, leaves a
+#     1 mm radial gap after 82 mm that the table does not fill, so the
+#     non-structural filler is taken to 42 mm (its area and the filler-profile
+#     geometry change; it carries no bending).
+#   * Inner armour on the bedding (OD 89 + 2 x 3.5 = 96 mm, as tabulated);
+#     outer armour directly on the inner armour (103 mm, as tabulated; no
+#     inter-armour layer is listed).
+#   * The outer sheath (OD 112 mm, t 4.0 mm) would start 0.5 mm outside the
+#     outer armour; it is taken from the armour (t 4.5 mm).
+#   * Armour lay angles from the pitches at the helix radii:
+#     atan(2 pi 46.25 / 913) = 17.66 deg, atan(2 pi 49.75 / 1233) = 14.23 deg.
+#   * The conductor (19 wires of 2.64 mm, 6 at 192 and 12 at -192 mm) is a
+#     solid cylinder of the tabulated OD with the source's copper modulus
+#     (81 GPa, Table 4), as in the source FE ("homogenised solid body").
+#   * The stainless fibre-optic tube (3.5 mm) is omitted, as in the source FE.
+#
+# IMPORTANT — the initial contact state was not measured. The source
+# reproduced the measured loops with its periodic FE cell only after applying
+# an external pressure on the outer sheath, 3.5 MPa being the best of 3.5,
+# 3.62 and 5 MPa ([Zeidan2026] Sec. 5.3; friction 0.20-0.24 on every
+# contact). That value belongs to the source FE's contact accounting; it is
+# recorded below as a published calibration, not as a measured state.
+cable:
+  name: "Zeidan 2025 four-point test cable"
+  description: "Three-core 12/20 kV dynamic power cable, 112 mm, two armour layers"
+  manufacturer: "Public (Zeidan 2025; Zeidan et al. 2026)"
+  source_document: "Zeidan, PhD thesis, Ecole Centrale de Nantes (2025), Ch. 5; Zeidan et al., IJSS 338 (2026) 114089"
+  voltage_kV: 20.0
+
+materials:
+  copper_zeidan2025:
+    description: Homogenised conductor of the source FE
+    E_Pa: {value: 8.1e10, source: "[Zeidan2026] Table 4; [Zeidan2025] Table 5.3"}
+    nu: {value: 0.33, source: "[Zeidan2026] Table 4"}
+  epr_zeidan2025:
+    description: EPR insulation (with the screens of the core, as in the source)
+    polymer: true
+    E_Pa: {value: 6.0e6, source: "[Zeidan2026] Table 4"}
+    nu: {value: 0.49, source: "[Zeidan2026] Table 4"}
+  mdpe_zeidan2025:
+    polymer: true
+    E_Pa: {value: 5.0e8, source: "[Zeidan2026] Table 4; [Zeidan2025] Table 5.3"}
+    nu: {value: 0.30, source: "[Zeidan2026] Table 4"}
+  ldpe_zeidan2025:
+    polymer: true
+    E_Pa: {value: 3.0e8, source: "[Zeidan2026] Table 4; [Zeidan2025] Table 5.3"}
+    nu: {value: 0.30, source: "[Zeidan2026] Table 4"}
+  hdpe_zeidan2025:
+    polymer: true
+    E_Pa: {value: 8.0e8, source: "[Zeidan2026] Table 4; [Zeidan2025] Table 5.3"}
+    nu: {value: 0.30, source: "[Zeidan2026] Table 4"}
+
+core_lay:
+  pitch_m: 0.80
+  lay_direction: left_hand
+  source: "[Zeidan2026] Table 3, core sheath pitch -800 mm (negative = left-hand lay)"
+
+initial_state:
+  external_pressure_Pa: 3.5e6
+  identification: published_calibration
+  calibration_scope: all_contacts   # the source FE has friction on every contact
+  source: "[Zeidan2026] Sec. 5.3 and Fig. 20: p = 3.5 MPa on the outer sheath of the FE cell, best of 3.5/3.62/5 MPa"
+
+layers:
+
+  # --- Three power cores (trefoil, lay radius 19.919 mm) ---
+  - name: cu_conductor
+    layer_type: cylindrical_offset
+    material: copper_zeidan2025
+    n_cores: 3
+    r_offset_m: 0.019919
+    r_inner_m: 0.0
+    r_outer_m: 0.0058          # OD 11.6 mm [Zeidan2026 Table 3]
+    source: "[Zeidan2026] Table 3 (conductor OD 11.6 mm, 19 x 2.64 mm)"
+
+  - name: conductor_screen
+    layer_type: cylindrical_offset
+    material: mdpe_zeidan2025
+    n_cores: 3
+    r_offset_m: 0.019919
+    r_inner_m: 0.0058
+    r_outer_m: 0.0070          # OD 14 mm, t 1.2 mm
+    source: "[Zeidan2026] Table 3 (conductor screen OD 14 mm, t 1.2 mm, MDPE)"
+
+  - name: epr_insulation
+    layer_type: cylindrical_offset
+    material: epr_zeidan2025
+    n_cores: 3
+    r_offset_m: 0.019919
+    r_inner_m: 0.0070
+    r_outer_m: 0.01575         # OD 31.5 mm, t 8.75 mm
+    source: "[Zeidan2026] Table 3 (insulation OD 31.5 mm, t 8.75 mm, EPR)"
+
+  - name: core_sheath
+    layer_type: cylindrical_offset
+    material: mdpe_zeidan2025
+    n_cores: 3
+    r_offset_m: 0.019919
+    r_inner_m: 0.01575
+    r_outer_m: 0.01725         # OD 34.5 mm, t 1.5 mm
+    source: "[Zeidan2026] Table 3 (core sheath OD 34.5 mm, t 1.5 mm, MDPE, pitch -800 mm)"
+
+  # --- Bundle layers (concentric about the cable axis) ---
+  - name: ldpe_filler
+    layer_type: cylindrical
+    material: ldpe_zeidan2025
+    r_inner_m: 0.0             # fills the interstices from the axis
+    r_outer_m: 0.042           # to the bedding (tabulated OD 82 mm; see header)
+    structural: false
+    source: "[Zeidan2026] Table 3 (filler LDPE, OD 82 mm); taken to the bedding"
+
+  - name: bedding
+    layer_type: cylindrical
+    material: hdpe_zeidan2025
+    r_inner_m: 0.042
+    r_outer_m: 0.0445          # OD 89 mm, t 2.5 mm
+    source: "[Zeidan2026] Table 3 (bedding OD 89 mm, t 2.5 mm, HDPE)"
+
+  - name: inner_armour
+    layer_type: helical
+    material: galvanised_steel_armour   # E = 210 GPa = [Zeidan2026] Table 4 Steel
+    n_wires: 75
+    d_wire_m: 0.0035
+    r_helix_m: 0.04625         # bedding outer radius + wire radius
+    lay_angle_deg: 17.66       # atan(2 pi r / 913 mm)
+    lay_direction: right_hand  # pitch +913 mm
+    bulk_sn: saevik_2011_flat_steel
+    source: "[Zeidan2026] Table 3 (armouring interior OD 96 mm, 75 x 3.5 mm, pitch 913 mm)"
+
+  - name: outer_armour
+    layer_type: helical
+    material: galvanised_steel_armour
+    n_wires: 82
+    d_wire_m: 0.0035
+    r_helix_m: 0.04975         # inner armour outer radius + wire radius
+    lay_angle_deg: 14.23       # atan(2 pi r / 1233 mm)
+    lay_direction: left_hand   # pitch -1233 mm
+    bulk_sn: saevik_2011_flat_steel
+    source: "[Zeidan2026] Table 3 (armouring exterior OD 103 mm, 82 x 3.5 mm, pitch -1233 mm)"
+
+  - name: outer_sheath
+    layer_type: cylindrical
+    material: hdpe_zeidan2025
+    r_inner_m: 0.0515          # on the outer armour (see header)
+    r_outer_m: 0.056           # OD 112 mm
+    source: "[Zeidan2026] Table 3 (outer sheath OD 112 mm, t 4.0 mm, HDPE)"
+
+aggregate_properties:
+  OD_mm: 112.0                 # [Zeidan2026] Sec. 5

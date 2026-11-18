@@ -10,6 +10,20 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Added
 
+- Validation rows Z-EI and Z-ID (targets registered before the runs): the four-point loops of
+  Zeidan (2025, PhD thesis, Ch. 5) and Zeidan et al. (2026, IJSS 338, 114089) on a 112 mm
+  three-core cable (`cables/zeidan2025.yaml`, 75 + 82 armour wires of 3.5 mm, zero tension),
+  digitised in plotted order from the native PDF polylines
+  (`validation/scripts/digitise_zeidan2025.py`) and simulated in the test's arrangement with
+  its own reduction (`validation/scripts/check_zeidan2025.py`). The plotted curvature is the
+  loading-point formula applied to the mid-span deflection, 26–29 % above the central
+  curvature of the source's Fig. 18. Both rows FAIL: the measured stick secant (141–240 kN m²)
+  is 12–20 times the packaged no-slip EI_max (12.0 kN m², armour ξ 0.009/0.016, because the
+  series shear stack counts the 8.75 mm EPR of the cores), and no initial pressure reaches the
+  measured 40 mm work (largest 41.9 against 445.1 J/m). In a diagnostic with the armour ξ from
+  the bedding alone the work of all four amplitudes is within ±11 %, the moment range 33–48 %
+  short (slipping slope near EI_min), and the laid cores change the work by less than 0.2 %.
+  The laid-core law stays off by default (registered rule not met).
 - Scorecard rows AW-DONG25 and AW-ZT14 (code-to-code, stated, not gated): the anchored-wire
   clamp solver against the published FE of Dong et al. (2025) (anchor 156.4 against 156.9 MPa,
   peak 207.8 against 204.5 MPa) and Zhu and Tan (2014) (1.19 / 1.70 against 2.22, an FE whose
@@ -299,6 +313,14 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Changed
 
+- The rows that compare with the measured loops of Ménard and Cartraud (2023), BM1-loop,
+  BM1-loop-uniform and BM1-ID, are stated, not gated (status INFO, the verdict against the
+  registered target kept): the test is an unreliable reference. The benchmark register states the
+  evidence: the source's own limits (one specimen, end effects not investigated, achieved
+  curvature ranges off target), its table and figure disagreeing on equal-span ranges (−15 %
+  against +4 and +11 %), and an independent FE reconstruction (Kwon et al. 2026) that does not
+  match. Targets and results are unchanged.
+
 - `read_cabledyn_sections` places the `Dec`/`Azi` tangents of a finite-EI line (any section
   with `EI > 0`) at their nodes, as CableDyn 0.4.2 and later write them: the node's own
   cubic-Hermite tangent. Every value was placed at the mid-arc of the chord between the
@@ -382,6 +404,10 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Fixed
 
+- `SectionLaw.from_cable` reads the cable's own materials (its `materials:` block) when the law
+  is built and every time it is evaluated. Outside `simulate_bending_test` it read the library
+  instead, and a layer whose material the library lacks silently dropped out of the stiffness
+  (the Zeidan cable: a small-curvature secant of 4.48 instead of 6.99 kN m²).
 - The public 66 kV template (`iea_task49_66kv.yaml`) and its derived 300 mm² section model the
   core screens as the source's section model does (Janocha et al. 2024, Table 3), not as solid
   copper annuli. Table 1 labels the 2.00 mm conductor screen copper tape and the 3.15 mm
