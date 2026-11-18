@@ -1233,6 +1233,77 @@ def _slip_scale_identities(menard: CableData) -> tuple[float, float, float]:
     return homogeneity, group, deviation / residual
 
 
+def _zeidan_rows() -> list[Row]:
+    """Rows Z-EI and Z-ID: the Zeidan (2025) four-point loops of a 112 mm
+    cable (registered targets in doc/benchmarks.md; check_zeidan2025.py)."""
+    import check_zeidan2025 as zd  # noqa: PLC0415
+
+    ei = zd.z_ei()
+    stick_map, slip_map, xi = ei["stick_true_Nm2"], ei["slip_Nm2"], ei["xi"]
+    assert isinstance(stick_map, dict) and isinstance(slip_map, dict)
+    assert isinstance(xi, dict)
+    stick = [v for pair in stick_map.values() for v in pair]
+    slip = list(slip_map.values())
+    rows = [
+        Row(
+            "2",
+            "Z-EI",
+            "Zeidan (2025) four-point test, 112 mm three-core cable: measured "
+            "stick secant (x1.425, reading R2) vs the no-slip EI_max; measured "
+            "slip slope vs EI_min (parameter-free)",
+            "stick secant <= EI_max and slip slope >= EI_min at 30-60 mm",
+            f"stick {min(stick) / 1e3:.0f}-{max(stick) / 1e3:.0f} kN·m² vs "
+            f"EI_max {float(ei['ei_max_Nm2']) / 1e3:.1f} kN·m² (xi "
+            + "/".join(f"{v:.3f}" for v in xi.values())
+            + f"; plane-section {float(ei['ei_plane_section_Nm2']) / 1e3:.0f} kN·m²); "
+            f"slip {min(slip) / 1e3:.2f}-{max(slip) / 1e3:.2f} vs EI_min "
+            f"{float(ei['ei_min_Nm2']) / 1e3:.2f} kN·m²",
+            "PASS" if ei["pass"] else "FAIL",
+        )
+    ]
+    out = zd.z_id()
+    ident = out["identification"]
+    assert isinstance(ident, zd.Identification)
+    target = "40 mm branch RMSE < 5%; 30, 50, 60 mm work within 20%, RMSE < 10%, moment range within 10%"
+    if out["rows"] is None:
+        value = (
+            f"P0 not identifiable: largest 40 mm work {ident.largest_work:.1f} J/m "
+            f"(P0 {ident.largest_at_pa / 1e3:.0f} kPa) vs measured "
+            f"{zd.measured_loops()[zd.IDENTIFY_MM].work:.1f} J/m"
+        )
+    else:
+        result = out["rows"]
+        assert isinstance(result, dict)
+        value = f"P0 {float(ident.pressure_pa or 0.0) / 1e3:.1f} kPa; " + "; ".join(
+            f"{a} mm {r['work_error'] * 100:+.1f}% / {r['rmse'] * 100:.1f}% / "
+            f"{r['range_error'] * 100:+.1f}%"
+            for a, r in result.items()
+        )
+    rows.append(
+        Row(
+            "2",
+            "Z-ID",
+            "Zeidan (2025) loops at 30-60 mm in the four-point arrangement "
+            "(reading R2), laid cores with wedge and filler profiles (mu 0.2): "
+            "P0 identified on the 40 mm work, 30, 50, 60 mm predicted",
+            target,
+            value,
+            "PASS (identified, then predicted)" if out["pass"] else "FAIL",
+        )
+    )
+    return rows
+
+
+def _menard_status(verdict: str) -> str:
+    """Status of a row against the measured Ménard and Cartraud (2023) loops.
+
+    The test is an unreliable reference (doc/benchmarks.md, "Reliability of
+    the Ménard and Cartraud (2023) test"): its rows are stated, not gated.
+    The verdict against the registered target stays in the status.
+    """
+    return f"INFO (unreliable reference, stated not gated; registered target {verdict})"
+
+
 def _rows() -> list[Row]:
     rows: list[Row] = _normal_state_rows()
     menard = cx.load_cable(cx.menard2023_yaml_path(), geometry_override=None)
@@ -2039,9 +2110,11 @@ def _rows() -> list[Row]:
                 f"W={work_v:.1f} J/m vs measured {measured_work:.1f} J/m; measured {measured_min:.0f}/"
                 f"{measured_max:.0f} N\u00b7m; ordered RMSE {rmse_v:.2f}%; "
                 f"matched experimental work difference {err_v:.1f}%",
-                "PASS (published calibration transfer)"
-                if rmse_v < 5.0 and err_v < 10.0
-                else "FAIL",
+                _menard_status(
+                    "PASS (published calibration transfer)"
+                    if rmse_v < 5.0 and err_v < 10.0
+                    else "FAIL"
+                ),
             )
         )
 
@@ -2067,10 +2140,13 @@ def _rows() -> list[Row]:
                 f"{id_rows[tag]['rmse_percent']:.2f}%"
                 for tag in "abcdef"
             ),
-            "PASS (identified, then predicted)" if ident["pass"] else "FAIL",
+            _menard_status(
+                "PASS (identified, then predicted)" if ident["pass"] else "FAIL"
+            ),
         )
     )
 
+    rows.extend(_zeidan_rows())
     rows.extend(_hu_rows())
     rows.extend(_witz_rows())
     rows.extend(_saevik_rows())
@@ -2309,6 +2385,7 @@ def main() -> None:
         "| BM6 | `copper_poon2022` SWT constants (cited registry) + representative contact | curve YES (registry); cable-level contact driver is representative, not from a cable |",
         "| WITZ | `witz1996.yaml` geometry + material library + digitised Witz Figs 5-6 | EI_min YES (parameter-free); WITZ-ID: initial pressure identified on the Fig. 5 width (declared `identified`), Fig. 6 predicted without refitting |",
         "| SV11 | `saevik2011.yaml` geometry (Table 1; outer armour, tapes and sheath assumed) + material library (polymer modulus identified on the Table 1 EI) + rig constants in `validation/scripts/check_saevik2011.py` + digitised Sævik Figs 17-23 and Gjøsteen Figs 27-35 | PARTIAL — section from the cable definition; the curvature profile along the pipe comes from a harness beam model with an assumed rotation point |",
+        "| ZEID | `zeidan2025.yaml` geometry (Zeidan et al. 2026 Table 3; radii the table does not close stated in the file) + its own `materials:` block (Table 4) + the four-point arrangement of the thesis (Sec. 5.3) + digitised thesis Figs 5.5-5.6 and paper Fig. 18 | YES for Z-EI (parameter-free); Z-ID: initial pressure identified on the 40 mm work (declared `identified`), 30, 50, 60 mm predicted |",
         "| DAI20 | digitised Dai et al. (2020) Fig. 9 + rig constants in `validation/scripts/check_dai2020.py` (end-fitting distance, pivot and rigid length assumed) + tube data of its Tables 1 and 3 | PARTIAL — rig beam with one identified bending stiffness; the umbilical section is not built (its Table 1 is inconsistent) |",
         "",
         "Engine note (RESOLVED): the Kim/Coulomb cross-sectional loop assumes "

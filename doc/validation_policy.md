@@ -91,7 +91,10 @@ averaged or pooled into one accuracy figure.
 9. **Failing targets are reported, not loosened.** A target is never widened,
    and a failing row is never removed, after the result is known. A test
    (`tests/test_validation_report.py`) pins the Ménard ±0.10 work comparison to
-   its unchanged 10% target and its FAIL status.
+   its unchanged 10% target and its stated verdict. A reference judged
+   unreliable on stated evidence (for example the Ménard and Cartraud 2023
+   test, [benchmarks.md](benchmarks.md)) is reported as INFO, "stated, not
+   gated", with its verdict against the registered target kept in the status.
 10. **Partial and negative results stay visible.** PARTIAL, NOT VALIDATED and
     NOT COMPARABLE rows remain in the scorecard and the register.
 11. **No transfer of scope.** A component curve, a numerical kernel check or a

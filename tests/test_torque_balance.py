@@ -166,12 +166,14 @@ def test_tq6_solved_template_agrees_with_fixed_radius(template_result):
     carry load with the cores (the source's Table 3), both models hold them
     and differ by 1.5 % (FAIL against the band; before, the fixed-radius model
     left the screens out while the solved section carried them, -0.5 %).
-    This test guards the documented value.
+    The band is not widened: the test pins the documented deviation, so a
+    change of either model in either direction shows here.
     """
     r = template_result
-    assert r.torque_coefficient_m == pytest.approx(
-        r.fixed_radius["torque_per_tension_m"], rel=2e-2
-    )
+    deviation = r.torque_coefficient_m / r.fixed_radius["torque_per_tension_m"] - 1.0
+    # Documented in doc/benchmarks.md TQ6 (1.5026 against 1.5251 mm, FAIL
+    # against the registered 1 % band); the pin lies wholly outside the band.
+    assert deviation == pytest.approx(-0.0147, abs=1e-3)
     assert r.ea_fixed_N[-1] == pytest.approx(r.fixed_radius["K_ee_N"], rel=0.06)
     # Twist opposes the fixed-end torque.
     assert r.torque_coefficient_m > 0 > r.twist_coefficient_rad_per_N_m

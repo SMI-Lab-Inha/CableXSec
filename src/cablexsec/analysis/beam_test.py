@@ -80,7 +80,7 @@ from cablexsec.analysis.along_wire_test import (
 )
 from cablexsec.api import _prepare_mkappa_law
 from cablexsec.cable_adapters import require_fully_specified
-from cablexsec.cables.schema import CableData
+from cablexsec.cables.schema import CableData, uses_cable_materials
 from cablexsec.exceptions import CableInputError, CableSolverError
 from cablexsec.mechanics.bend_restrictor import ArticulatedRestrictor
 from cablexsec.mechanics.core_friction import (
@@ -210,6 +210,7 @@ class SectionLaw:
         )
 
     @classmethod
+    @uses_cable_materials
     def from_cable(
         cls,
         cable: CableData,
@@ -246,6 +247,10 @@ class SectionLaw:
         to a sample time, and the test solver evaluates every station over
         trial curvature histories (a reduced history plus sorted trial
         curvatures) that carry no time, so the leg property would not hold.
+
+        The law reads the cable's own materials (its ``materials:`` block)
+        when it is built and every time it is evaluated, also outside a call
+        of :func:`simulate_bending_test`.
         """
         require_fully_specified(cable, "SectionLaw.from_cable")
         require_finite(tension_N, "tension_N")
@@ -301,7 +306,8 @@ class SectionLaw:
         if friction_model != "distributed":
 
             def run(kappa: FloatArray) -> SectionResponse:
-                out = law.run(kappa)
+                with cable.material_scope():
+                    out = law.run(kappa)
                 return SectionResponse(
                     out.moment_Nm, out.work.friction_J_per_m, out.work.stored_J_per_m
                 )
@@ -313,6 +319,10 @@ class SectionLaw:
         cos_b, sin_b = math.cos(phi_bend), math.sin(phi_bend)
 
         def run_distributed(kappa: FloatArray) -> SectionResponse:
+            with cable.material_scope():
+                return _distributed(kappa)
+
+        def _distributed(kappa: FloatArray) -> SectionResponse:
             kx, ky = kappa * cos_b, kappa * sin_b
             moment = law.ei_min * kappa
             friction = np.zeros_like(kappa)
