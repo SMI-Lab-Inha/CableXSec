@@ -127,7 +127,7 @@ Effect report: `validation/scripts/radial_effect_report.py`.
   - A prescribed calibrated pressure (0.4 MPa) for bending.
   - Normalised stiffness only; no geometry is published.
 - **Su, Zhao and Zhu (2026).**
-  - An analytical model with unilateral layer contact and an equivalent-ring kinematic link of the three cores, with the filler neglected.
+  - An analytical model with unilateral layer contact and an equivalent-ring kinematic link of the three cores, with the filler neglected. The link (Eq. 36) ties the binder ring to the cores' outer radius, so the ring is supported radially as in a filled bundle.
   - 3D FE with filler and cores; test EA for the 35 kV cable.
 - **Gjøsteen et al. (2027).** A three-phase core contact element; trefoil core-to-core force under tension.
 
@@ -250,11 +250,14 @@ The section state minimises the small-strain elastic energy per axial metre with
 | Su et al. (2026) 35 kV, EA tension (twist fixed, 500 kN secant) | FE 615.4 MN; test 631.7 MN | 608.7 MN | −1.1 % FE; −3.6 % test (no-interaction bound about +30 %) |
 | Su et al. (2026) 35 kV, EA compression | FE 329.7 MN | 298.4 MN | −9.5 % |
 | Su et al. (2026) 35 kV, GJ (axial strain fixed) | FE 209.5 / 201.2 kN m²; test 209.8 / 201.3 kN m² | 199.5 / 177.0 | −4.8 % / −12.0 % FE (the filler bonded to the ring without warping gave 203.0 / 180.5) |
+| Su et al. (2026) 35 kV, armour torque (axial strain fixed) | Source analytical model, Fig. 19 shares: 193.0 / 172.3 kN m² | 193.3 / 170.8 | +0.2 % / −0.9 % |
+| Su et al. (2026) 35 kV, interfaces at 1000 N m | Source analytical model, Table 11: anticlockwise separation at armour 1–2 and 3–4 (3–4 gap 0.031 mm), 58.3, 51.5, 55.2, 34.6, 32.0 kPa; clockwise armour 1–2 49.8, 3–4 49.3 kPa | Same separations (0.029 mm); 54.4, 57.0, 57.0, 38.4, 35.5 kPa; 55.2, 51.9 kPa | −7 % to +11 % |
 | Su et al. (2026) 35 kV, interfaces at 100 kN | Source analytical model, Table 10 (kPa): 432.8, 283.9, 173.3, 176.4, 74.5; separation at armour 4 | 365.0, 255.6, 158.7, 161.9, 76.7; same separation | −16 % to +3 % |
 | Ménard and Cartraud (2023), P = 0.3 MPa | 46 kN/m inner sheath | 26.6 (void interstices) to 72.0 (fully filled) kN/m | Bracket only |
 
 **Inconclusive and negative cases**
 
+- **Su et al. (2026) 35 kV, anticlockwise torsional stiffness.** −12.0 % against the FE and the test. The armour torque and the contact state agree with the source's analytical model (rows above). The polymer layers carry half of that model's share: their exact `G J` is 6.1 kN m², the model's share 12.0 kN m², twice the thin-wall terms of its Eq. 11. The rest is the armour's direction dependence: 11.3 % here, 10.1 % in the source's analytical model, 4.0 % FE, 4.1 % test; the FE's anticlockwise split and the test conditions are not published. No input is changed ([benchmarks.md](benchmarks.md), "Torsional stiffness of the Su et al. (2026) 35 kV cable").
 - **Su et al. (2026), 36 kV.** The FE content is unclear: the tables are labelled "helical armour layers".
   - Compression with the armour package alone agrees (231 vs 234 MN).
   - Tension falls between the armour-only (220 MN) and full-section (389 MN) models, against FE 308 MN.

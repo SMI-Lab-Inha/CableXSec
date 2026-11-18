@@ -4,9 +4,10 @@
 
 * Knapp (1979), Tables IV and VI: closed-form tension-torsion stiffness of two
   armoured cables with a compressible core (independent derivation).
-* Su, Zhao and Zhu (2026), 35 kV three-core cable, Tables 1, 6, 7 and 10:
-  three-dimensional FE and test axial stiffness, FE torsional stiffness and
-  the analytical interface-pressure pattern.
+* Su, Zhao and Zhu (2026), 35 kV three-core cable, Tables 1, 6, 7, 10 and
+  11 and Fig. 19: three-dimensional FE and test axial stiffness, FE torsional
+  stiffness, and the armour torque and interface pattern of the source's
+  analytical model.
 * Ménard and Cartraud (2023), Sec. 6.4: printed inner-sheath line load at
   the calibrated 0.3 MPa state. The source filler geometry is not tabulated,
   so only a bracket by the two filler representations is checked.
@@ -169,8 +170,14 @@ def test_su_2026_35kv_axial_and_torsional_stiffness():
     # twist as separate bodies: -4.8 % and -12.0 %. The band of the softer
     # direction was 12 % when the filler added its polar moment about the
     # cable axis (-10.3 %); that bonded term is not supported by the
-    # frictionless filler contacts, and Su's own model without the filler
-    # gives -8.4 %, so the remaining gap is not the filler.
+    # frictionless filler contacts. The remaining gap is the armour's
+    # direction dependence: the outer armour lifts off armour 3 under the
+    # anticlockwise torque and expands the outer sheath (asymmetry 11.3 %;
+    # source analytical model 10.1 %, FE 4.0 %, test 4.1 %). The armour
+    # torque and the contact state agree with the source's analytical model
+    # (test below); the FE's anticlockwise split and the test conditions are
+    # not published, so no cause in the model is identified and the band is
+    # not tightened (doc/benchmarks.md, Su et al. 2026 torsion).
     assert gj[1] == pytest.approx(209.5e3, rel=0.05)
     assert gj[0] == pytest.approx(201.2e3, rel=0.13)
     # The no-radial-interaction bound is about 30 % stiffer than the FE.
@@ -220,6 +227,79 @@ def test_su_2026_35kv_interface_pattern_at_100kN():
         ]
         > 0
     )
+
+
+@pytest.mark.full_scale
+def test_su_2026_35kv_torsion_against_source_analytical_model():
+    """Fig. 19 and Table 11: the source's analytical model in torsion.
+
+    Ends fixed axially, as in the torsion tests above. The source's model
+    neglects the filler's stiffness but ties the binder ring to the cores'
+    outer radius (Eq. 36), so the ring is supported radially as in a filled
+    bundle; it is compared with the filled section. A positive twist tightens
+    armour 1, the source's anticlockwise sense (Sec. 5.2).
+
+    * Armour torque, Fig. 19 shares: 93.5 % of 184.3 kN m² anticlockwise,
+      94.1 % of 205.1 kN m² clockwise.
+    * Table 11, 1000 N m anticlockwise: armour 1-2 and armour 3-4 separate
+      (3-4 gap 0.031 mm); the other interfaces carry 58.3, 51.5, 55.2, 34.6
+      and 32.0 kPa. Clockwise: armour 1-2 49.8 and armour 3-4 49.3 kPa.
+
+    Bands as in the other checks of this cable: 2 % on stiffness, 20 % on
+    interface pressure; 10 % on the 3-4 gap.
+    """
+    section = _su35_cached(True)
+    helical = [x for x in section.layers if isinstance(x, ElasticHelicalRing)]
+    for sign, armour_target in ((1, 0.935 * 184.3e3), (-1, 0.941 * 205.1e3)):
+        result = section.solve(
+            torque_Nm=sign * 5000,
+            prescribed_twist_per_m=None,
+            prescribed_axial_strain=0.0,
+        )
+        armour_torque = sum(
+            result.wire_stress_Pa[x.name]
+            * x.total_area_m2
+            * x.helix_radius_m
+            * math.sin(x.signed_lay_angle_rad)
+            for x in helical
+        )
+        assert armour_torque / result.twist_per_m == pytest.approx(
+            armour_target, rel=0.02
+        )
+    table11 = {  # kPa (None: separation)
+        1: {
+            ("bundle", "armour1"): 58.3,
+            ("armour1", "armour2"): None,
+            ("armour2", "binder2"): 51.5,
+            ("binder2", "armour3"): 55.2,
+            ("armour3", "armour4"): None,
+            ("armour4", "binder3"): 34.6,
+            ("binder3", "outer_sheath"): 32.0,
+        },
+        -1: {("armour1", "armour2"): 49.8, ("armour3", "armour4"): 49.3},
+    }
+    for sign, source in table11.items():
+        result = section.solve(
+            torque_Nm=sign * 1000,
+            prescribed_twist_per_m=None,
+            prescribed_axial_strain=0.0,
+        )
+        names = list(result.interface_names)
+        for pair, value in source.items():
+            i = names.index(pair)
+            pressure = (
+                result.interface_line_force_N_per_m[i]
+                / (2 * math.pi * result.interface_radius_m[i])
+                / 1e3
+            )
+            if value is None:
+                assert pressure == 0.0, pair
+                assert result.interface_gap_m[i] > 0, pair
+            else:
+                assert pressure == pytest.approx(value, rel=0.2), (sign, pair)
+        if sign == 1:
+            gap = result.interface_gap_m[names.index(("armour3", "armour4"))]
+            assert gap == pytest.approx(0.031e-3, rel=0.1)
 
 
 @pytest.mark.full_scale
