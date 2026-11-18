@@ -170,11 +170,11 @@ as zero with the basis `not_published`.
 <!-- tutorial-output -->
 ```text
 IEA Task 49 / Janocha 2024 66 kV three-core (public template)
-EA, twist fixed         636.8 MN
-EI full slip            20.98 kN m^2
-EI no slip (xi)       1434.40 kN m^2
+EA, twist fixed         638.5 MN
+EI full slip            21.74 kN m^2
+EI no slip (xi)       1391.17 kN m^2
 inner_armour: winding stress 0 MPa (not_published); outer_armour: winding stress 0 MPa (not_published)
-100 kN inner_armour  P = 0.086 MPa, slip onset 0.00023 1/m
+100 kN inner_armour  P = 0.086 MPa, slip onset 0.00024 1/m
 100 kN outer_armour  P = 0.023 MPa, slip onset 0.00007 1/m
 ```
 

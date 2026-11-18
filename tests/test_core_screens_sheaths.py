@@ -584,12 +584,12 @@ def test_66kv_template_has_no_metallic_sheath_or_wire_screen():
     assert not [
         x for x in template.layers if isinstance(x, cx.api.CylindricalShellLayer)
     ]
-    screen = template.get_layer("cu_wire_screen")
+    screen = template.get_layer("cu_tape_screen")
     assert not screen.strand_layers  # a full ring (Janocha Table 1)
     k = _sine(1.0 / 2.76, 1)
     amps = {
         s: cx.compute_core_layer_strain(
-            template, "cu_wire_screen", k, core_state=s
+            template, "cu_tape_screen", k, core_state=s
         ).maximum()["strain_amplitude"]
         for s in ("free", "frictional", "stuck")
     }

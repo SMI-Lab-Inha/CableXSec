@@ -41,9 +41,10 @@ Status: **P** published value; **D** derived from published values;
 | Conductor | 3 × 630 mm² Cu, envelope 29.90 mm | Section 2.1; Table 1 | P |
 | Conductor model | area-equivalent solid, r = 14.161 mm (exactly 630 mm²); stranding voids merged into the screen | Required by the radial solution (no strand radial law) | D |
 | Conductor stranding (variant `iea_task49_66kv_stranded`) | 61 compacted wires 1 + 6 + 12 + 18 + 24, ring thickness 3.322 mm, 10.33 mm² each; lay ratio 12, equal-ratio or equal-pitch pattern, alternating, outer left hand | Wire count Fig. 4a; envelope Table 1; pitches designed (Section 4.5) | P / D / A |
-| Conductor screen | copper tape, OD 33.90 mm, loose | Table 1; merged into the conductor body in Table 3 | P, loose: A |
+| Conductor screen | semiconducting screen with the XLPE properties of Table 2, OD 33.90 mm, loose | OD Table 1 (labelled copper tape); Table 3 merges it into the conductor body of 630 mm² copper wires, so it adds no copper (Section 2.1) | P (OD) / D |
 | Insulation | XLPE, OD 57.70 mm (11.9 mm wall) | Table 1 | P |
-| Insulation screen | copper, OD 64.00 mm, loose | Table 1; merged into the insulation in Table 3 | P, loose: A |
+| Insulation screen | semiconducting screen with the XLPE properties of Table 2, OD 63.80 mm, carries load with the core | OD Table 1 (labelled copper); Table 3 merges it into the XLPE insulation shell (Section 2.1) | P (OD) / D |
+| Metallic screen | loose copper tape, 0.10 mm, OD 64.00 mm, on the insulation screen | A copper screen is named (Table 1) but its copper area is not published, and the source model has none (Table 3); the electrical and thermal analyses need one | A (thickness) |
 | Core sheath | MDPE, OD 70.40 mm | Table 1 | P |
 | Core pitch-circle radius | 40.81 mm | Touching cores: 40.65 mm in the Table 1 section, 40.55 mm from Fig. 2b (111 mm); laid touching tubes at 10° need ≥ 40.80 mm | D |
 | Core lay | 10° at the core-centre radius, pitch 1.4542 m, right hand | Table 1 (angle); radius of definition and hand | P / A |
@@ -72,6 +73,36 @@ Status: **P** published value; **D** derived from published values;
 | Electrical | ε_r 2.5, tan δ 0.001; Mazzanti life constants | [IEC60287-1-1] Table 3; [Mazzanti2007] Table I, as other templates | P (other source) |
 | Design life, DFF, MBR | 25 years; 10; 2.76 m | [IEATask49] Section 3, Section 3.3.2, Table 13 | P |
 | Minimum breaking load | `aggregate_properties.MBL_kN` 659 kN with `MBL_basis` approximate; shown beside the tension capacity of the Capacity envelope, never a limit | [IEATask49] Table 13, p. 35 (the source gives MBL and MBR as approximate values) | P (comparison) |
+
+### 2.1 Screens: Table 1 against the source's section model
+
+Table 1 lists the conductor screen as copper tape (2.00 mm wall) and the
+insulation screen as copper (3.15 mm wall). Read as solid copper annuli, the
+insulation screen alone would hold 602 mm² of copper per core, about the
+conductor's own 630 mm², and the cable would weigh 76.3 kg/m (the template
+before 18 November 2026). The source's own section model does not do this:
+Table 3 merges the conductor screen into the conductor body (beam elements of
+the 61 copper wires of Fig. 4a, 630 mm²) and the insulation screen into the
+XLPE insulation shell, and the cable weighs 547 N/m in air (Table 5), the
+55.76 kg/m of [IEATask49] Table 13. The template follows Table 3: the walls of
+Table 1 are kept, the conductor screen is a loose semiconducting layer and
+the insulation screen a semiconducting layer that carries load with the core,
+both with the XLPE properties of Table 2 ([IEC60287-2-1] counts
+semiconducting screens with the insulation), and a loose 0.10 mm copper tape
+(assumed) is the metallic screen of the electrical and thermal analyses.
+
+| Layer (three cores) | Table 1 read as copper | Template (Table 3) |
+| --- | --- | --- |
+| Conductor screen (with the stranding voids) | 7.44 kg/m | 0.77 kg/m |
+| Insulation screen | 16.44 kg/m | 1.64 kg/m |
+| Copper tape screen | — | 0.55 kg/m (assumed thickness) |
+| Cable | 76.33 kg/m (+36.9 %) | 55.41 kg/m (−0.6 %) |
+| Published | 55.76 kg/m ([IEATask49] Table 13; 547 N/m, Janocha Table 5) | |
+
+Without the assumed tape the template weighs 54.86 kg/m (−1.6 %). No input
+was adjusted to the published mass; the remaining difference lies in the
+representation of the conductor and filler bodies, whose areas the source does
+not tabulate.
 
 The armour wire counts were obtained by counting the 284 wire sections of the
 66 kV model in Janocha Fig. 4a (139 inner, 145 outer; every section has the
@@ -115,21 +146,21 @@ th = cx.compute_thermal(cable, current_A=1093.0, conductor_area_m2=630e-6,
 
 | Quantity | CableXSec | Published | Comment |
 | --- | --- | --- | --- |
-| EA (fixed ends) | 636.8 MN (free ends 629.8) | 658 MN, Janocha 2.4 / IEA Table 13 | −3.2 %; armour 416, copper 203, polymers 18 MN |
-| GJ | 131.3 kN·m² | 152 kN·m² at 50 kN, Janocha 2.4 | −14 %; CableXSec GJ is the extension-only lay term, without polymer and core torsion |
-| Full-slip EI | 21.0 kN·m², with or without core friction | 42.47 kN·m² slipping stiffness at 50 kN, IEA Table 13; branch slope about 29 kN·m² in Fig. 6 and about 41 kN·m² in Fig. 12b | −51 % (−28 % against Fig. 6); outer and inner sheath give 11.6 and 6.1 kN·m². Friction cannot raise the full-slip value (Section 4.1) |
-| No-slip EI (plane section) | 1653 kN·m²; bending-law slope 853 kN·m² armour only, 981 kN·m² with core friction (core ξ = 0.73) | Fig. 12b inset (10 kN): secant about 2,500–3,000 kN·m² at 1–2×10⁻³ 1/m | Above the plane-section bound of the published section; retired as a target (Section 4.1) |
-| M at 0.2 1/m, 50 kN loop | 4.31 / 4.28 kN·m (bounded / solved); 4.44 / 4.38 kN·m with core friction | about 6.8 kN·m, Fig. 6 | Code to code (Section 4.1) |
-| Loop half-height at κ = 0 | 0.11 / 0.08 kN·m (bounded / solved); 0.25 / 0.18 kN·m with core friction | about 1 kN·m, Fig. 6 | Code to code; 0.38 / 0.37 kN·m with the filler profiles (Section 4.1) |
-| Moment at slip onset, 10/100/200 kN | 0.23 / 0.43 / 0.66 kN·m at 0.01 1/m; 0.26 / 0.70 / 1.19 kN·m with core friction (bounded) | about 5.5 / 9.5 / 12 kN·m, Fig. 12b | Retired as a target: Fig. 12b disagrees with Fig. 6 of the same model (Section 4.1) |
-| Armour axial stress at 1000 kN | 298 / 305 MPa (inner / outer) | about 355 MPa von Mises, Fig. 19b | Axial part only |
-| Conductor axial stress at 1000 kN | 176 MPa | about 190 MPa, Fig. 19b | −7 % |
+| EA (fixed ends) | 638.5 MN (free ends 631.3) | 658 MN, Janocha 2.4 / IEA Table 13 | −3.0 %; armour 416, copper 203, polymers 20 MN |
+| GJ | 131.4 kN·m² | 152 kN·m² at 50 kN, Janocha 2.4 | −14 %; CableXSec GJ is the extension-only lay term, without polymer and core torsion |
+| Full-slip EI | 21.7 kN·m², with or without core friction | 42.47 kN·m² slipping stiffness at 50 kN, IEA Table 13; branch slope about 29 kN·m² in Fig. 6 and about 41 kN·m² in Fig. 12b | −49 % (−25 % against Fig. 6); outer and inner sheath give 11.6 and 6.1 kN·m², the cores 3.7 kN·m². Friction cannot raise the full-slip value, and no component bending of the published section reaches 42 kN·m² (Section 4.1) |
+| No-slip EI (plane section) | 1655 kN·m²; bending-law slope 1215 kN·m² armour only, 1330 kN·m² with core friction (core ξ = 0.65) | Fig. 12b inset (10 kN): secant about 2,500–3,000 kN·m² at 1–2×10⁻³ 1/m | Above the plane-section bound of the published section; retired as a target (Section 4.1) |
+| M at 0.2 1/m, 50 kN loop | 4.46 / 4.46 kN·m (bounded / solved); 4.59 / 4.56 kN·m with core friction | about 6.8 kN·m, Fig. 6 | Code to code (Section 4.1) |
+| Loop half-height at κ = 0 | 0.11 / 0.11 kN·m (bounded / solved); 0.25 / 0.21 kN·m with core friction | about 1 kN·m, Fig. 6 | Code to code; 0.38 / 0.41 kN·m with the filler profiles (Section 4.1) |
+| Moment at slip onset, 10/100/200 kN | 0.24 / 0.44 / 0.66 kN·m at 0.01 1/m; 0.27 / 0.71 / 1.20 kN·m with core friction (bounded) | about 5.5 / 9.5 / 12 kN·m, Fig. 12b | Retired as a target: Fig. 12b disagrees with Fig. 6 of the same model (Section 4.1) |
+| Armour axial stress at 1000 kN | 297 / 304 MPa (inner / outer) | about 355 MPa von Mises, Fig. 19b | Axial part only |
+| Conductor axial stress at 1000 kN | 170 MPa | about 190 MPa, Fig. 19b | −10 % |
 | Armour yield, pure bending | 1.16 1/m | about 1 1/m, Section 3.3 | |
 | Armour yield, pure tension | about 1.1 MN | about 1000 kN, Section 3.3 | |
-| Copper 120 MPa plastic limit, pure tension | 702 kN (characteristic envelope, factors 1.0) | about 600 kN (Fig. 21); MBL 659 kN (IEA Table 13) | +6.6 % against the MBL; governs the envelope (Section 4.6) |
+| Copper 120 MPa plastic limit, pure tension | 704 kN (characteristic envelope, factors 1.0) | about 600 kN (Fig. 21); MBL 659 kN (IEA Table 13) | +6.9 % against the MBL; governs the envelope (Section 4.6) |
 | Copper 120 MPa plastic limit, pure bending | 0.362 1/m, bend radius 2.76 m, bent towards a core; 0.353 1/m, 2.84 m in the worst bending direction, 30° from a core (strand basis of the 5 GPa bending modulus) | 0.5 1/m (Section 3.3); MBR 2.76 m (IEA Table 13) | Set by the assumed bending modulus (Section 4.6) |
-| Conductor temperature at 1093 A (125 MW) | 88.9 °C (armour 61.0 °C) | 125 MW rating, IEA Table 13 (90 °C XLPE basis) | Assumed T4; no three-core factor or λ2 |
-| Mass | 76.3 kg/m; 52.5 kg/m without the screens | 55.76 kg/m, IEA Table 13 | Screens are full copper annuli in Table 1 |
+| Conductor temperature at 1093 A (125 MW) | 95.3 °C (armour 61.0 °C) | 125 MW rating, IEA Table 13 (90 °C XLPE basis) | Assumed T4; no three-core factor or λ2; the semiconducting screens count with the insulation (88.9 °C with the earlier full copper screens), and the stranding voids of the area-equivalent conductor, counted with the conductor screen, add about 1 K |
+| Mass | 55.4 kg/m (54.9 kg/m without the assumed copper tape) | 55.76 kg/m, IEA Table 13; 547 N/m in air, Janocha Table 5 | −0.6 %; screens after the source's section model (Section 2.1); 76.3 kg/m with Table 1 read as copper |
 
 The friction-dependent values from here to the end of the page were computed
 with the former symmetric capstan bound, except the loop half-heights and
@@ -180,10 +211,14 @@ plots (about ±5 % of full scale).
 
 | Quantity at 50 kN | Armour only (bounded / solved) | Cores (bounded / solved) | Cores and filler profiles (bounded / solved) | Source FE |
 | --- | --- | --- | --- | --- |
-| Core normal load per core | — | 16.4 / 12.2 kN/m (bounded: wedged trefoil) | profile 10.8 / 15.6 kN/m | not stated |
-| Loop half-height at κ = 0 | 0.112 / 0.081 kN·m | 0.246 / 0.181 kN·m | 0.380 / 0.374 kN·m | about 1.0 kN·m (Fig. 6) |
-| M at 0.2 1/m | 4.31 / 4.28 kN·m | 4.44 / 4.38 kN·m | 4.58 / 4.57 kN·m | about 6.8 kN·m (Fig. 6) |
-| Branch slope, 0.05–0.15 1/m | 21.0 kN·m² | 21.0 kN·m² | 21.0 kN·m² | about 29 kN·m² (Fig. 6); 42.47 kN·m² (IEA Table 13) |
+| Core normal load per core | — | 16.4 / 11.4 kN/m (bounded: wedged trefoil) | profile 10.8 / 16.2 kN/m | not stated |
+| Loop half-height at κ = 0 | 0.111 / 0.115 kN·m | 0.246 / 0.209 kN·m | 0.379 / 0.409 kN·m | about 1.0 kN·m (Fig. 6) |
+| M at 0.2 1/m | 4.46 / 4.46 kN·m | 4.59 / 4.56 kN·m | 4.73 / 4.76 kN·m | about 6.8 kN·m (Fig. 6) |
+| Branch slope, 0.05–0.15 1/m | 21.7 kN·m² | 21.7 kN·m² | 21.7 kN·m² | about 29 kN·m² (Fig. 6); 42.47 kN·m² (IEA Table 13) |
+
+The solved armour contact rose with the screens of Section 2.1 (half-height
+0.081 kN·m with the earlier full copper screens, whose stiff copper rings took
+radial load in the solved section).
 
 What the comparison shows:
 
@@ -205,15 +240,29 @@ What the comparison shows:
   winding and sheath shrinkage (Section 4.4 of the local analysis guide), which
   neither the source nor the template states.
 - **Friction cannot raise the full-slip stiffness.** The slope difference
-  (21.0 against about 29 kN·m² in Fig. 6) lies in the component bending
+  (21.7 against about 29 kN·m² in Fig. 6) lies in the component bending
   stiffness: with the conductor bending as solid copper (112.2 GPa instead of
-  the 5 GPa assumed), the cores would add 9.6 kN·m² (30.6 kN·m² in total),
-  close to the Fig. 6 slope. The IEA Wind Task 49 value, whose row cites the
-  same source, is reported code to code.
+  the 5 GPa assumed), the cores would add 9.6 kN·m² (31.3 kN·m² in total),
+  close to the Fig. 6 slope. The IEA Wind Task 49 value (42.47 kN·m², close
+  to the Fig. 12b slope), whose row cites the same source, lies above every
+  component bending stiffness of the published section and is reported code
+  to code: the source is inconsistent with itself here (Fig. 6 against
+  Fig. 12b and Table 13), and no input is changed to follow either.
 - A synthetic 61-wire conductor (lay ratio 12, Table 2 copper friction 0.30)
   raises the half-height by a further 0.03 kN·m.
 
 ### 4.2 Energised cable: temperature history into clamping and fatigue
+
+**Status (18 November 2026).** The tables and factors of Sections 4.2 and
+4.2.1 were computed with the earlier full copper screens of Table 1 and are
+kept as that record; they are not regenerated. With the screens of
+Section 2.1 the reported state at rated current (`T_ref` 20 °C, 50 kN) is a
+conductor at 97.1 °C (coupled `R_ac`), an inner-armour clamping of 439 kPa
+against 44.4 kPa unenergised, and a thermal wire stress of +96.9 MPa (with the
+earlier screens 293 kPa, 31.1 kPa and +84.3 MPa); the cold state 5 K below
+`T_ref` has 45.4 kPa (51.8 kPa), and the relaxed variant (`T_ref` 15 °C,
+f = 0.2) 244 kPa against 46.9 kPa (188 and 33.1 kPa). The semiconducting
+screens are thermal resistance and polymer that the copper annuli were not.
 
 The energised analysis (about 400 s on one thread) couples the
 layer temperatures of the transient IEC ladder into the solved radial
@@ -380,7 +429,7 @@ d = cx.design_torque_balance(cable, "outer_lay_angle", tension_N=100e3)
 
 With the assumed lay directions (cores and outer armour right-hand, inner
 armour left-hand), the end torque with the twist restrained is 1.503 mm times
-the tension (150 N·m at 100 kN; fixed-radius matrix 1.510 mm), and a free end
+the tension (150 N·m at 100 kN; fixed-radius matrix 1.525 mm), and a free end
 twists by −0.0533 °/m per 100 kN (5.3° over 100 m). The layer torques at
 100 kN are −604 N·m (inner armour), +525 N·m (outer armour) and +229 N·m
 (laid cores); the armour balance ratio is 0.869. A free end raises the inner
@@ -402,17 +451,18 @@ the other packaged cables.
 ### 4.4 Screens and sheath: core slip state and strain life
 
 The copper screens of Table 1 are full annuli, not wires, so the per-core
-wire-screen assessment (`compute_core_screen_fatigue`, gap P1) does not apply;
+wire-screen assessment (`compute_core_screen_fatigue`, gap P1) does not apply
+to the template's copper tape;
 the wet design has no metallic sheath, so the strain-life sheath route
 (`compute_shell_fatigue(method="strain_life")`, gap P6) does not apply either.
-The core slip state (gap P8) applies to the screen annulus: at the dynamic MBR
-of 2.76 m its strain amplitude is 1.12% for free cores, 1.12% for the
+The core slip state (gap P8) applies to the copper tape: at the dynamic MBR
+of 2.76 m its strain amplitude is 1.17% for free cores, 1.17% for the
 frictional law (the cores slip: no manufacturing clamping is declared, at 0
-and 50 kN) and 2.44% for stuck cores, largest at the tangential fibre of a
+and 50 kN) and 2.49% for stuck cores, largest at the tangential fibre of a
 core on the neutral axis (free) or at the outer fibre of a core on the
-extreme fibre (stuck); `cx.compute_core_layer_strain(cable, "cu_wire_screen",
-kx, core_state=...)`. A wire or tape representation of the screens is a
-geometry input that Table 1 does not give.
+extreme fibre (stuck); `cx.compute_core_layer_strain(cable, "cu_tape_screen",
+kx, core_state=...)`. The screen's copper area and form (wires or tapes) are
+geometry inputs that the source does not give.
 
 ### 4.5 Designed conductor stranding (`iea_task49_66kv_stranded`)
 
@@ -473,13 +523,13 @@ The conductor is a solid with the 5 GPa effective bending modulus (an
 assumption, Section 2). Its bending stress about its own axis is taken on the
 basis of that stiffness: the slipping wires of radius R sqrt(E_b/E) that
 give it, 0.211 times the plane-section stress of solid copper. At 80 kN and
-0.1 1/m the conductor then takes 46 MPa in the frictional core slip state
+0.1 1/m the conductor then takes 47 MPa in the frictional core slip state
 (utilisation 0.39 against 120 MPa) instead of the 170 MPa of solid copper;
-held to the cable axis (stuck) its core axis takes 457 MPa on the net section
-(utilisation 4.07). The net-section stress at 80 kN is 13.67 MPa at zero
-curvature (the tension share, E cos^2 eps at the 636.8 MN fixed-end EA) and
-15.43 MPa at 0.1 1/m towards the first core, where friction holds the core
-axis (the stick coefficient 0.733 and the core contact load set it).
+held to the cable axis (stuck) its core axis takes 458 MPa on the net section
+(utilisation 4.07). The net-section stress at 80 kN is 13.63 MPa at zero
+curvature (the tension share, E cos^2 eps at the 638.5 MN fixed-end EA) and
+16.6 MPa at 0.1 1/m along the section x axis, where friction holds the core
+axis (the stick coefficient 0.653 and the core contact load set it).
 
 The capacity envelope includes these limits with the component factor of the
 lifecycle phase (OWA MecLim II guideline (2025) Table 5, p. 19: 0.80 normal,
@@ -489,8 +539,8 @@ governs at every tension:
 
 | Quantity | Armour only | With the component limits | Published |
 | --- | --- | --- | --- |
-| Tension capacity at zero curvature, factors 1.0 | about 1.23 MN | 702 kN | MBL 659 kN (IEA Table 13) |
-| Tension capacity, normal operation | 825 kN | 562 kN | — |
+| Tension capacity at zero curvature, factors 1.0 | about 1.23 MN | 704 kN | MBL 659 kN (IEA Table 13) |
+| Tension capacity, normal operation | 825 kN | 564 kN | — |
 | Bend radius at zero tension, factors 1.0 | 0.86 m | 2.84 m (2.76 m bent towards a core) | MBR 2.76 m (IEA Table 13) |
 | Bend radius at zero tension, normal operation | 1.28 m | 3.55 m | — |
 
@@ -501,10 +551,10 @@ this cable the largest lies 30° from a core at low tension. Bent towards a
 core the conductor reaches its proof stress at 2.76 m, the published
 minimum bend radius. That agreement rests on the assumed
 5 GPa bending modulus; Janocha (Section 3.3) reaches the copper plastic limit
-at 0.5 1/m in pure bending with resolved wires. The loose copper screens lie
-outside the load path: their kinematic stress (384 MPa in the wire screen at
-80 kN and 0.1 1/m) is flagged against their yield stress in Component
-stresses and left out of the envelope.
+at 0.5 1/m in pure bending with resolved wires. The loose screens lie outside
+the load path: the kinematic stress of the copper tape (384 MPa at 80 kN and
+0.1 1/m) is reported in Component stresses with no limit given (the library
+gives no yield stress for a copper tape screen) and left out of the envelope.
 
 ### 4.7 Derived 300 mm² section (`iea_task49_66kv_300`)
 
@@ -530,13 +580,15 @@ step is an assumption, listed in the file header):
 | Property | Derived section | [IEATask49] Table 13, 300 mm² | Difference | 630 mm² template against its row |
 | --- | --- | --- | --- | --- |
 | Outer diameter | 164.0 mm | 161 mm | +1.9 % | 0 % |
-| EA (fixed ends) | 477.5 MN | 469.6 MN | +1.7 % | −3.2 % |
-| Full-slip EI at 50 kN | 14.0 kN·m² | 19.92 kN·m² | −30 % | −51 % |
-| Dry mass | 56.9 kg/m | 36.66 kg/m | +55 % | +37 % |
+| EA (fixed ends) | 478.9 MN | 469.6 MN | +2.0 % | −3.0 % |
+| Full-slip EI at 50 kN | 14.5 kN·m² | 19.92 kN·m² | −27 % | −49 % |
+| Dry mass | 40.4 kg/m | 36.66 kg/m | +10 % | −0.6 % |
 
 The diameter and axial stiffness follow the table closely; the full-slip EI
-and the mass carry the template's known differences (Section 5, items 1 and
-8). Tests: `tests/test_template_66kv_300.py`.
+carries the template's known difference (Section 5, item 1). The mass (56.9
+kg/m with full copper screens, +55 %) is 10 % above the row: the derived
+section keeps the 630 mm² wall thicknesses, which the table's scaling to a
+smaller conductor does not. Tests: `tests/test_template_66kv_300.py`.
 
 ## 5. Gaps found
 
@@ -587,5 +639,8 @@ and the mass carry the template's known differences (Section 5, items 1 and
 7. **Laid-core geometry.** Table 1 gives touching circular cores in the
    section; touching laid cores need a 0.16 mm larger pitch-circle radius,
    which puts the core envelope 0.11 mm into the bedding.
-8. **Mass.** The copper screens of Table 1 are full annuli (2.0 and 3.15 mm);
-   real tape and wire screens are lighter, so the template mass is high.
+8. **Screens and mass.** Table 1 labels the 2.00 and 3.15 mm screen walls
+   copper; read as solid copper they give 76.3 kg/m against the published
+   55.76 kg/m. The template follows the source's section model (Table 3) and
+   gives 55.4 kg/m (Section 2.1); the copper area of the metallic screen is
+   not published (0.10 mm tape assumed).

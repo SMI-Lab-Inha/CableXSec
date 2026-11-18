@@ -10,7 +10,8 @@
 #   * conductor: 300 mm2 area-equivalent solid (r 9.772 mm); stranded envelope
 #     20.63 mm with the 630 mm2 fill ratio (28.32/29.90)^2;
 #   * radial thicknesses of the conductor screen (2.00 mm), XLPE insulation
-#     (11.90 mm, set by the 66 kV voltage class), copper wire screen (3.15 mm),
+#     (11.90 mm, set by the 66 kV voltage class), insulation screen (3.05 mm)
+#     with its 0.10 mm copper tape (3.15 mm together),
 #     core sheath (3.20 mm), beddings (0.40, 0.20 mm), inner sheath (4.05 mm),
 #     armour wires (3.15 mm) and outer sheath (5.15 mm) kept from Janocha et al.
 #     (2024) Table 1;
@@ -19,7 +20,9 @@
 #     envelope (75.90/76.01);
 #   * armour wire counts from the 630 mm2 coverage (inner 0.873 at 13 deg,
 #     outer 0.866 at 10 deg): 122 and 128 wires; lay angles kept;
-#   * materials, lay directions, water-ingress state, clamping (zero, not
+#   * materials, screen representation (semiconducting screens with the XLPE
+#     properties, after the source model's Table 3, and an assumed 0.10 mm
+#     copper tape), lay directions, water-ingress state, clamping (zero, not
 #     published), thermal boundary and S-N curves as the 630 mm2 template.
 # The derived outer diameter is 164.0 mm against 161 mm in Table 13 (+1.9 %).
 # Table 13 values are comparison targets (aggregate_properties), not inputs.
@@ -74,16 +77,16 @@ layers:
       14.95 mm are merged into the loose conductor screen.
     source: "[Janocha2024] Table 1 (Conductor 29.90 mm), Section 2.1 (630 mm2)"
 
-  - name: cu_conductor_screen
+  - name: conductor_screen
     layer_type: cylindrical_offset
-    material: copper_tape_screen
+    material: xlpe_janocha2024
     n_cores: 3
     r_offset_m: 0.0354389
     r_inner_m: 0.009772050238058398  # conductor envelope 10.32 mm less the stranding voids
     r_outer_m: 0.0123172       # 24.63 mm (screen 2.00 mm kept)
     structural: false
-    notes: "Copper tape per Table 1 (merged into the conductor body in the source model, Table 3); also spans the stranding voids"
-    source: "[Janocha2024] Table 1 (Conductor screen 33.90 mm, copper tape)"
+    notes: "Loose semiconducting screen with the XLPE properties, as in the 630 mm2 template (Table 3 merges it into the conductor); also spans the stranding voids"
+    source: "[Janocha2024] Table 1 (Conductor screen 33.90 mm), Table 3 (merged into the conductor)"
 
   - name: xlpe_insulation
     layer_type: cylindrical_offset
@@ -101,16 +104,26 @@ layers:
       field_threshold_kV_mm: 5.0
     source: "[Janocha2024] Table 1 (Insulation 57.70 mm, XLPE); electrical [IEC60287-1-1]/[Mazzanti2007]"
 
-  - name: cu_wire_screen
+  - name: insulation_screen
     layer_type: cylindrical_offset
-    material: copper_wire_screen
+    material: xlpe_janocha2024
     n_cores: 3
     r_offset_m: 0.0354389
     r_inner_m: 0.0242172
+    r_outer_m: 0.0272672       # 54.73 mm less the 0.10 mm copper tape
+    notes: "Semiconducting screen with the XLPE properties that carries load with the core, as in the 630 mm2 template (Table 3 merges it into the insulation)"
+    source: "[Janocha2024] Table 1 (Insulation screen 64.00 mm), Table 3 (merged into the insulation)"
+
+  - name: cu_tape_screen
+    layer_type: cylindrical_offset
+    material: copper_tape_screen
+    n_cores: 3
+    r_offset_m: 0.0354389
+    r_inner_m: 0.0272672
     r_outer_m: 0.0273672       # 54.73 mm (screen 3.15 mm kept)
     structural: false
-    notes: "Copper per Table 1; merged into the insulation body in the source model (Table 3)"
-    source: "[Janocha2024] Table 1 (Insulation screen 64.00 mm, copper)"
+    notes: "Metallic screen for the electrical and thermal analyses: loose copper tape of ASSUMED thickness 0.10 mm, as in the 630 mm2 template"
+    source: "[Janocha2024] Table 1 (copper screen named; area not published); thickness assumed"
 
   - name: mdpe_core_sheath
     layer_type: cylindrical_offset

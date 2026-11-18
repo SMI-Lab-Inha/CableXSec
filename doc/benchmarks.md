@@ -327,8 +327,8 @@ registered before the runs; nothing was refitted.
 
 | Case | Class | Target | Armour only | With core friction | Status |
 | --- | --- | --- | --- | --- | --- |
-| Janocha (2024) 66 kV, 50 kN, Fig. 6 loop half-height at κ = 0 | C2C (FE, no initial contact state) | reported (about 1.0 kN·m) | 0.081 kN·m (solved) | 0.181 kN·m (μ 0.46, Table 2); 0.374 kN·m with the filler profiles | reported |
-| Same, slipping slope; IEA Wind Task 49 Table 13 (its row cites the same source) | C2C | reported (42.47 kN·m²; Fig. 6 about 29) | 21.0 kN·m² | 21.0 kN·m² | reported |
+| Janocha (2024) 66 kV, 50 kN, Fig. 6 loop half-height at κ = 0 | C2C (FE, no initial contact state) | reported (about 1.0 kN·m) | 0.115 kN·m (solved) | 0.209 kN·m (μ 0.46, Table 2); 0.409 kN·m with the filler profiles | reported |
+| Same, slipping slope; IEA Wind Task 49 Table 13 (its row cites the same source) | C2C | reported (42.47 kN·m²; Fig. 6 about 29) | 21.7 kN·m² | 21.7 kN·m² | reported |
 | Same, Fig. 12b moment at 0.01 1/m and stick slope | — | retired (below) | 0.23 / 0.37 / 0.53 kN·m | 0.25 / 0.57 / 0.93 kN·m | retired |
 | Ménard (2023) range (b), transferred inputs (0.3 MPa of the source FE), core μ 0.2 as in the source FE | M | RMSE < 5 %; work within 10 % (BM1-loop) | 2.71 %; +8.8 % | 5.15 %; +27.2 % | FAIL with the cores against the BM1-loop target; stated, not gated (unreliable reference) |
 | Ménard (2023) ranges (a), (c)–(f), work | M | — | +47.2, +44.7, +32.0, +2.2, −3.6 % | +63.1, +59.8, +46.2, +19.3, +12.6 % | (worse); stated, not gated |
@@ -337,7 +337,7 @@ registered before the runs; nothing was refitted.
   no initial contact state; its figures are compared code to code and not
   gated. Fig. 12b is retired as a target (below). With the full contact
   accounting (wedged trefoil and filler profiles) the Fig. 6 half-height at
-  50 kN is 0.380 / 0.374 kN·m (bounded / solved) against about 1.0 kN·m read
+  50 kN is 0.379 / 0.409 kN·m (bounded / solved) against about 1.0 kN·m read
   from the figure. Friction does not raise the full-slip slope; the slope
   difference lies in component bending ([template_66kv.md](template_66kv.md)
   Section 4.1).
@@ -424,9 +424,9 @@ of small cycles at the pressure that fits the larger ones.
 
 | Model | Half-height at κ = 0, bounded / solved |
 | --- | --- |
-| Armour only | 0.112 / 0.081 kN·m |
-| Laid cores, wedged trefoil | 0.246 / 0.181 kN·m |
-| Laid cores and filler profiles | 0.380 / 0.374 kN·m |
+| Armour only | 0.111 / 0.115 kN·m |
+| Laid cores, wedged trefoil | 0.246 / 0.209 kN·m |
+| Laid cores and filler profiles | 0.379 / 0.409 kN·m |
 | Source FE, Fig. 6 (read from the figure) | about 1.0 kN·m |
 
 ### Retired: Janocha et al. (2024) Fig. 12b knee moments and stick slope
@@ -444,7 +444,7 @@ figures (about ±5 % of full scale):
    higher tension can only raise tension-induced friction.
 2. **The stick branch is stiffer than any stuck section.** The Fig. 12b
    inset reaches about 3.0 kN·m at 1×10⁻³ 1/m and 5.0 kN·m at 2×10⁻³ 1/m at
-   10 kN: a secant of 2,500–3,000 kN·m², above the 1653 kN·m² plane-section
+   10 kN: a secant of 2,500–3,000 kN·m², above the 1655 kN·m² plane-section
    bound of the published section with every component stuck. No stick–slip
    law of the published geometry can follow that branch, and the knee
    moments at 0.01 1/m sit on it.
@@ -704,7 +704,7 @@ Gates of `tests/test_thermal_history.py` for the slow-time driver
 | Class | Quantity | Reference | Result | Status |
 | --- | --- | --- | --- | --- |
 | A | Steady state of the transient RC ladder at the BM5 inputs (908.45 A, three cores, λ1′, `T4` 0.3211 K·m/W, 15 °C, `R_ac` at 90 °C) | `compute_thermal` 136.06 °C (IEC-consistent profile) | Equal to 1e-12 at 1, 3 and 8 sub-annuli per layer; every annulus edge to 1e-11; heat through `T4` equals the heat generated to 1e-10 | PASS |
-| A | Same, 66 kV three-core template at 1093 A | `compute_thermal` 88.85 °C | Equal to 1e-9 (conditioning of the thin copper screens) | PASS |
+| A | Same, 66 kV three-core template at 1093 A | `compute_thermal` 95.35 °C | Equal to 1e-8 (conditioning of the 0.10 mm copper tape screens) | PASS |
 | A | Crank–Nicolson energy balance of the transient network | Discrete identity `ΣC ΔT = h/2 (Q_n + Q_n+1)` | Round-off (1e-9) | PASS |
 | A | TR-BDF2 order; steady hold; step response | Second order; steady state | Error ratio 3–5 on halving the step; drift < 1e-8 K; step reaches the steady state to 1e-3 K | PASS |
 | A | Coupled `R_ac(T_c)` | Fixed point | Re-evaluating `R_ac` at `T_c` changes no node by more than 1e-10 | PASS |
@@ -2050,7 +2050,7 @@ moments (Costello 1997, Example 3.1: −5% torque for a seven-wire strand).
 | TQ3 (TQ-KL) | MM | Kim and Lee (2017) Section 5.1, 1+6+12 strand (Table 4): outer helix angle that balances the torque for six inner angles (Fig. 19 legend) and the final design (78.85°, 87.41°), beam FE with friction 0.115 | abs. difference ≤ 0.3° | −0.06 to −0.26° (final design 87.28° against 87.41°, an outer lay angle from the axis of 2.72° against 2.59°) | PASS |
 | TQ4 (TQ-UJ) | M, MM | Utting and Jones (1987), Part I Table 1 (geometry, measured lay) and Part II Table 1: fixed-end torque per kN of six seven-wire strands, Machida–Durelli theory (column ii) and test (column vii) | model/theory 1.04–1.07; model/test 1.00–1.15 | 1.051–1.059; 1.067–1.136 | PASS |
 | TQ5 | A | Mirror lay: every lay direction reversed (armour and laid cores) on the 1×37 rope and the 66 kV template | < 1e-9 relative | torque and twist reverse, wire stresses and balance ratio unchanged (0 and below 1e-9) | PASS |
-| TQ6 | I | `fixed_radius` against `xsec_stiffness` (`EA_N`, `EA_torsion_coupling`, `GJ_Nm2`); solved 66 kV template against the fixed-radius torque coefficient | identical; < 1% | identical; 1.5026 against 1.5102 mm (−0.5%); EA 607 against 637 MN | PASS |
+| TQ6 | I | `fixed_radius` against `xsec_stiffness` (`EA_N`, `EA_torsion_coupling`, `GJ_Nm2`); solved 66 kV template against the fixed-radius torque coefficient | identical; < 1% | identical; 1.5026 against 1.5251 mm (−1.5%); EA 607 against 638 MN | FAIL (since the insulation screens carry load in both models; −0.5% when the fixed-radius model left them out) |
 | TQ7 | I | Design round trip on the 66 kV template: zero torque coefficient at the returned lay angle; free twist and stress redistribution then vanish | < 1e-9 m; < 1e-12; < 1e-3 Pa | 1.3e-13 m; below 1e-12; below 1e-3 Pa | PASS |
 
 The excess over the Machida–Durelli theory is the omitted bending and

@@ -28,8 +28,21 @@
 # Assumptions (not published; see doc/template_66kv.md):
 #   * core lay pitch from the 10 deg bundle lay angle taken at the core-centre
 #     radius; lay directions (only "opposite" armour lays are stated);
-#   * screens are loose (no axial load), as the source merges them into the
-#     conductor and insulation bodies (Table 3);
+#   * screens follow the source's section model (Table 3), not full copper
+#     annuli: Table 1 labels the conductor and insulation screens "copper
+#     tape" and "copper", but walls of 2.00 and 3.15 mm of solid copper
+#     would put 600 mm2 of copper in each insulation screen, about the
+#     conductor's own area, and 76.3 kg/m in the cable against the published
+#     547 N/m (Table 5; 55.76 kg/m in [IEATask49] Table 13). Table 3 merges
+#     the conductor screen into the conductor body (630 mm2 of copper wires)
+#     and the insulation screen into the XLPE insulation. Here the conductor
+#     screen is a loose semiconducting layer and the insulation screen a
+#     semiconducting XLPE layer that bends and stretches with the core, both
+#     with the XLPE properties of Table 2, as [IEC60287-2-1] counts
+#     semiconducting screens with the insulation;
+#   * the metallic screen that the electrical and thermal analyses need is a
+#     loose 0.10 mm copper tape on the insulation screen (thickness assumed;
+#     0.55 kg/m, 1 % of the cable mass; the source model has none);
 #   * the three MDPE filler bodies are one equal-filler-area annulus;
 #   * no manufacturing clamping (none stated by the source): declared as
 #     manufacturing_clamping with basis not_published and value zero;
@@ -85,16 +98,22 @@ layers:
       14.95 mm are merged into the loose conductor screen.
     source: "[Janocha2024] Table 1 (Conductor 29.90 mm), Section 2.1 (630 mm2)"
 
-  - name: cu_conductor_screen
+  - name: conductor_screen
     layer_type: cylindrical_offset
-    material: copper_tape_screen
+    material: xlpe_janocha2024
     n_cores: 3
     r_offset_m: 0.04081
     r_inner_m: 0.014161046158239446  # conductor envelope 14.95 mm less the stranding voids
     r_outer_m: 0.01695         # 33.90 mm [Table 1]
     structural: false
-    notes: "Copper tape per Table 1 (merged into the conductor body in the source model, Table 3); also spans the stranding voids"
-    source: "[Janocha2024] Table 1 (Conductor screen 33.90 mm, copper tape)"
+    notes: >-
+      Table 1 labels it copper tape; the source model merges it into the
+      conductor body of 630 mm2 copper wires (Table 3), so it adds no copper.
+      Represented as a loose semiconducting screen with the XLPE properties
+      of Table 2 (no semiconducting compound is in the library;
+      [IEC60287-2-1] counts semiconducting screens with the insulation). It
+      also spans the stranding voids of the area-equivalent conductor.
+    source: "[Janocha2024] Table 1 (Conductor screen 33.90 mm), Table 3 (merged into the conductor)"
 
   - name: xlpe_insulation
     layer_type: cylindrical_offset
@@ -112,16 +131,33 @@ layers:
       field_threshold_kV_mm: 5.0
     source: "[Janocha2024] Table 1 (Insulation 57.70 mm, XLPE); electrical [IEC60287-1-1]/[Mazzanti2007]"
 
-  - name: cu_wire_screen
+  - name: insulation_screen
     layer_type: cylindrical_offset
-    material: copper_wire_screen
+    material: xlpe_janocha2024
     n_cores: 3
     r_offset_m: 0.04081
     r_inner_m: 0.02885
+    r_outer_m: 0.0319          # 64.00 mm [Table 1] less the copper tape below
+    notes: >-
+      Table 1 labels the 3.15 mm insulation screen copper; the source model
+      merges it into the XLPE insulation shell (Table 3). Represented as a
+      semiconducting screen with the XLPE properties of Table 2 that carries
+      load with the core, as the merged shell does.
+    source: "[Janocha2024] Table 1 (Insulation screen 64.00 mm), Table 3 (merged into the insulation)"
+
+  - name: cu_tape_screen
+    layer_type: cylindrical_offset
+    material: copper_tape_screen
+    n_cores: 3
+    r_offset_m: 0.04081
+    r_inner_m: 0.0319
     r_outer_m: 0.0320          # 64.00 mm [Table 1]
     structural: false
-    notes: "Copper per Table 1; merged into the insulation body in the source model (Table 3)"
-    source: "[Janocha2024] Table 1 (Insulation screen 64.00 mm, copper)"
+    notes: >-
+      Metallic screen of the core for the electrical and thermal analyses: a
+      loose copper tape of ASSUMED thickness 0.10 mm (the source names a
+      copper screen but gives no copper area; its model has none, Table 3).
+    source: "[Janocha2024] Table 1 (copper screen named; area not published); thickness assumed"
 
   - name: mdpe_core_sheath
     layer_type: cylindrical_offset

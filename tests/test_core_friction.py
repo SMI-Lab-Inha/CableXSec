@@ -502,9 +502,10 @@ def test_janocha_template_regression(cable):
     res = cx.compute_mkappa(
         cable, k, tension_N=T, contact_model="solved", core_friction=SPEC
     )
-    # 180.6 N m with the signed capstan bound (187.1 with the former cap).
-    assert -_descending_zero(k, res.moment_Nm) == pytest.approx(180.6, rel=1e-2)
-    assert res.EI_min_Nm2 == pytest.approx(21.0e3, rel=1e-2)
+    # 208.5 N m with the screens of the source's section model (18 Nov 2026;
+    # 180.6 N m with full copper screen annuli, 187.1 with the former cap).
+    assert -_descending_zero(k, res.moment_Nm) == pytest.approx(208.5, rel=1e-2)
+    assert res.EI_min_Nm2 == pytest.approx(21.74e3, rel=1e-2)
 
 
 PROFILES = CoreFrictionSpec(
