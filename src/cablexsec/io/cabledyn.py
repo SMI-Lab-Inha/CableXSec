@@ -85,7 +85,9 @@ vertical plane. They then evolve without twist:
 When the line is restrained in torsion and ``Twist<L>N<J>`` channels bracket
 the section, the material axes are :math:`(\mathbf{e}_1,\mathbf{e}_2)` turned
 right-handed about :math:`\mathbf{t}` by the material twist from End A. A line
-restrained in torsion without these channels is rejected.
+restrained in torsion at both ends without these channels is rejected, and so
+is one restrained at either end whose line type couples torque and tension
+(``GJ|K``): its twist follows the stretch.
 
 The returned ``rotation_curvature_x/y`` are the components of the
 rotation-curvature (Darboux bending) vector :math:`\boldsymbol{\kappa}` on the
@@ -195,7 +197,23 @@ _MOVING_POINTS = ("coupled", "vessel", "free", "connect")
 # --------------------------------------------------------------------------- #
 @dataclass(frozen=True)
 class CableDynLineType:
-    """One ``LINE TYPES`` row (SI)."""
+    """One ``LINE TYPES`` row (SI), read by position as CableDyn reads it.
+
+    ``ea_N`` is ``None`` for a viscoelastic (``Es|Ed``, ``Es|alphaMBL|vbeta``)
+    or Syrope ``EA`` column. ``gj_Nm2`` is the ``GJ`` of a 14-column row
+    (``None`` on a 10-column row). The damping and coupling parts of the
+    ``EI`` and ``GJ`` columns are kept as CableDyn resolves them:
+    ``bending_damping_Nm2s`` is the ``Bb`` of ``EI|Bb``, ``EI|-zeta|f``
+    (``Bb = zeta EI/(pi f)``) or ``EI|-zeta|f1|f2``
+    (``Bb = zeta EI/(pi (f1 + f2))``), ``mass_damping_1_s`` the
+    mass-proportional ``alpha = 4 pi zeta f1 f2/(f1 + f2)`` of the Rayleigh
+    form, ``torque_tension_coupling_Nm`` the ``K`` of ``GJ|K``
+    (``T = EA eps + K tau``, ``M = GJ tau + K eps``) and ``torsional_damping``
+    the ``Bt`` of ``GJ|K|Bt`` [N m² s] (negative: ``-zeta`` of the critical
+    torsional damping of an element). ``polar_inertia_kg_m`` is the ``Irn``
+    [kg m²/m] of a 14-column row. ``ei_token`` and ``gj_token`` are the
+    columns as written.
+    """
 
     name: str
     diameter_m: float
@@ -203,6 +221,13 @@ class CableDynLineType:
     ea_N: float | None
     ei_Nm2: float
     gj_Nm2: float | None
+    bending_damping_Nm2s: float = 0.0
+    mass_damping_1_s: float = 0.0
+    torque_tension_coupling_Nm: float = 0.0
+    torsional_damping: float = 0.0
+    polar_inertia_kg_m: float | None = None
+    ei_token: str = ""
+    gj_token: str | None = None
 
 
 @dataclass(frozen=True)
@@ -216,7 +241,12 @@ class CableDynSection:
 
 @dataclass(frozen=True)
 class CableDynLine:
-    """A deck line in public order (End A -> End B, after any anchor-first swap)."""
+    """A deck line in public order (End A -> End B, after any anchor-first swap).
+
+    ``torsion_restrained`` is a line restrained in torsion at both ends;
+    ``torsion_restrained_ends`` names every restrained end (``"a"``, ``"b"``,
+    public order). CableDyn solves the torsion of a line restrained at either.
+    """
 
     line_id: int
     end_a: str
@@ -225,6 +255,7 @@ class CableDynLine:
     sections: tuple[CableDynSection, ...]
     torsion_restrained: bool
     reversed_by_parser: bool
+    torsion_restrained_ends: frozenset[str] = frozenset()
 
     @property
     def n_elements(self) -> int:
@@ -353,16 +384,207 @@ def _option_record(row: Sequence[str]) -> tuple[str, str] | None:
     return None
 
 
+#: A decimal real as CableDyn spells one: sign, digits, point, exponent e/E/d/D.
+_REAL = re.compile(r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eEdD][+-]?\d+)?")
+_INTEGER = re.compile(r"[+-]?\d+")
+_NOT_FINITE = ("inf", "infinity", "nan")
+#: Tokens: a quoted text (it may hold spaces) or a run of non-space characters.
+_TOKEN = re.compile(r"\"[^\"]*\"|'[^']*'|\S+")
+
+
+def _unquote(token: str) -> str:
+    if len(token) >= 2 and token[0] == token[-1] and token[0] in "\"'":
+        return token[1:-1]
+    return token.replace('"', "").replace("'", "")
+
+
+def _numeric_shape(token: str) -> bool:
+    """CableDyn's test of a number token (the header rows have none)."""
+    word = token[1:] if token[:1] in "+-" else token
+    return bool(_REAL.fullmatch(token)) or word.casefold() in _NOT_FINITE
+
+
 def _float(token: str, what: str, path: Path) -> float:
-    try:
-        value = float(token)
-    except ValueError:
-        raise CableSchemaError(
-            f"{path.name}: {what} is not numeric: {token!r}"
-        ) from None
+    if not _REAL.fullmatch(token):
+        word = token[1:] if token[:1] in "+-" else token
+        if word.casefold() in _NOT_FINITE:
+            raise CableSchemaError(f"{path.name}: {what} is not finite: {token!r}")
+        raise CableSchemaError(f"{path.name}: {what} is not numeric: {token!r}")
+    value = float(token.replace("d", "e").replace("D", "e"))
     if not math.isfinite(value):
         raise CableSchemaError(f"{path.name}: {what} is not finite: {token!r}")
     return value
+
+
+def _int(token: str, what: str, path: Path) -> int:
+    if not _INTEGER.fullmatch(token):
+        raise CableSchemaError(f"{path.name}: {what} is not an integer: {token!r}")
+    return int(token)
+
+
+def _bars(token: str, what: str, path: Path, most: int) -> list[float]:
+    """The ``|``-separated numbers of one column (at most ``most`` of them)."""
+    parts = token.split("|")
+    if len(parts) > most:
+        raise CableSchemaError(
+            f"{path.name}: {what} {token!r} has {len(parts)} '|'-separated parts, "
+            f"at most {most}"
+        )
+    return [_float(part, what, path) for part in parts]
+
+
+def _ei_column(token: str, name: str, path: Path) -> tuple[float, float, float]:
+    """``EI``, bending damping ``Bb`` and mass-proportional ``alpha`` of the
+    ``EI`` column: ``EI``, ``EI|Bb``, ``EI|-zeta|f`` or ``EI|-zeta|f1|f2``
+    (CableDyn ``doc/driver_format.md``, LINE TYPES)."""
+    what = f"LINE TYPES EI column of {name}"
+    parts = _bars(token, what, path, 4)
+    ei, bb, alpha = parts[0], 0.0, 0.0
+    if ei < 0.0:
+        raise CableSchemaError(f"{path.name}: {what} {token!r}: EI must be >= 0")
+    if len(parts) == 2:
+        if parts[1] < 0.0:
+            raise CableSchemaError(
+                f"{path.name}: {what} {token!r}: a negative bending damping is -zeta "
+                "and needs the frequency it holds at, EI|-zeta|f"
+            )
+        bb = parts[1]
+    elif len(parts) >= 3:
+        zeta, frequencies = -parts[1], parts[2:]
+        if not 0.0 < zeta < 1.0 or min(frequencies) <= 0.0:
+            raise CableSchemaError(
+                f"{path.name}: {what} {token!r}: EI|-zeta|f[|f2] takes a damping ratio "
+                "0 < zeta < 1, written negative, and positive frequencies [Hz]"
+            )
+        if len(parts) == 3:
+            bb = zeta * ei / (math.pi * frequencies[0])
+        else:
+            f1, f2 = frequencies
+            bb = zeta * ei / (math.pi * (f1 + f2))
+            alpha = 4.0 * math.pi * zeta * f1 * f2 / (f1 + f2)
+    if (len(parts) >= 3 or bb > 0.0) and not ei > 0.0:
+        raise CableSchemaError(
+            f"{path.name}: LINE TYPES {name}: bending damping (EI|Bb) needs a "
+            "finite-EI cable (EI > 0)"
+        )
+    return ei, bb, alpha
+
+
+def _plain_ea(token: str, path: Path, name: str) -> float | None:
+    """The ``EA`` of a linear-elastic type; ``None`` for the viscoelastic
+    (``Es|Ed``, ``Es|alphaMBL|vbeta``) and Syrope (``SYROPE:file|a|b``) forms."""
+    if "|" in token or token.casefold().startswith("syrope:"):
+        return None
+    return _float(token, f"EA of {name}", path)
+
+
+def _data_rows(rows: list[list[str]]) -> list[list[str]]:
+    """Rows of a table section with a number token: CableDyn skips the others
+    (column-name and units rows), wherever they stand."""
+    return [row for row in rows if any(_numeric_shape(token) for token in row)]
+
+
+def _end_token(token: str, path: Path, line_id: int) -> str:
+    end = token.casefold()
+    if end in ("a", "enda", "end_a"):
+        return "a"
+    if end in ("b", "endb", "end_b"):
+        return "b"
+    raise CableSchemaError(
+        f"{path.name}: END CONNECTIONS End of line {line_id} must be A or B: {token!r}"
+    )
+
+
+def _torsion_restrained(token: str, path: Path, line_id: int) -> bool:
+    """``TorsStiffness``: Free/Zero/0 (none), Rigid/Infinity/Inf or a stiffness."""
+    word = token.casefold()
+    if word in ("free", "zero", "none", "-"):
+        return False
+    if word in ("rigid", "infinity", "inf"):
+        return True
+    value = _float(token, f"END CONNECTIONS TorsStiffness of line {line_id}", path)
+    if value < 0.0:
+        raise CableSchemaError(
+            f"{path.name}: END CONNECTIONS TorsStiffness of line {line_id} must be "
+            f"Free, Rigid or a stiffness >= 0: {token!r}"
+        )
+    return value > 0.0
+
+
+#: Token counts of a LINE TYPES row: 10 or 14 columns, either followed by the
+#: VIV columns Cl or Cl dF cF.
+_LINE_TYPE_COLUMNS = (10, 11, 13, 14, 15, 17)
+
+
+def _line_type(row: list[str], path: Path) -> CableDynLineType:
+    """One LINE TYPES row by position, as CableDyn reads it:
+    ``Name Diam MassDenInAir EA BA/-zeta EI [GAs GJ Irt Irn] Cd_n Cd_t Ca_n Ca_t
+    [Cl [dF cF]]``."""
+    name = row[0]
+    if len(row) not in _LINE_TYPE_COLUMNS:
+        raise CableSchemaError(
+            f"{path.name}: LINE TYPES row {name!r} has {len(row)} columns; CableDyn "
+            "reads 10 (Name Diam MassDenInAir EA BA/-zeta EI Cd_n Cd_t Ca_n Ca_t) "
+            "or 14 (Name Diam MassDenInAir EA BA/-zeta EI GAs GJ Irt Irn Cd_n Cd_t "
+            "Ca_n Ca_t), either followed by Cl [dF cF] (11, 13, 15 or 17)"
+        )
+    # The plain numeric columns, named by position (BA may hold Bs|Bd).
+    finite_ei_row = len(row) >= 14
+    names = (["GAs", "GJ", "Irt", "Irn"] if finite_ei_row else []) + [
+        "Cd_n",
+        "Cd_t",
+        "Ca_n",
+        "Ca_t",
+        "Cl",
+        "dF",
+        "cF",
+    ]
+    for column, label in zip(row[6:], names, strict=False):
+        if label not in ("GJ", "Irn"):
+            _float(column, f"{label} of {name}", path)
+    ea = _plain_ea(row[3], path, name)
+    ei, bb, alpha = _ei_column(row[5], name, path)
+    gj: float | None = None
+    coupling = torsional_damping = 0.0
+    polar_inertia: float | None = None
+    gj_token: str | None = None
+    if finite_ei_row:
+        gj_token = row[7]
+        what = f"LINE TYPES GJ column of {name}"
+        parts = _bars(gj_token, what, path, 3)
+        gj = parts[0]
+        coupling = parts[1] if len(parts) > 1 else 0.0
+        torsional_damping = parts[2] if len(parts) > 2 else 0.0
+        polar_inertia = _float(row[9], f"Irn of {name}", path)
+        if coupling != 0.0 and not (
+            ei > 0.0 and ea is not None and gj > 0.0 and ea * gj > coupling**2
+        ):
+            raise CableSchemaError(
+                f"{path.name}: LINE TYPES {name}: torque-tension coupling (GJ|K) "
+                "needs a finite-EI, linear-elastic cable with GJ > 0 and K^2 < EA GJ"
+            )
+        if torsional_damping != 0.0 and not (
+            ei > 0.0 and gj > 0.0 and polar_inertia > 0.0
+        ):
+            raise CableSchemaError(
+                f"{path.name}: LINE TYPES {name}: torsional damping (GJ|K|Bt) needs a "
+                "finite-EI cable with GJ > 0 and Irn > 0"
+            )
+    return CableDynLineType(
+        name=name,
+        diameter_m=_float(row[1], f"Diam of {name}", path),
+        mass_kg_m=_float(row[2], f"mass of {name}", path),
+        ea_N=ea,
+        ei_Nm2=ei,
+        gj_Nm2=gj,
+        bending_damping_Nm2s=bb,
+        mass_damping_1_s=alpha,
+        torque_tension_coupling_Nm=coupling,
+        torsional_damping=torsional_damping,
+        polar_inertia_kg_m=polar_inertia,
+        ei_token=row[5],
+        gj_token=gj_token,
+    )
 
 
 def _deck_blocks(path: Path) -> dict[str, list[list[str]]]:
@@ -385,27 +607,27 @@ def _deck_blocks(path: Path) -> dict[str, list[list[str]]]:
             continue
         text = _strip_comment(line)
         if text:
-            blocks[current].append(text.replace('"', " ").replace("'", " ").split())
+            # A quoted token counts once, spaces and all, as in CableDyn;
+            # stray quotes elsewhere are dropped.
+            blocks[current].append([_unquote(token) for token in _TOKEN.findall(text)])
     return blocks
-
-
-def _table(
-    rows: list[list[str]], path: Path, section: str
-) -> tuple[list[str], list[list[str]]]:
-    """Header names (case-folded) and data rows; the units row is dropped."""
-    if not rows:
-        raise CableSchemaError(f"{path.name}: deck section {section} is empty")
-    header = [name.casefold() for name in rows[0]]
-    data = [row for row in rows[1:] if not row[0].startswith("(")]
-    return header, data
 
 
 def read_cabledyn_deck(path: str | Path) -> CableDynDeck:
     """Read line types, lines, sections, end connections, options and outputs.
 
+    The tables are read by position, as CableDyn reads them: a row without a
+    number token is a column-name or units row and is skipped, and the token
+    count selects the row form (LINE TYPES 10, 11, 13, 14, 15 or 17 columns;
+    POINTS 5 or 9; LINES 3, 4 or the stock 7; SECTIONS 4; END CONNECTIONS 6,
+    10 or 11). The ``EI`` column may carry bending damping (``EI|Bb``,
+    ``EI|-zeta|f``, ``EI|-zeta|f1|f2``) and the ``GJ`` column of a 14-column
+    row torque-tension coupling and torsional damping (``GJ|K``,
+    ``GJ|K|Bt``); :class:`CableDynLineType` keeps them.
+
     Applies CableDyn's anchor-first swap (a line whose ``NodeA`` is ``Fixed`` and
-    whose ``NodeB`` moves is reversed, with its sections), so node 1 is End A
-    as in every output file.
+    whose ``NodeB`` moves is reversed, with its sections and end connections),
+    so node 1 is End A as in every output file.
     """
     deck_path = Path(path)
     if not deck_path.is_file():
@@ -415,90 +637,89 @@ def read_cabledyn_deck(path: str | Path) -> CableDynDeck:
         if required not in blocks:
             raise CableSchemaError(f"{deck_path.name}: no {required.upper()} section")
 
-    header, rows = _table(blocks["line types"], deck_path, "LINE TYPES")
-    for column in ("typename", "diam", "massdeninair", "ea", "ei"):
-        if column not in header:
-            raise CableSchemaError(
-                f"{deck_path.name}: LINE TYPES lacks column {column!r}; found {header}"
-            )
     line_types: dict[str, CableDynLineType] = {}
-    for row in rows:
-        values = dict(zip(header, row, strict=False))
-        try:
-            ea: float | None = float(values["ea"])
-        except ValueError:
-            ea = None  # viscoelastic or Syrope constitutive token
-        gj_token = values.get("gj")
-        name = values["typename"]
-        line_types[name.casefold()] = CableDynLineType(
-            name=name,
-            diameter_m=_float(values["diam"], f"Diam of {name}", deck_path),
-            mass_kg_m=_float(values["massdeninair"], f"mass of {name}", deck_path),
-            ea_N=ea,
-            ei_Nm2=_float(values["ei"], f"EI of {name}", deck_path),
-            gj_Nm2=None if gj_token is None else _float(gj_token, "GJ", deck_path),
-        )
+    for row in _data_rows(blocks["line types"]):
+        line_type = _line_type(row, deck_path)
+        key = line_type.name.casefold()
+        if key in line_types:
+            raise CableSchemaError(
+                f"{deck_path.name}: LINE TYPES defines {line_type.name!r} twice"
+            )
+        line_types[key] = line_type
+    if not line_types:
+        raise CableSchemaError(f"{deck_path.name}: LINE TYPES has no data rows")
 
     point_types: dict[str, str] = {}
-    if "points" in blocks:
-        p_header, p_rows = _table(blocks["points"], deck_path, "POINTS")
-        if "id" not in p_header or not ({"type", "attachment"} & set(p_header)):
-            raise CableSchemaError(f"{deck_path.name}: POINTS needs ID and Type")
-        type_column = "type" if "type" in p_header else "attachment"
-        for row in p_rows:
-            values = dict(zip(p_header, row, strict=False))
-            point_types[values["id"]] = values[type_column].casefold()
-
-    l_header, l_rows = _table(blocks["lines"], deck_path, "LINES")
-    seven_column = "linetype" in l_header
-    sections_by_line: dict[int, list[CableDynSection]] = {}
-    if "sections" in blocks:
-        s_header, s_rows = _table(blocks["sections"], deck_path, "SECTIONS")
-        for column in ("lineid", "linetype", "length", "numsegs"):
-            if column not in s_header:
-                raise CableSchemaError(f"{deck_path.name}: SECTIONS lacks {column!r}")
-        for row in s_rows:
-            values = dict(zip(s_header, row, strict=False))
-            sections_by_line.setdefault(int(values["lineid"]), []).append(
-                CableDynSection(
-                    line_type=values["linetype"],
-                    length_m=_float(values["length"], "section Length", deck_path),
-                    n_segments=int(values["numsegs"]),
-                )
+    point_rows = _data_rows(blocks.get("points", []))
+    if "points" in blocks and not point_rows:
+        raise CableSchemaError(f"{deck_path.name}: POINTS has no data rows")
+    for row in point_rows:
+        if len(row) not in (5, 9):
+            raise CableSchemaError(
+                f"{deck_path.name}: POINTS row {row[0]!r} has {len(row)} columns; "
+                "CableDyn reads 5 (ID Type X Y Z) or 9 (ID Type X Y Z Mass Vol CdA Ca)"
             )
-    torsion_ends: dict[int, set[str]] = {}
-    if "end connections" in blocks:
-        e_header, e_rows = _table(
-            blocks["end connections"], deck_path, "END CONNECTIONS"
+        point_types[row[0]] = row[1].casefold()
+
+    sections_by_line: dict[int, list[CableDynSection]] = {}
+    for row in _data_rows(blocks.get("sections", [])):
+        if len(row) != 4:
+            raise CableSchemaError(
+                f"{deck_path.name}: SECTIONS row has {len(row)} columns; CableDyn "
+                "reads 4 (LineID LineType Length NumSegs)"
+            )
+        sections_by_line.setdefault(
+            _int(row[0], "SECTIONS LineID", deck_path), []
+        ).append(
+            CableDynSection(
+                line_type=row[1],
+                length_m=_float(row[2], "section Length", deck_path),
+                n_segments=_int(row[3], "section NumSegs", deck_path),
+            )
         )
-        if "torsstiffness" in e_header:
-            for row in e_rows:
-                values = dict(zip(e_header, row, strict=False))
-                token = values.get("torsstiffness", "none").casefold()
-                if token not in ("none", "-", "0", "0.0"):
-                    torsion_ends.setdefault(int(values["lineid"]), set()).add(
-                        values["end"].casefold()
-                    )
+    torsion_ends: dict[int, set[str]] = {}
+    for row in _data_rows(blocks.get("end connections", [])):
+        if len(row) not in (6, 10, 11):
+            raise CableSchemaError(
+                f"{deck_path.name}: END CONNECTIONS row has {len(row)} columns; "
+                "CableDyn reads 6 (LineID End Stiffness EzX EzY EzZ), or 10 or 11 "
+                "with the torsion columns (... TorsStiffness NxX NxY NxZ [Pretwist])"
+            )
+        line_id = _int(row[0], "END CONNECTIONS LineID", deck_path)
+        end = _end_token(row[1], deck_path, line_id)
+        if len(row) >= 10 and _torsion_restrained(row[6], deck_path, line_id):
+            torsion_ends.setdefault(line_id, set()).add(end)
     lines: dict[int, CableDynLine] = {}
-    for row in l_rows:
-        values = dict(zip(l_header, row, strict=False))
-        line_id = int(values["id"])
-        if seven_column:
-            end_a, end_b = values.get("attacha", ""), values.get("attachb", "")
+    for row in _data_rows(blocks["lines"]):
+        line_id = _int(row[0], "LINES ID", deck_path)
+        if line_id in lines:
+            raise CableSchemaError(
+                f"{deck_path.name}: LINES lists line {line_id} twice"
+            )
+        if len(row) == 7:
+            # Stock form: ID LineType AttachA AttachB UnstrLen NumSegs Outputs.
+            end_a, end_b, outputs = row[2], row[3], row[6]
             sections = [
                 CableDynSection(
-                    line_type=values["linetype"],
-                    length_m=_float(values["unstrlen"], "UnstrLen", deck_path),
-                    n_segments=int(values["numsegs"]),
+                    line_type=row[1],
+                    length_m=_float(row[4], "UnstrLen", deck_path),
+                    n_segments=_int(row[5], "NumSegs", deck_path),
                 )
             ]
             if line_id in sections_by_line:
                 raise CableSchemaError(
                     f"{deck_path.name}: line {line_id} has a 7-column row and SECTIONS"
                 )
-        else:
-            end_a, end_b = values.get("nodea", ""), values.get("nodeb", "")
+        elif len(row) in (3, 4):
+            end_a, end_b = row[1], row[2]
+            outputs = row[3] if len(row) == 4 else "-"
             sections = sections_by_line.get(line_id, [])
+        else:
+            raise CableSchemaError(
+                f"{deck_path.name}: LINES row of line {line_id} has {len(row)} "
+                "columns; CableDyn reads 3 (ID NodeA NodeB), 4 (+Outputs) or the "
+                "stock 7 (ID LineType AttachA AttachB UnstrLen NumSegs Outputs)"
+            )
         if not sections:
             raise CableSchemaError(f"{deck_path.name}: line {line_id} has no sections")
         for sec in sections:
@@ -511,24 +732,31 @@ def read_cabledyn_deck(path: str | Path) -> CableDynDeck:
                 raise CableSchemaError(
                     f"{deck_path.name}: invalid section of {line_id}"
                 )
+        finite_ei = any(
+            line_types[sec.line_type.casefold()].ei_Nm2 > 0.0 for sec in sections
+        )
         type_a = point_types.get(end_a, "")
         type_b = point_types.get(end_b, "")
         swap = type_a == "fixed" and (
             type_b in _MOVING_POINTS
             or type_b.startswith("body")
             or type_b.startswith("turbine")
+            or (finite_ei and re.fullmatch(r"r\d+[ab]", end_b.casefold()) is not None)
         )
+        ends = torsion_ends.get(line_id, set())
         if swap:
             end_a, end_b = end_b, end_a
             sections = sections[::-1]
+            ends = {"b" if end == "a" else "a" for end in ends}
         lines[line_id] = CableDynLine(
             line_id=line_id,
             end_a=end_a,
             end_b=end_b,
-            outputs=values.get("outputs", "-"),
+            outputs=outputs,
             sections=tuple(sections),
-            torsion_restrained=torsion_ends.get(line_id, set()) >= {"a", "b"},
+            torsion_restrained=ends >= {"a", "b"},
             reversed_by_parser=swap,
+            torsion_restrained_ends=frozenset(ends),
         )
 
     records = [
@@ -540,9 +768,15 @@ def read_cabledyn_deck(path: str | Path) -> CableDynDeck:
     options: dict[str, str] = {}
     for key, value in records:
         options[key] = value
+    # A row whose first token is END closes the channel list (stock decks).
+    output_rows = blocks.get("outputs", [])
+    stop = next(
+        (i for i, row in enumerate(output_rows) if row[0].casefold() == "end"),
+        len(output_rows),
+    )
     channels = tuple(
         token
-        for row in blocks.get("outputs", [])
+        for row in output_rows[:stop]
         for token in " ".join(row).replace(",", " ").split()
     )
     defaults = []
@@ -1676,6 +1910,24 @@ def read_cabledyn_sections(
             f"line {line_id} is restrained in torsion; the material frame needs "
             f"Twist{line_id}N<J> channels at the nodes bracketing every section"
         )
+    coupled = sorted(
+        {
+            sec.line_type
+            for sec in line.sections
+            if deck_obj.line_type(sec.line_type).torque_tension_coupling_Nm != 0.0
+        }
+    )
+    if coupled and line.torsion_restrained_ends and not twist_available:
+        # Solved in torsion, a coupled line twists as it stretches
+        # (Twist = -sum (K/GJ)(l - L) with one end free): the twist-free
+        # frame would miss it.
+        raise CableSchemaError(
+            f"line {line_id} couples torque and tension (GJ|K of {', '.join(coupled)}) "
+            "and is restrained in torsion at End "
+            f"{' and '.join(sorted(line.torsion_restrained_ends)).upper()}: its "
+            "material twist follows the stretch, so the material frame needs "
+            f"Twist{line_id}N<J> channels at the nodes bracketing every section"
+        )
 
     # Main-table column plan.
     main_cols: list[int] = [0]
@@ -2218,8 +2470,8 @@ def section_channels(
     For every section: ``L<L>N<J>Dec``/``Azi`` on the spline window,
     ``Ten<L>N<J>`` and (``positions``) ``L<L>N<J>p{x,y,z}`` at the two bracketing
     nodes, ``Curv<L>N<J>`` there for the consistency check, and
-    ``Twist``/``Torq`` on a line restrained in torsion. With these channels
-    alone use ``frame="section"``; the default ``frame="arc"`` also needs the
+    ``Twist``/``Torq`` on a line restrained in torsion at either end. With these
+    channels alone use ``frame="section"``; the default ``frame="arc"`` also needs the
     ``p`` flag of the line (node positions from End A to the section).
     """
     deck_obj = deck if isinstance(deck, CableDynDeck) else read_cabledyn_deck(deck)
@@ -2245,7 +2497,7 @@ def section_channels(
             if positions:
                 for axis in "xyz":
                     add(f"L{line_id}N{node}p{axis}")
-            if line.torsion_restrained:
+            if line.torsion_restrained_ends:
                 add(f"Twist{line_id}N{node}")
                 add(f"Torq{line_id}N{node}")
     return tuple(names)

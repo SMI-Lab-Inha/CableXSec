@@ -450,6 +450,30 @@ All notable changes to CableXSec are recorded in this file. The format follows
   `.elements.out` is no longer refused: the files show whether the mesh was refined. Real
   CableDyn 0.4.2 output of the refined run is in `tests/data/cabledyn/lw24r.*`; from the refined
   positions the curvature meets every `Curv` channel within the default 5 %.
+- `read_cabledyn_deck` reads the LINE TYPES tokens of CableDyn 0.4.x: `GJ|K` and `GJ|K|Bt`
+  (torque–tension coupling and torsional damping, CableDyn 0.4.0) in the `GJ` column, and
+  `EI|Bb`, `EI|-zeta|f` and `EI|-zeta|f1|f2` (bending and Rayleigh damping) in the `EI` column.
+  It rejected them as "not numeric", so no deck using them could be read. The line type keeps
+  the numeric `EI` and `GJ` and the extra parts as CableDyn resolves them
+  (`bending_damping_Nm2s`, `mass_damping_1_s`, `torque_tension_coupling_Nm`,
+  `torsional_damping`, `polar_inertia_kg_m`, and the columns as written in `ei_token` and
+  `gj_token`), with CableDyn's checks (`0 < ζ < 1`, positive frequencies, damping and coupling
+  only on a finite-EI type, `K² < EA·GJ`). The tables are now read by position, as CableDyn
+  reads them, instead of by header name: a row without a number token is a header or units
+  row, and the token count selects the row form. An 11-column LINE TYPES row is the 10 columns
+  and the VIV `Cl`, so a header naming its last column `GJ` no longer turns `Cl` into a `GJ`
+  (CableDyn reads `GJ` only from the 14-column row), and stock-MoorDyn headers (`Mass/m`,
+  `Cd Ca CdAx CaAx`) read. END CONNECTIONS `TorsStiffness` `Free`, `Zero` or `0` now leaves the
+  end free in torsion (any token but `none`, `-` and `0` restrained it, so a deck with `Free`
+  was refused for want of `Twist` channels), `EndA`/`End_A` name End A, and the restrained ends
+  follow the anchor-first swap (`CableDynLine.torsion_restrained_ends`). A finite-EI line from
+  a `Fixed` point to a rod end is swapped as CableDyn swaps it, an `END` row closes the OUTPUTS
+  list, a quoted name may hold spaces, exponents may be written with `D`, and a duplicate line
+  type or line id is refused. A line solved in torsion whose type couples torque and tension
+  twists as it stretches, so `read_cabledyn_sections` needs its `Twist` channels even when only
+  one end is restrained, and `section_channels` lists `Twist`/`Torq` for a line restrained at
+  either end. `tests/data/cabledyn/lw24g.*` is a CableDyn 0.4.2 run of a deck with these
+  tokens.
 - `read_cabledyn_sections` closes every output file it reads. The per-line `.p.out` and
   `.t.out` readers were left open after a read (and after a failed one) until garbage
   collection, which raised `ResourceWarning`. The files of one run must now also end on the same

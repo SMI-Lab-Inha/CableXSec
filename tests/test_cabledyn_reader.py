@@ -12,7 +12,9 @@ tangents; development build 4b94321), ``lw128_v010`` of the v0.1.0 driver
 on the same deck (chord tangents), ``lw24`` of the v0.1.0 driver (no
 tangent channels) and ``lw24r`` of the CableDyn 0.4.2 driver (development
 build 4b94321) on the ``lw24`` deck (1 s, tangent channels), whose static
-solve (``tensile_safety True``) now refines the 24 deck elements to 43.
+solve (``tensile_safety True``) now refines the 24 deck elements to 43, and
+``lw24g`` of the same build on that deck written with the 0.4.x LINE TYPES
+tokens (damping, ``GJ|K|Bt``, End A restrained in torsion).
 """
 
 from __future__ import annotations
@@ -1020,3 +1022,92 @@ def test_deck_node_numberings_must_agree(tmp_path):
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     with pytest.raises(CableSchemaError, match="DeckNode numberings of line 1 differ"):
         read_cabledyn_sections(root, deck, {"sag": 58.4})
+
+
+# --------------------------------------------------------------------------- #
+# CableDyn 0.4.x LINE TYPES tokens                                            #
+# --------------------------------------------------------------------------- #
+def _without_twist(tmp_path, *, coupling=True):
+    """Copy of the ``lw24g`` run without its ``Twist`` channels."""
+    for suffix in ("Line1.p.out", "Line1.t.out", "static.out", "elements.out"):
+        name = f"lw24g.{suffix}"
+        (tmp_path / name).write_bytes((DATA / name).read_bytes())
+    rows = (DATA / "lw24g.out").read_text(encoding="utf-8").splitlines()
+    keep = [
+        i for i, name in enumerate(rows[1].split("\t")) if not name.startswith("Twist")
+    ]
+    (tmp_path / "lw24g.out").write_text(
+        "\n".join(
+            [
+                rows[0],
+                *("\t".join(row.split("\t")[i] for i in keep) for row in rows[1:]),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    text = (DATA / "lw24g.dat").read_text(encoding="utf-8")
+    if not coupling:
+        text = text.replace("1.5e4|2.0e3|", "1.5e4|0|")
+    (tmp_path / "lw24g.dat").write_text(text, encoding="utf-8")
+    return tmp_path / "lw24g", tmp_path / "lw24g.dat"
+
+
+@pytest.mark.full_scale
+def test_real_cabledyn_run_with_damped_coupled_line_types(tmp_path):
+    """``lw24g``: the ``lw24`` deck in the grammar of CableDyn 0.4.x.
+
+    Rayleigh bending damping ``EI|-zeta|f1|f2`` and ``EI|Bb``, 14-column rows
+    with ``GJ|K|Bt`` (``K`` 2 kN m), End A restrained in torsion (``EndA``,
+    ``TorsStiffness Rigid``), End B free, and an ``END`` row in OUTPUTS. The
+    CableDyn 0.4.2 driver (development build 4b94321) read and ran it for
+    1 s; restrained at one end, the coupling twists the line as it stretches.
+    """
+    deck = read_cabledyn_deck(DATA / "lw24g.dat")
+    bare, buoy = deck.line_type("bare"), deck.line_type("buoy")
+    assert (bare.ei_Nm2, buoy.ei_Nm2) == (1.99e4, 1.99e4)
+    assert bare.bending_damping_Nm2s == pytest.approx(0.02 * 1.99e4 / (math.pi * 2.2))
+    assert bare.mass_damping_1_s == pytest.approx(4 * math.pi * 0.02 * 0.4 / 2.2)
+    assert (buoy.bending_damping_Nm2s, buoy.mass_damping_1_s) == (500.0, 0.0)
+    assert (bare.gj_Nm2, bare.torque_tension_coupling_Nm, bare.torsional_damping) == (
+        1.5e4,
+        2.0e3,
+        -0.01,
+    )
+    assert (buoy.torsional_damping, buoy.polar_inertia_kg_m) == (20.0, 0.63)
+    line = deck.line(1)
+    assert line.torsion_restrained_ends == {"a"} and not line.torsion_restrained
+    assert deck.channels[-1] == "L1N14Azi" and "Ignored1" not in deck.channels
+
+    sections = {"upper": 10.0, "sag": 58.4}
+    read = read_cabledyn_sections(
+        DATA / "lw24g", deck, sections, curvature_check_rtol=0.5
+    )
+    rows = (DATA / "lw24g.out").read_text(encoding="utf-8").splitlines()
+    header = rows[1].split("\t")
+    channel = np.array(
+        [
+            [float(row.split("\t")[header.index(f"Twist1N{j}")]) for j in (9, 10)]
+            for row in rows[2:]
+        ]
+    )
+    weight = (58.4 - 8 * 68.114 / 10) / (68.114 / 10)
+    twist = read.histories["sag"].twist_rad
+    np.testing.assert_allclose(
+        twist, np.radians((1 - weight) * channel[:, 0] + weight * channel[:, 1])
+    )
+    assert np.all(twist < 0.0)
+    # Without the Twist channels the coupled line cannot be read; with K = 0
+    # its twist-free frame is read as for any line restrained at one end.
+    (tmp_path / "k").mkdir()
+    (tmp_path / "plain").mkdir()
+    with pytest.raises(CableSchemaError, match="couples torque and tension"):
+        read_cabledyn_sections(
+            *_without_twist(tmp_path / "k"), sections, curvature_check_rtol=0.5
+        )
+    plain = read_cabledyn_sections(
+        *_without_twist(tmp_path / "plain", coupling=False),
+        sections,
+        curvature_check_rtol=0.5,
+    )
+    assert plain.histories["sag"].twist_rad is None

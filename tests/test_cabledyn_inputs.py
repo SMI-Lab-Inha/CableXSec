@@ -88,7 +88,8 @@ def test_at_least_one_section(tmp_path):
             "--------------------- WIRES ---\n",
             "no LINES",
         ),
-        ("BA EI Cd_n", "BA EX Cd_n", "lacks column 'ei'"),
+        ("1.2 0.1 1.0 0.0\n", "1.2 0.1 1.0 0.0 7 8\n", "'cable' has 12 columns"),
+        ("1.2 0.1 1.0 0.0\n", "1.2 0.1 1.0 0x\n", "Ca_t of cable is not numeric"),
         ("cable 0.2 40.0", "cable abc 40.0", "not numeric"),
         ("cable 0.2 40.0", "cable inf 40.0", "not finite"),
         (
@@ -100,13 +101,17 @@ def test_at_least_one_section(tmp_path):
         (
             "ID Type X Y Z\n(-) (-) (m) (m) (m)\n1 Coupled 0 0 -10\n2 Fixed 10 0 -12\n",
             "",
-            "POINTS is empty",
+            "POINTS has no data rows",
         ),
-        ("ID Type X Y Z", "ID Kind X Y Z", "POINTS needs ID and Type"),
+        ("2 Fixed 10 0 -12\n", "2 Fixed 10 0 -12 0\n", "POINTS row '2' has 6"),
+        ("1 cable 10.0 100\n", "1 cable 10.0 100 5\n", "SECTIONS row has 5"),
+        ("1 cable 10.0 100\n", "1 cable 10.0 1e2\n", "NumSegs is not an integer"),
+        ("1 1 2 pt\n", "1 1 2 pt x\n", "LINES row of line 1 has 5 columns"),
+        ("1 1 2 pt\n", "1 1 2 pt\n1 1 2 pt\n", "lists line 1 twice"),
         (
-            "LineID LineType Length NumSegs",
-            "LineID LineType Length Segs",
-            "SECTIONS lacks 'numsegs'",
+            "--------------------- POINTS ---\n",
+            "cable 0.2 40.0 5e8 0.0 2e4 1.2 0.1 1.0 0.0\n--------------------- POINTS ---\n",
+            "defines 'cable' twice",
         ),
         ("1 cable 10.0 100\n", "2 cable 10.0 100\n", "line 1 has no sections"),
         ("1 cable 10.0 100\n", "1 rope 10.0 100\n", "undefined type"),
@@ -540,8 +545,202 @@ def test_section_history_exports(tmp_path):
         wet.window(0.0, 9.0)
 
 
-def test_non_numeric_axial_stiffness_token(tmp_path):
+@pytest.mark.parametrize("token", ["5.0e8|7.0e8", "5e8|0.2|0.3", "SYROPE:owc.txt|2|3"])
+def test_non_numeric_axial_stiffness_token(tmp_path, token):
     # A viscoelastic or Syrope constitutive token in the EA column.
     path = _deck(tmp_path / "d.dat")
-    _edit(path, "cable 0.2 40.0 500000000.0", "cable 0.2 40.0 visco_table")
+    _edit(path, "cable 0.2 40.0 500000000.0", f"cable 0.2 40.0 {token}")
     assert read_cabledyn_deck(path).line_type("cable").ea_N is None
+    _edit(path, f"cable 0.2 40.0 {token}", "cable 0.2 40.0 visco_table")
+    with pytest.raises(CableSchemaError, match="EA of cable is not numeric"):
+        read_cabledyn_deck(path)
+
+
+_ROW_10 = "cable 0.2 40.0 500000000.0 0.0 20000.0 1.2 0.1 1.0 0.0\n"
+
+
+def _line_types(tmp_path, row):
+    path = _deck(tmp_path / "d.dat")
+    _edit(path, _ROW_10, row)
+    return path
+
+
+@pytest.mark.parametrize(
+    ("ei", "bb", "alpha"),
+    [
+        ("2.0e4", 0.0, 0.0),
+        ("2.0e4|0", 0.0, 0.0),
+        ("2.0e4|1.5e3", 1.5e3, 0.0),
+        ("2.0e4|-0.05|0.5", 0.05 * 2.0e4 / (math.pi * 0.5), 0.0),
+        (
+            "2.0e4|-0.02|0.2|2.0",
+            0.02 * 2.0e4 / (math.pi * 2.2),
+            4.0 * math.pi * 0.02 * 0.2 * 2.0 / 2.2,
+        ),
+        ("2.0D4|1.5D3", 1.5e3, 0.0),
+    ],
+)
+def test_bending_damping_in_the_ei_column(tmp_path, ei, bb, alpha):
+    """``EI|Bb``, ``EI|-zeta|f`` and ``EI|-zeta|f1|f2`` (CableDyn 0.4.x)."""
+    path = _line_types(tmp_path, f"cable 0.2 40.0 5e8 0.0 {ei} 1.2 0.1 1.0 0.0\n")
+    line_type = read_cabledyn_deck(path).line_type("cable")
+    assert line_type.ei_Nm2 == 2.0e4
+    assert line_type.bending_damping_Nm2s == pytest.approx(bb, rel=1e-15)
+    assert line_type.mass_damping_1_s == pytest.approx(alpha, rel=1e-15)
+    assert line_type.ei_token == ei
+    assert line_type.gj_Nm2 is None
+
+
+@pytest.mark.parametrize(
+    ("ei", "match"),
+    [
+        ("2.0e4|-0.05", "needs the frequency"),
+        ("2.0e4|-1.5|0.5", "0 < zeta < 1"),
+        ("2.0e4|-0.05|0.0", "positive frequencies"),
+        ("2.0e4|-0.05|0.2|-1", "positive frequencies"),
+        ("0.0|100", "needs a finite-EI cable"),
+        ("0.0|-0.05|0.5", "needs a finite-EI cable"),
+        ("2e4|1|2|3|4", "5 '\\|'-separated parts, at most 4"),
+        ("-2e4", "EI must be >= 0"),
+        ("2e4|x", "not numeric"),
+    ],
+)
+def test_bending_damping_errors(tmp_path, ei, match):
+    path = _line_types(tmp_path, f"cable 0.2 40.0 5e8 0.0 {ei} 1.2 0.1 1.0 0.0\n")
+    with pytest.raises(CableSchemaError, match=match):
+        read_cabledyn_deck(path)
+
+
+def _row_14(gj, *, ea="5e8", ei="2e4", irn="0.2"):
+    return f"cable 0.2 40.0 {ea} 0.0 {ei} 1.9e8 {gj} 0.1 {irn} 1.2 0.1 1.0 0.0\n"
+
+
+@pytest.mark.parametrize(
+    ("gj", "values"),
+    [
+        ("1.5e4", (1.5e4, 0.0, 0.0)),
+        ("1.5e4|0", (1.5e4, 0.0, 0.0)),
+        ("1.5e4|50.0", (1.5e4, 50.0, 0.0)),
+        ("1.5e4|-50.0|-0.01", (1.5e4, -50.0, -0.01)),
+        ("1.5e4|0|20.0", (1.5e4, 0.0, 20.0)),
+    ],
+)
+def test_coupling_and_torsional_damping_in_the_gj_column(tmp_path, gj, values):
+    """``GJ``, ``GJ|K``, ``GJ|K|Bt`` of the 14-column row (CableDyn 0.4.0)."""
+    line_type = read_cabledyn_deck(_line_types(tmp_path, _row_14(gj))).line_type(
+        "cable"
+    )
+    assert (
+        line_type.gj_Nm2,
+        line_type.torque_tension_coupling_Nm,
+        line_type.torsional_damping,
+    ) == values
+    assert (line_type.ea_N, line_type.ei_Nm2) == (5e8, 2e4)
+    assert line_type.polar_inertia_kg_m == 0.2
+    assert line_type.gj_token == gj
+
+
+@pytest.mark.parametrize(
+    ("row", "match"),
+    [
+        (_row_14("1.5e4|1e7"), "K\\^2 < EA GJ"),
+        (_row_14("1.5e4|50", ei="0.0"), "coupling \\(GJ\\|K\\) needs"),
+        (_row_14("1.5e4|50", ea="5e8|6e8"), "linear-elastic"),
+        (_row_14("0|50"), "GJ > 0"),
+        (_row_14("1.5e4|0|20", irn="0"), "torsional damping \\(GJ\\|K\\|Bt\\)"),
+        (_row_14("1.5e4|1|2|3"), "4 '\\|'-separated parts, at most 3"),
+        (_row_14("1.5e4", irn="x"), "Irn of cable is not numeric"),
+    ],
+)
+def test_gj_column_errors(tmp_path, row, match):
+    with pytest.raises(CableSchemaError, match=match):
+        read_cabledyn_deck(_line_types(tmp_path, row))
+
+
+def test_line_type_columns_are_read_by_position(tmp_path):
+    """CableDyn reads a LINE TYPES row by its token count, not by the header.
+
+    An 11-column row is the 10 columns and the VIV lift coefficient ``Cl``:
+    a header naming the 11th column ``GJ`` does not make it one, and a
+    stock-MoorDyn header (``Mass/m``, ``Cd Ca CdAx CaAx``) reads the same row.
+    """
+    path = _deck(tmp_path / "d.dat")
+    _edit(
+        path,
+        "TypeName Diam MassDenInAir EA BA EI Cd_n Cd_t Ca_n Ca_t\n",
+        "LineType Diam Mass/m EA BA/-zeta EI Cd Ca CdAx CaAx GJ\n",
+    )
+    _edit(path, _ROW_10, _ROW_10.replace(" 0.0\n", " 0.0 0.8\n"))
+    line_type = read_cabledyn_deck(path).line_type("cable")
+    assert line_type.gj_Nm2 is None and line_type.ea_N == 5e8
+    _edit(path, " 0.0 0.8\n", " 0.0 1.0e4|50.0\n")
+    with pytest.raises(CableSchemaError, match="Cl of cable is not numeric"):
+        read_cabledyn_deck(path)
+
+
+def test_quoted_names_and_header_rows_anywhere(tmp_path):
+    path = _deck(tmp_path / "d.dat")
+    _edit(path, _ROW_10, _ROW_10.replace("cable", '"armoured cable"'))
+    _edit(path, "1 cable 10.0 100\n", '(-) (-) (m) (-)\n1 "armoured cable" 10.0 100\n')
+    deck = read_cabledyn_deck(path)
+    assert deck.line(1).sections[0].line_type == "armoured cable"
+    assert deck.line_type("Armoured Cable").ei_Nm2 == 2e4
+
+
+@pytest.mark.parametrize(
+    ("row", "ends"),
+    [
+        ("1 A Rigid 1 0 0 Free 0 1 0\n1 B Rigid 1 0 0 Zero 0 1 0\n", set()),
+        ("1 A Rigid 1 0 0 0 0 1 0\n1 B Rigid 1 0 0 0.0e0 0 1 0 15\n", set()),
+        ("1 EndA Rigid 1 0 0 Inf 0 1 0\n1 End_B Rigid 1 0 0 2.5e3 0 1 0\n", {"a", "b"}),
+        ("1 B Pinned 1 0 0 Infinity 0 1 0 0\n", {"b"}),
+        ("1 A Rigid 1 0 0\n", set()),
+    ],
+)
+def test_end_connection_torsion_tokens(tmp_path, row, ends):
+    """TorsStiffness Free/Zero/0 leaves the end free in torsion (CableDyn)."""
+    path = _deck(tmp_path / "d.dat", torsion=True)
+    _edit(path, "1 A Rigid 1 0 0 Rigid 0 1 0 0\n1 B Rigid 1 0 0 Rigid 0 1 0 0\n", row)
+    line = read_cabledyn_deck(path).line(1)
+    assert line.torsion_restrained_ends == ends
+    assert line.torsion_restrained == (ends == {"a", "b"})
+
+
+@pytest.mark.parametrize(
+    ("row", "match"),
+    [
+        ("1 C Rigid 1 0 0 Rigid 0 1 0\n", "End of line 1 must be A or B"),
+        ("1 A Rigid 1 0 0 -5 0 1 0\n", "TorsStiffness of line 1 must be"),
+        ("1 A Rigid 1 0 0 Rigid 0 1\n", "END CONNECTIONS row has 9 columns"),
+    ],
+)
+def test_end_connection_errors(tmp_path, row, match):
+    path = _deck(tmp_path / "d.dat", torsion=True)
+    _edit(path, "1 A Rigid 1 0 0 Rigid 0 1 0 0\n1 B Rigid 1 0 0 Rigid 0 1 0 0\n", row)
+    with pytest.raises(CableSchemaError, match=match):
+        read_cabledyn_deck(path)
+
+
+def test_anchor_first_swap_also_swaps_the_torsion_ends(tmp_path):
+    path = _deck(tmp_path / "d.dat", torsion=True)
+    _edit(path, "1 1 2 pt\n", "1 2 1 pt\n")
+    _edit(path, "1 B Rigid 1 0 0 Rigid 0 1 0 0\n", "")
+    line = read_cabledyn_deck(path).line(1)
+    assert line.reversed_by_parser
+    assert line.torsion_restrained_ends == {"b"}
+
+
+def test_finite_ei_line_to_a_rod_end_is_swapped(tmp_path):
+    path = _deck(tmp_path / "d.dat")
+    _edit(path, "1 1 2 pt\n", "1 2 R1A pt\n")
+    assert read_cabledyn_deck(path).line(1).reversed_by_parser
+    path = _deck(tmp_path / "d.dat", ei=0.0)
+    _edit(path, "1 1 2 pt\n", "1 2 R1A pt\n")
+    assert not read_cabledyn_deck(path).line(1).reversed_by_parser
+
+
+def test_outputs_end_closes_the_channel_list(tmp_path):
+    path = _deck(tmp_path / "d.dat", channels=["FairTen1", "END", "AnchTen1"])
+    assert read_cabledyn_deck(path).channels == ("FairTen1",)
+    _edit(path, '"FairTen1"\n', '"FairTen1","Ten1N2" Curv1N2\n')
+    assert read_cabledyn_deck(path).channels == ("FairTen1", "Ten1N2", "Curv1N2")
