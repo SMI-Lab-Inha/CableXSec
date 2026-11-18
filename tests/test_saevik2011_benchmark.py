@@ -14,8 +14,10 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
+from dataclasses import replace
 
 import check_saevik2011 as sv
+import numpy as np
 import pytest
 import run_validation
 
@@ -134,3 +136,137 @@ def test_registered_targets_and_results_are_pinned(rows):
     # Former symmetric cap: 1.90 (sectional 1.32).
     assert gj.value == "1.80 (sectional 1.24); static stress 271 MPa"
     assert gj.status == "FAIL"
+
+
+def test_rig_defaults_are_the_registered_rig():
+    rig = sv.sv11_rig()
+    assert (rig.x_anchor_m, rig.free_length_m, rig.rigid_right_m) == (
+        sv.X_ANCHOR_M,
+        sv.FREE_LENGTH_M,
+        sv.RIGID_RIGHT_M,
+    )
+    assert (rig.gap_m, rig.bell_end_m, rig.kappa_b0, rig.kappa_b1) == (
+        sv.GAP_M,
+        sv.BELL_END_M,
+        sv.KAPPA_B0,
+        sv.KAPPA_B1,
+    )
+    assert rig.inlet_bounded and rig.x_rotation_m == 0.0
+    moment, _ei_max, ei_min = sv.backbone(sv.load_cases()[0], sv.MU_DECLARED)
+    default = sv.Beam(moment, ei_min, 500e3)
+    explicit = sv.Beam(moment, ei_min, 500e3, rig=rig)
+    assert (default.lower == explicit.lower).all()
+    assert (default.upper == explicit.upper).all()
+    a = default.solve(math.radians(2.0))[1]
+    b = explicit.solve(math.radians(2.0))[1]
+    assert (a == b).all()
+
+
+def test_rotation_point_only_changes_the_lever_arm():
+    # Turning the rocker about the clamp instead of x = 0 moves the far pin
+    # by the lever-arm ratio, nothing else.
+    moment, _ei_max, ei_min = sv.backbone(sv.load_cases()[0], sv.MU_DECLARED)
+    rig = sv.sv11_rig()
+    turned = sv.Beam(
+        moment, ei_min, 500e3, rig=replace(rig, x_rotation_m=rig.x_anchor_m)
+    )
+    w = turned.solve(math.radians(1.0))[0]
+    lever = turned.x[-1] - rig.x_anchor_m
+    assert w[-1] == pytest.approx(-lever * math.sin(math.radians(1.0)), rel=1e-15)
+
+
+def test_eq88_consistency_favours_the_1p72_m_end():
+    eq = sv.eq88_consistency()
+    # Saevik (2011): 3.9 m at s = 1.72 m and a 16 deg slope; Gjosteen et al.
+    # (2027) the same radius at 1.79 m.
+    assert eq["1.72"]["radius_m"] == pytest.approx(3.90, abs=0.005)
+    assert eq["1.72"]["slope_deg"] == pytest.approx(15.9, abs=0.05)
+    assert eq["1.79"]["radius_m"] == pytest.approx(3.79, abs=0.005)
+    assert eq["1.79"]["slope_deg"] == pytest.approx(17.0, abs=0.05)
+    assert eq["radius_3.9"]["s_m"] == pytest.approx(1.722, abs=5e-4)
+
+
+@needs_numba
+def test_split_rows_are_pinned():
+    rows = {r.ident: r for r in run_validation._saevik_split_rows()}
+    split = rows["SV11-SPLIT"]
+    assert split.target == "stated, not gated"
+    assert split.value == (
+        "(a) median R 1.01 (11 of 14 in band), GJ 1.27; (b) LC 14 R 1.70, GJ "
+        "1.80, largest change against the registered correction below 1e-12; "
+        "registered 1.62 and 1.80, sectional 1.00 and 1.24"
+    )
+    reach = rows["SV11-REACH"]
+    assert reach.value == (
+        "a_max 0.26 and 0.36; R corrected 0.45 and 0.54 (sectional 0.45 and "
+        "0.54); sectional outside the band: LC 4 2.17, LC 7 0.45, LC 8 0.54"
+    )
+    eq = rows["SV11-EQ88"]
+    assert eq.value == (
+        "1.72 m: 3.90 m, 15.9 deg; 1.79 m: 3.79 m, 17.0 deg; 3.9 m at s = 1.722 m"
+    )
+    assert {r.status for r in rows.values()} == {"INFO"}
+
+
+def test_free_inlet_needs_a_node_at_the_entrance():
+    moment, _ei_max, ei_min = sv.backbone(sv.load_cases()[0], sv.MU_DECLARED)
+    rig = replace(sv.sv11_rig(), inlet_bounded=False)  # x_anchor -2.305 m
+    with pytest.raises(ValueError, match="no node at the bellmouth entrance"):
+        sv.Beam(moment, ei_min, 500e3, rig=rig)
+    on_grid = replace(rig, x_anchor_m=-2.3)
+    beam = sv.Beam(moment, ei_min, 500e3, rig=on_grid)
+    inlet = beam.x < -1e-9
+    assert np.isinf(beam.upper[inlet]).all()
+
+
+def test_rig_anchor_sets_the_termination_coordinates():
+    # A rig with another end-fitting position moves the profile coordinates
+    # and the station distances together (the anchor is at the rig's face).
+    case = next(c for c in sv.load_cases() if c.lc == 14)
+    rig = replace(sv.sv11_rig(), x_anchor_m=-3.0, free_length_m=12.875)
+    res = sv.predict_case(case, sv.MU_DECLARED, only=("2.1",), rig=rig)
+    term = res["stations"]["2.1"]["termination"]
+    assert term["termination_applied"] == 1.0
+    assert term["axial_p"] > 0.0
+
+
+def test_setting_changes_clear_the_split_cache(monkeypatch):
+    # split_values is cached by mu only: changing the tendon definition or the
+    # anchor stiffness must drop it together with gate_values.
+    cleared = []
+
+    class Spy:
+        def __init__(self, name):
+            self.name = name
+
+        def cache_clear(self):
+            cleared.append(self.name)
+
+    monkeypatch.setattr(sv, "gate_values", Spy("gate"))
+    monkeypatch.setattr(sv, "split_values", Spy("split"))
+    monkeypatch.setattr(sv, "cable", Spy("cable"))
+    monkeypatch.setattr(sv, "TENDONS", sv.TENDONS)
+    monkeypatch.setattr(sv, "K_ANCHOR_N_M", sv.K_ANCHOR_N_M)
+    sv.use_anchor(None)
+    assert cleared == ["gate", "split"]
+    cleared.clear()
+    sv.use_tendons("round")
+    assert cleared == ["cable", "gate", "split"]
+
+
+def test_held_inlet_keeps_the_contact_zone_curvature():
+    # A station in the held inlet takes the held curvature as its history, so
+    # the normalised shape reproduces the beam's contact-zone curvature.
+    case = next(c for c in sv.load_cases() if c.lc == 14)
+    held = sv.predict_case(
+        case, sv.MU_DECLARED, only=("1.1", "2.1"), variant=sv.TermVariant(inlet="hold")
+    )
+    moment, _ei_max, ei_min = sv.backbone(case, sv.MU_DECLARED)
+    beam = sv.Beam(moment, ei_min, case.tension_N)
+    _w, k = beam.peak_profile(case.angle_range_deg / 2)
+    st = held["stations"]
+    assert st["1.1"]["kappa_peak_termination"] == pytest.approx(
+        np.interp(0.0, beam.x, k), rel=1e-12
+    )
+    assert st["1.1"]["kappa_peak_termination"] != st["1.1"]["kappa_peak"]
+    assert st["2.1"]["kappa_peak_termination"] == st["2.1"]["kappa_peak"]

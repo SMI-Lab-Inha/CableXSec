@@ -4,8 +4,9 @@
 
 On the only published near-termination measurements (Saevik 2011, Gjosteen
 et al. 2027; BENCHMARKS SV11 and T2) the anchored-wire Coulomb correction gives
-1.65-3.4 times the measured ranges, the sectional result 1.03 times. The
-warning changes no number.
+1.6-3.4 times the measured ranges, the sectional result 1.0 times; the
+excess comes from the bellmouth curvature profile, not from the end-fitting
+anchor. The warning changes no number.
 """
 
 from __future__ import annotations
@@ -62,7 +63,15 @@ def test_clamped_termination_warns_for_either_solver(history, solver):
     assert len(caught) == 1
     message = str(caught[0].message)
     assert message == CLAMPED_TERMINATION_WARNING
-    for part in ("upper estimate", "1.65-3.4", "1.03", "SV11", "T2", "Saevik 2011"):
+    for part in (
+        "upper estimate",
+        "1.6-3.4",
+        "1.0 times",
+        "not from the end-fitting anchor",
+        "SV11",
+        "T2",
+        "Saevik 2011",
+    ):
         assert part in message
     assert result.clamp_correction[layer.name]["applied"]
     # Bitwise the same result as without the warning machinery.

@@ -10,6 +10,22 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Added
 
+- Reported rows SV11-SPLIT, SV11-REACH and SV11-EQ88: where the SV11 termination increment
+  comes from. With the bellmouth curvature imposed uniformly from the end-fitting face the
+  end-fitting anchor alone moves the SV11-PLANE median from 1.00 to 1.01 and SV11-GJ from 1.24
+  to 1.27 (registered correction 1.62 and 1.80); with the armour anchored 20 m upstream instead
+  the corrected ranges do not change. The increment is the anchored chain's response to the
+  curvature gradients at the bellmouth contact, with the stuck straight inlet as the anchor, on
+  a curvature field that does not carry the anchoring. At 0.5° and 1° the pipe sticks and the
+  correction is zero (R 0.45, 0.54), so SV11-PLANE cannot pass through any termination
+  correction. Eq. 88 confirms Sævik's bellmouth end (1.72 m: 3.90 m and 15.9°; Gjøsteen et al.'s
+  1.79 m gives 3.79 m and 17.0°). The benchmark page adds the rig, stick and shear-stack
+  sensitivities (`check_saevik2011.py OUTPUT --sensitivity`): the corrected median moves from
+  1.62 to 1.25 when the rocker turns about the end-fitting face, the sectional one by 9 %; with
+  the Yun shear stack cut at the nearest helical layer below (ξ 0.52 → 0.88) the small-angle
+  sectional ratios reach the band. No registered row, input or default is changed; the SV11
+  harness beam takes its rig as a `Rig` value (the registered rig by default).
+
 - Validation rows Z-EI and Z-ID (targets registered before the runs): the four-point loops of
   Zeidan (2025, PhD thesis, Ch. 5) and Zeidan et al. (2026, IJSS 338, 114089) on a 112 mm
   three-core cable (`cables/zeidan2025.yaml`, 75 + 82 armour wires of 3.5 mm, zero tension),

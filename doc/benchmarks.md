@@ -1387,6 +1387,106 @@ coordinates (figures only); the curvature distribution along the pipe; the
 end-fitting position relative to the bellmouth (taken from the rig lengths);
 Sævik and Igland (2002) and Andersen et al. (2001) are not held.
 
+**Where the termination increment comes from (SV11-SPLIT, SV11-REACH,
+SV11-EQ88; reported, not gated).** The registered correction anchors the
+armour at the end-fitting face and gives each station the beam's peak
+curvature profile as the shape of a proportional field. Two variants of the
+same solver separate the end fitting from the profile
+(`check_saevik2011.split_values`; computed after the registered rows, no
+target):
+
+| Variant | SV11-PLANE median R (in band) | SV11-GJ |
+| --- | --- | --- |
+| sectional (no correction) | 1.00 (11 of 14) | 1.24 |
+| registered correction | 1.62 (3 of 14) | 1.80 |
+| end-fitting anchor alone: uniform curvature from the face | 1.01 (11 of 14) | 1.27 |
+| no end fitting: anchor 20 m upstream of the face, profile unchanged (LC 14) | LC 14 1.70 (registered 1.70) | 1.80 |
+
+- *The end fitting contributes about 1 %.* Even with the bellmouth curvature
+  imposed uniformly from the face, the anchor 1.7–5.2 m from the stations
+  moves the median by +0.011 and the GJ ratio by +0.024. With the end
+  fitting removed from the solved chain the corrected ranges do not change
+  (largest station change below 1e-12). The SV11 rows therefore do not test
+  the end-fitting mechanics of the correction at all.
+- *The increment is a curvature-gradient effect.* The pipe in the straight
+  inlet carries at most 5 % of the bellmouth curvature, so its wires stay
+  stuck and the inlet acts as an anchor at the start of the curved section;
+  with the inlet curvature set to zero the result is nearly the same (table
+  below). Across the contact zone the curvature rises from 0.008 to
+  0.146 1/m within 0.7 m and falls back to 0.008 1/m within the next 0.8 m
+  (LC 14), against a clamp boundary layer of 1.86 m at the largest slip
+  demand `a = κ/κ_c ≈ 27`; the anchored-wire law amplifies the peak friction
+  force by about `1 + 0.54 √a ≈ 3.8` there. Holding the inlet at the
+  curvature of the start of the curved section (removing the step, not the
+  contact) leaves the median at 1.61 and lowers GJ only to 1.57 (table
+  below): the step at the start of the curved section is not the main source;
+  the gradients across the contact zone are.
+- *The beam does not carry it.* The profile is taken from a beam with the
+  sectional backbone, so the wire forces that the anchored chain builds next
+  to the inlet never stiffen the pipe there. The consistent two-way solution
+  (TC-1 to TC-3 above) spreads the bend into the bellmouth and lowers the
+  along-wire median from 3.09 to 1.18 and GJ from 4.2 to 1.46, still outside
+  both gates.
+- *SV11-PLANE cannot be reached by a termination correction.* At 0.5° and
+  1° the slip demand of the correction stays at a_max 0.26 and 0.36: the
+  pipe sticks, the correction is zero and R = 0.45 and 0.54, outside
+  [0.70, 1.43] whatever the correction does. Twelve of 14 then requires every
+  other case in the band, including LC 4 (250 kN, 17 MPa), whose sectional
+  ratio is already 2.17 (corrected 3.59). Passing needs the small-angle
+  (stick) curvature and the low-pressure cases fixed first; both are
+  section and beam questions, not termination ones.
+- *Rig and stick sensitivities* (`check_saevik2011.py OUTPUT --sensitivity`,
+  none registered):
+
+| Variant | median R corrected (in band) | sectional (in band) | GJ corrected / sectional |
+| --- | --- | --- | --- |
+| registered | 1.62 (3) | 1.00 (11) | 1.80 / 1.24 |
+| gap 10 mm | 1.62 (2) | 0.96 (10) | 1.70 / 1.24 |
+| bellmouth end 1.79 m | 1.62 (3) | 1.00 (11) | 1.80 / 1.24 |
+| rotation at the end-fitting face | 1.25 (6) | 1.09 (11) | 1.50 / 1.26 |
+| inlet curvature zero | 1.61 (3) | 1.00 (11) | 1.86 / 1.24 |
+| inlet held at the curved-start curvature | 1.61 (3) | 1.00 (11) | 1.57 / 1.24 |
+| rigid stick in the correction | 2.30 (2) | 1.00 (11) | 2.24 / 1.24 |
+| shear stack to the nearest helix | 2.17 (3) | 1.19 (12) | 2.07 / 1.27 |
+
+  The correction is fragile: turning the rocker about the end-fitting face
+  instead of the start of the curved section (15 % longer lever arm) moves
+  LC 14 from 1.70 to 1.17, while the sectional result changes by a
+  few per cent. The rigid stick raises it, as in T2. With the shear stack of
+  the Yun coefficient cut at the nearest helical layer below (the 8.7 mm
+  pressure sheath lies under the steel pressure armour and is the larger part
+  of the compliance in the packaged section: ξ 0.52 → 0.88), the small-angle
+  ratios become 0.79, 0.86 and 1.21 (0.5°, 1°, 1.5°) and the sectional
+  SV11-PLANE reads median 1.19 with 12 of 14 in band (the gate's median bound
+  is 1.18), while the corrected median rises to 2.17 because the stiffer stick
+  raises the slip demand. The stick-regime deficit is therefore mostly the
+  assumed shear compliance of the section, not the rig. This is a sensitivity of an
+  unreported section property (the tape and sheath assumptions A5–A6 of
+  `saevik2011.yaml`), not a registered input, and changes no row.
+- *Mesh and solver tolerance* (`check_saevik2011.profile_convergence`). The
+  beam solves to a projected gradient of 1e-9 relative to the initial one. At
+  20 mm, solving to 1e-13 instead changes the station curvatures by at most
+  0.5 % (LC 7, 14 and 18), and halving the mesh at 1e-13 by at most
+  1.0 %. The 5 % (11 % at one station) quoted above was measured with the
+  1e-9 tolerance on both meshes; on the finer mesh that tolerance stops short
+  of convergence (`EI/h⁴` inflates the initial gradient), so most of it is
+  the solve, not the mesh.
+- *The rig as published.* Eq. 88 at Sævik's end, 1.72 m, gives 3.90 m and
+  15.9°, both printed values; at Gjøsteen et al.'s 1.79 m it gives 3.79 m and
+  17.0° (SV11-EQ88), so 1.72 m is kept; the radius of 3.9 m is reached at
+  1.722 m. Gjøsteen et al.'s 10 mm gap is their model's value "according to
+  Lukassen", Sævik's 5 mm is the test description; the harness keeps 5 mm.
+  Sævik's 14.5 m specimen and Gjøsteen et al.'s 16.55 m sample are
+  compatible if the 14.5 m counts the bare fittings (12.18 m of pipe plus
+  about 1.16 m each) and the 16.55 m the full rigid arrangements. Sævik's
+  Fig. 15, scaled with the station abscissae of Figs 17–23 (about 0.56 px per
+  mm on a 600 dpi render), draws the straight inlet back to about 2.35 m
+  before the curved section, consistent with the assumed end-fitting face at
+  2.305 m. LC 14 is a 15° range in Sævik's Table 2 and ±8° in Gjøsteen et
+  al.; the two papers' measured ranges at the same stations imply static
+  stresses of 238–341 MPa (above), a ±18 % inconsistency between the two
+  plots of one test.
+
 ## Measured wire-on-tape friction loops (DAI18-DIG, DAI18-RS, DAI18-T1, DAI18-T3)
 
 Source: Dai, Sævik and Ye, "An anisotropic friction model in non-bonded

@@ -517,6 +517,78 @@ def _saevik_rows() -> list[Row]:
     ]
 
 
+def _saevik_split_rows() -> list[Row]:
+    """Where the SV11 termination increment comes from (reported, not gated).
+
+    The registered correction (anchor at the end-fitting face, the beam's
+    bellmouth curvature profile) split into the end-fitting anchor alone and
+    the curvature profile alone; the slip demand at the smallest angles; the
+    consistency of the two published bellmouth end points with Eq. 88.
+    scripts/check_saevik2011.py (split_values, eq88_consistency).
+    """
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    import check_saevik2011 as sv  # noqa: PLC0415
+
+    sp = sv.split_values()
+    ef, far, reg = sp["ef_only"], sp["no_end_fitting"], sp["registered"]
+    small = sp["small_angle"]
+    lo, hi = (small[lc] for lc in sv.SMALL_ANGLE_CASES)
+    outside = ", ".join(
+        f"LC {lc} {sp['R_sectional_outside'][lc]:.2f}"
+        for lc in sp["sectional_outside_band"]
+    )
+    eq = sv.eq88_consistency()
+    change = max(far["largest_station_change"], far["largest_gj_change"])
+    change_text = "below 1e-12" if change < 1e-12 else f"{change:.1e}"
+    return [
+        Row(
+            "2",
+            "SV11-SPLIT",
+            "Sævik (2011) termination increment by origin: (a) end-fitting "
+            "anchor alone (the correction with uniform curvature from the "
+            "end-fitting face), 14 load cases (SV11-PLANE) and LC 14 at +-8 deg "
+            "(SV11-GJ); (b) no end fitting (armour anchored 20 m upstream of the "
+            "face, bellmouth curvature profile unchanged), LC 14 (SV11-PLANE) and "
+            "LC 14 at +-8 deg (SV11-GJ)",
+            "stated, not gated",
+            f"(a) median R {ef['median_R']:.2f} ({ef['count_in_band']} of 14 in "
+            f"band), GJ {ef['gj_ratio']:.2f}; (b) LC 14 R {far['R_lc14']:.2f}, GJ "
+            f"{far['gj_ratio']:.2f}, largest change against the registered "
+            f"correction {change_text}"
+            f"; registered {reg['median_R']:.2f} and {reg['gj_ratio']:.2f}, "
+            f"sectional {reg['median_R_sectional']:.2f} and "
+            f"{reg['gj_ratio_sectional']:.2f}",
+            "INFO",
+        ),
+        Row(
+            "2",
+            "SV11-REACH",
+            "SV11-PLANE reach of any termination correction: largest slip "
+            "demand a = kappa / kappa_c of the correction at 0.5 and 1 deg, and "
+            "the load cases whose sectional R is outside [0.70, 1.43]",
+            "stated, not gated",
+            f"a_max {lo['a_max']:.2f} and {hi['a_max']:.2f}; R corrected "
+            f"{lo['R']:.2f} and {hi['R']:.2f} (sectional {lo['R_sectional']:.2f} "
+            f"and {hi['R_sectional']:.2f}); sectional outside the band: {outside}",
+            "INFO",
+        ),
+        Row(
+            "2",
+            "SV11-EQ88",
+            "Sævik (2011) Eq. 88, kappa = 0.067 + 0.11 s, at the two published "
+            "bellmouth ends (Sævik 1.72 m; Gjøsteen et al. 1.79 m): radius and "
+            "slope",
+            "Sævik's text: 3.9 m and 16 deg",
+            f"1.72 m: {eq['1.72']['radius_m']:.2f} m, "
+            f"{eq['1.72']['slope_deg']:.1f} deg; 1.79 m: "
+            f"{eq['1.79']['radius_m']:.2f} m, {eq['1.79']['slope_deg']:.1f} deg; "
+            f"3.9 m at s = {eq['radius_3.9']['s_m']:.3f} m",
+            "INFO",
+        ),
+    ]
+
+
 def _anchored_wire_fe_rows() -> list[Row]:
     """Anchored wire at uniform curvature against two published FE studies.
 
@@ -2012,6 +2084,7 @@ def _rows() -> list[Row]:
     rows.extend(_hu_rows())
     rows.extend(_witz_rows())
     rows.extend(_saevik_rows())
+    rows.extend(_saevik_split_rows())
     rows.extend(_anchored_wire_fe_rows())
     rows.extend(_dai2018_rows())
 

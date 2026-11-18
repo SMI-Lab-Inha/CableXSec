@@ -151,9 +151,10 @@ CLAMPED_TERMINATION_WARNING = (
     "the anchored-wire Coulomb correction (TerminationSpec anchor='clamped', "
     "clamp or along_wire solver) is an upper estimate that is not supported "
     "by the only published near-termination measurements (Saevik 2011 / "
-    "Gjosteen 2027 bellmouth FBG ranges: corrected ranges 1.65-3.4 times "
-    "measured, sectional 1.03 times; doc/benchmarks.md SV11 and T2). Report "
-    "it as a sensitivity bound beside the sectional result."
+    "Gjosteen 2027 bellmouth FBG ranges: corrected ranges 1.6-3.4 times "
+    "measured, sectional 1.0 times; the excess there comes from the bellmouth "
+    "curvature profile, not from the end-fitting anchor; doc/benchmarks.md "
+    "SV11 and T2). Report it as a sensitivity bound beside the sectional result."
 )
 
 
@@ -262,9 +263,13 @@ class TerminationSpec:
     With ``anchor="clamped"`` the anchored-wire Coulomb correction, with
     either solver, is an upper estimate. It is not supported by the only
     published near-termination measurements: on the bellmouth FBG ranges of
-    Saevik (2011) and Gjosteen et al. (2027) the corrected ranges are 1.65-3.4
-    times the measured ones, the sectional ranges 1.03 times
-    (doc/benchmarks.md, SV11 and T2). :func:`compute_fatigue` therefore
+    Saevik (2011) and Gjosteen et al. (2027) the corrected ranges are 1.6-3.4
+    times the measured ones, the sectional ranges 1.0 times
+    (doc/benchmarks.md, SV11 and T2). There the end fitting lies 2.3 m before
+    the curved bellmouth and adds about 1 %; the excess comes from the steep
+    curvature gradients at the ends of the bellmouth contact (the uncurved,
+    stuck inlet acts as the anchor) on a beam curvature that does not carry
+    the anchoring (row SV11-SPLIT). :func:`compute_fatigue` therefore
     issues :class:`~cablexsec.provenance.UnvalidatedModelWarning` for it;
     ``anchor="none"`` does not warn.
     """
