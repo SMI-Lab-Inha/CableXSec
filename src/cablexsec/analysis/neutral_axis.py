@@ -39,7 +39,8 @@ rotation curvatures are converted to ``b`` by the readers.
    The number of sign changes is returned so that this can be seen.
 4. **Moment direction**: the direction ``psi`` of the section moment
    ``m = sum_L m_L + EI_min b`` conjugate to ``b`` (the moment-curvature law
-   of :func:`cablexsec.compute_mkappa`, without core friction). The angle
+   of :func:`cablexsec.compute_mkappa`; with ``core_friction`` it adds the
+   laid-core law of :func:`cablexsec.compute_mkappa`). The angle
    from the curvature to a moment, ``delta = psi - theta`` wrapped to
    (-180, 180] deg, is positive anticlockwise. Under a curvature that turns
    anticlockwise at constant magnitude the moment leads: the work per unit
@@ -80,6 +81,7 @@ from cablexsec.provenance import Provenance
 
 if TYPE_CHECKING:
     from cablexsec.cables.schema import CableData
+    from cablexsec.mechanics.core_friction import CoreFrictionSpec
     from cablexsec.mechanics.mkappa import HelicalLayerSpec
 
 __all__ = [
@@ -171,6 +173,9 @@ class NeutralAxisResult:
     plus ``EI_min``."""
     direction_share: float
     provenance: Provenance
+    core_moment_Nm: FloatArray | None = None
+    """Moment of the laid-core law (cores, internal rings, filler profiles)
+    in ``moment_Nm``, (samples, 2); ``None`` without core friction."""
 
     @property
     def curvature_1_m(self) -> FloatArray:
@@ -333,13 +338,18 @@ def neutral_axes(
     section_radius_m: float = math.inf,
     friction_model: FrictionLaw = "direction_tied",
     direction_share: float = DIRECTION_SHARE,
+    core_moment_Nm: FloatArray | None = None,
+    core_stick_EI_Nm2: float = 0.0,
 ) -> NeutralAxisResult:
     """Neutral axes of a section of armour ``layers`` (name, spec) over a history.
 
     ``kappa_x``, ``kappa_y`` are the axial-strain gradient [1/m];
     ``axial_strain`` the strain of the cable axis (zero when ``None``);
     ``contact_pressure_Pa`` the ``P1+P2`` history of each layer by name (the
-    layer's own clamping when absent). See the module text for the quantities.
+    layer's own clamping when absent). ``core_moment_Nm`` (samples, 2) is the
+    moment of a laid-core law over the same history, added to the section
+    moment, and ``core_stick_EI_Nm2`` its stick stiffness, added to
+    ``ei_max_Nm2``. See the module text for the quantities.
     """
     kx = np.asarray(kappa_x, dtype=np.float64)
     ky = np.asarray(kappa_y, dtype=np.float64)
@@ -354,6 +364,19 @@ def neutral_axes(
         raise CableInputError("EI_min must be finite and non-negative")
     if not section_radius_m > 0.0:
         raise CableInputError("the section radius must be positive")
+    if not (math.isfinite(core_stick_EI_Nm2) and core_stick_EI_Nm2 >= 0.0):
+        raise CableInputError(
+            "the core stick stiffness must be finite and non-negative"
+        )
+    core: FloatArray | None = None
+    if core_moment_Nm is not None:
+        core = np.asarray(core_moment_Nm, dtype=np.float64)
+        if core.shape != (kx.size, 2) or not np.isfinite(core).all():
+            raise CableInputError(
+                "the core moment must be finite, one (x, y) pair per sample"
+            )
+    elif core_stick_EI_Nm2 != 0.0:
+        raise CableInputError("a core stick stiffness needs the core moment")
     strain = (
         np.zeros_like(kx)
         if axial_strain is None
@@ -375,13 +398,19 @@ def neutral_axes(
     moment = ei_min_Nm2 * curvature
     for layer in armour:
         moment = moment + layer.moment_Nm
+    if core is not None:
+        moment = moment + core
     psi, _ = _direction(moment, share)
     limitations = [
         "the wire bending stress is that of the slip law of the fatigue route at "
         "the declared clamping (and its tension increment); bending-induced "
         "contact redistribution is not solved",
         "the moment adds EI_min times the curvature to the armour wire moments; "
-        "core friction of laid power cores is not included",
+        + (
+            "core friction of laid power cores is not included"
+            if core is None
+            else "it adds the laid-core law over the same history"
+        ),
         "the stress neutral axis is the diameter of the first circular harmonic; "
         "after a reversal the stress can change sign more than twice round a "
         "layer",
@@ -406,7 +435,9 @@ def neutral_axes(
         curvature_threshold_1_m=threshold,
         section_radius_m=float(section_radius_m),
         ei_min_Nm2=float(ei_min_Nm2),
-        ei_max_Nm2=float(ei_min_Nm2 + sum(spec.EI_stick for _, spec in layers)),
+        ei_max_Nm2=float(
+            ei_min_Nm2 + sum(spec.EI_stick for _, spec in layers) + core_stick_EI_Nm2
+        ),
         direction_share=share,
         provenance=Provenance(
             method=(
@@ -418,6 +449,7 @@ def neutral_axes(
             citations=CITATIONS,
             limitations=tuple(limitations),
         ),
+        core_moment_Nm=core,
     )
 
 
@@ -453,6 +485,7 @@ def compute_neutral_axes(
     friction_model: FrictionLaw = "direction_tied",
     direction_share: float = DIRECTION_SHARE,
     section_radius_m: float | None = None,
+    core_friction: bool | CoreFrictionSpec | None = None,
 ) -> NeutralAxisResult:
     """Neutral axes of ``cable`` over a curvature history (module text).
 
@@ -467,11 +500,30 @@ def compute_neutral_axes(
     force behind a direct strain, or zeros for the declared clamping alone.
     ``section_radius_m`` (default: the outer radius of the layers) bounds the
     strain neutral axis.
+
+    ``core_friction`` (``True`` or a
+    :class:`~cablexsec.mechanics.core_friction.CoreFrictionSpec`) adds the
+    stick-slip law of the laid power cores, their internal wire rings and the
+    filler profiles to the section moment, as ``core_friction`` of
+    :func:`cablexsec.compute_mkappa` does: the biaxial history of
+    :func:`~cablexsec.mechanics.core_friction.core_friction_history` with the
+    contact loads of the bounded contact model at the reference tension (the
+    first sample of the tension history, zero without one). As in
+    :func:`cablexsec.compute_mkappa`, the core contact loads stay at that
+    reference while the armour contact pressure follows the history. A planar
+    history at a constant tension then gives, along its plane, the moment of
+    :func:`cablexsec.compute_mkappa` with the same options (direction-tied
+    armour law). ``None`` (default) keeps the armour-only moment bit for bit.
     """
     from cablexsec.api import armour_contact_histories  # noqa: PLC0415
     from cablexsec.cable_adapters import (  # noqa: PLC0415
         cable_to_mkappa_specs,
         structural_armour_layers,
+    )
+    from cablexsec.mechanics.core_friction import (  # noqa: PLC0415
+        build_core_friction,
+        core_friction_history,
+        resolve_core_friction,
     )
     from cablexsec.mechanics.stiffness import ea_fixed, ei_min_slip  # noqa: PLC0415
 
@@ -506,6 +558,17 @@ def compute_neutral_axes(
     names = [layer.name for layer in structural_armour_layers(cable)]
     if not specs:
         raise CableInputError("the cable has no structural armour layer")
+    core_spec = resolve_core_friction(core_friction)
+    core_moment: FloatArray | None = None
+    core_stick = 0.0
+    if core_spec is not None:
+        model = build_core_friction(
+            cable, core_spec, reference, contact_model="bounded"
+        )
+        core_moment = core_friction_history(
+            model, kx, np.asarray(kappa_y, dtype=np.float64)
+        ).moment_Nm
+        core_stick = model.stick_EI_Nm2
     return neutral_axes(
         list(zip(names, specs, strict=True)),
         kx,
@@ -518,4 +581,6 @@ def compute_neutral_axes(
         ),
         friction_model=friction_model,
         direction_share=direction_share,
+        core_moment_Nm=core_moment,
+        core_stick_EI_Nm2=core_stick,
     )
