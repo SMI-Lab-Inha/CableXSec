@@ -26,6 +26,16 @@ All notable changes to CableXSec are recorded in this file. The format follows
   sectional ratios reach the band. No registered row, input or default is changed; the SV11
   harness beam takes its rig as a `Rig` value (the registered rig by default).
 
+- Validation rows DAI20-KAPPA and DAI20-COULOMB (Dai, Sævik and Ye 2020, steel-tube umbilical
+  in a bellmouth; targets registered before the run). The SV11 rig beam in the measured
+  bellmouth (0.1 1/m, 3 m, 200 kN), bending stiffness identified on the S2 curvature at 4°
+  (59.1 kN m²), predicts the angles at which the contact front reaches S2 and S3 0.87° and
+  0.89° early (band ±1.0°, PASS; mesh-converged; the rig pivot, inlet and rigid lengths are
+  declared assumptions with their sensitivities on the benchmark page). The sectional
+  full-slip range of the helical tubes with the source's contact line forces reproduces the
+  source's 2D values within 1.1 % and misses the measured Coulomb ranges by +89 / −55 %
+  (radial) and +114 / +163 % (radial plus hoop): the documented radial-only limit.
+
 - Validation rows Z-EI and Z-ID (targets registered before the runs): the four-point loops of
   Zeidan (2025, PhD thesis, Ch. 5) and Zeidan et al. (2026, IJSS 338, 114089) on a 112 mm
   three-core cable (`cables/zeidan2025.yaml`, 75 + 82 armour wires of 3.5 mm, zero tension),

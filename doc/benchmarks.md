@@ -2133,6 +2133,147 @@ itself from the suspects. Not tested: cyclic loading (both studies are
 monotonic), an interface stiffness from a source that prints it, transverse
 slip.
 
+## Steel-tube umbilical in a bellmouth (DAI20-KAPPA, DAI20-COULOMB)
+
+Dai, Sævik and Ye, "Experimental and numerical studies on dynamic stress and
+curvature in steel tube umbilicals", Marine Structures 72 (2020) 102724. A
+9 m steel-tube umbilical between two end fittings, constant tension 200 kN
+(the only tension with results), rocked by a tower against a bellmouth of
+constant curvature 0.1 1/m and length 3 m (Fig. 1: L = 3 m, R = 10 m). Fibre
+Bragg gratings on a spacer inside the centre tube and inside one large and one
+small helical tube (lay angle 7°) at station S2, 0.675 m from the bellmouth
+entrance, and S3, 0.352 m from the bellmouth end. It is the only measured
+curvature history inside a bellmouth in the termination literature held here,
+and an independent test of the rig-beam curvature that drives the SV11
+termination correction (same bellmouth topology: end fitting, entrance,
+curved surface, free span). It is not an armour or end-fitting stress set:
+the armour is not instrumented and the end fitting is not analysed. Harness
+`validation/scripts/check_dai2020.py`, digitised Fig. 9
+`validation/paper_data/dai2020_fig9_curvature.csv` (procedure, reading
+resolution and source SHA-256 in the header), tests `tests/test_dai2020.py`.
+Targets and every assumed input below were registered before any model
+output.
+
+**Inputs.** Given: tension 200 kN; bellmouth curvature 0.1 1/m over 3 m;
+station positions; entrance gap "in an order of 5 mm", not measured (the
+source's model uses 3 mm and finds 1–8 mm immaterial at S2 and S3); the
+tensioner is free to rotate; the first umbilical element is linked rigidly to
+the tower pivot (p. 7); contact line forces of the source's two 3D contact
+models (Table 3); μ = 0.2 (assumed by the source); tube outer diameters,
+thicknesses and radial locations (Table 1). Assumed here (not printed): the
+end fitting lies 2.1 m before the entrance (the entrance read from the
+Fig. 14 axis, a 0–9 m umbilical coordinate); the tower pivot is at the
+entrance (Fig. 1 sketches it a little inside the bellmouth); 2.2 m of rigid
+arrangement from the far end fitting to the tensioner pin (Fig. 1 sketch);
+no inlet tube between the end fitting and the entrance; no gravity (the
+source applies self-weight, value not printed); small slopes (the largest
+angle is 17°); tube steel 207 GPa. The umbilical bending stiffness and weight
+are not printed ("obtained from UFLEX").
+
+**DAI20-KAPPA (registered).** The SV11 rig beam (`check_saevik2011.Beam` with
+this rig: clamp at the end fitting, free inlet, entrance gap 3 mm, curved
+surface `w = gap + 0.1 s²/2` to 3 m, far pin), linear elastic with one
+bending stiffness `EI`, effective tension 200 kN, monotonic rocking (elastic:
+path independent, the measured cycle is read as the mean of the two rocking
+directions). `EI` is identified on one number: the S2 curvature at 4°,
+0.03995 1/m (mean of 0.0354 and 0.0445 at −4° and +4°). Then two angles are
+predicted, each against the mean of the two rocking directions in the
+measurement (read by linear interpolation of the 0.5° samples of the
+digitised file):
+
+- S2 reaches 90% of the bellmouth curvature (0.09 1/m) at 7.03° (7.44° and
+  6.63°);
+- S3 reaches 50% of it (0.05 1/m) at 14.57° (14.79° and 14.35°).
+
+Target: both predicted angles within ±1.0° of the measured ones. The band is
+about twice the half-difference between the two rocking directions in the data
+(0.40° and 0.22°) plus the reading resolution (0.2°). The plateau value is
+geometry and is not a target. A failure is reported as found, with the
+rig-assumption sensitivities (pivot, inlet, rigid length, gap) beside it; no
+assumption is changed to pass.
+
+**DAI20-COULOMB (stated, not gated).** CableXSec's sectional friction stress
+(direction-tied law, signed capstan bound) of each helical tube under a
+±0.1 1/m cycle (full slip), with the source's own contact line forces, μ =
+0.2, the tube sections of Table 1 and 207 GPa, against the measured "Coulomb
+friction strain range" at S2, 200 (large tube) and 158 (small tube)
+microstrain (Tables 4 and 5). The line forces are the source's Table 3,
+radial model (49 000 and 8 000 N/m) and radial plus constrained hoop model
+(55 500 and 46 900 N/m, the two hoop rows counted, as the source's "+13 %"
+requires). Expected, from the source's own 2D numbers (its Eq. 14 on
+Table 3: 374/70.4 and 424/414 microstrain): the same values within the
+sectional law's cos α and capstan terms, i.e. +87%/−55% (radial) and
++112%/+162% (hoop) against the measurement. It documents the radial-only
+sectional limit and checks that the package's full-slip law equals the
+source's 2D formula with the same line loads; it is not a prediction of the
+contact forces, which CableXSec cannot build for this section (Table 1 is
+internally inconsistent: sheath "diameters" smaller than twice the enclosed
+tube radii; 7° at the printed radii gives pitches of 2.0–2.3 m, not 1.875 m).
+
+**Not used.** The tube strain loops (Figs 12–13) and the "extreme axial strain
+range" (text only) need the along-element friction through the growing
+contact zone and the hoop contacts that the source adds; the curvature of the
+helical tubes (Fig. 13, bottom; the small tube reads 22% above and 33% below
+the bellmouth curvature, a sensor-offset error of that order by the source's
+own account); results at 5, 100 and 300 kN (not reported).
+
+**Results.**
+
+| ID | Class | Quantity | Target | Result | Status |
+| --- | --- | --- | --- | --- | --- |
+| DAI20-KAPPA | M | S2 at 90 % and S3 at 50 % of the bellmouth curvature, rig beam with `EI` identified on S2 at 4° | both within ±1.0° of 7.03° and 14.57° | `EI` 59.1 kN m²; S2 6.16° (−0.87°), S3 13.69° (−0.89°) | PASS |
+| — | I | same on 10, 5 and 2.5 mm beam meshes (20 mm registered) | reported | −0.89/−0.89°, −0.91/−0.90°, −0.91/−0.90° | converged |
+| DAI20-COULOMB | M | sectional full-slip range, large / small tube, source's line forces | stated, not gated (200 / 158 microstrain) | radial 378 / 71 (+89 / −55 %); radial plus hoop 428 / 416 (+114 / +163 %) | INFO |
+| — | I | same against the source's own 2D values (Table 4) | reported | within 1.1 % (378 / 71 / 428 / 416 against 374 / 70.4 / 424 / 414) | reproduced |
+
+Beam against the measurement (|κ| [1/m], measured −/+ side): S2 at 2°, 3°,
+4°, 5°, 6°: 0.014, 0.025, 0.040, 0.059, 0.085 against 0.012/0.018,
+0.024/0.030, 0.035/0.045, 0.047/0.059, 0.067/0.080; S3 at 14° and 15°: 0.058
+and 0.092 against 0.035/0.044 and 0.054/0.063.
+
+- *The rig beam carries the bellmouth curvature field within about 1°.* With
+  one stiffness identified at one point, the angle at which the contact front
+  reaches each station is predicted to −0.9° at both stations, 0.7 m and
+  2.6 m into the bellmouth. The identified 59 kN m² is a plausible slipped
+  stiffness for a 9 m steel-tube umbilical; it is not a measured value. The
+  beam enters contact about 0.9° early at both stations, and its approach to
+  the plateau is steeper than the measured one (S3 at 15°: 0.092 against
+  0.059); the source's own global model (its Fig. 9) also reaches the plateau
+  before the measurement. A linear elastic beam has no stick-slip hysteresis,
+  which would delay the approach on the loading branch.
+- *Dependence on the assumed rig* (reported, `check_dai2020.kappa_sensitivity`,
+  S2/S3 error): registered −0.87/−0.89°; gap 1 mm −0.83/−0.89°, 8 mm
+  −1.05/−0.90°; inlet 1.6 m −0.89/−0.76°, 2.6 m −0.95/−1.05°; no rigid
+  arrangement −0.77/−1.69°, 3.9 m −0.93/−0.51°; pivot at the end fitting
+  +0.04/−3.14° (`EI` 287 kN m²); pivot at S2: no stiffness between 1 and
+  10 000 kN m² gives the measured S2 curvature at 4°. The pass holds for the
+  entrance gap and inlet lengths near the declared ones and not for every
+  conceivable rig; the pivot position, which the source sketches but does not
+  dimension, is the largest unknown. Gate status unchanged by these
+  sensitivities.
+- *Solver tolerance.* The SV11 harness solves to a projected gradient of
+  1e-9 relative to the initial gradient. On meshes finer than 20 mm this
+  leaves the curvature unconverged by up to 5 % (EI/h⁴ inflates the initial
+  gradient; one 2.5 mm solve stopped on a spurious contact state); the Dai
+  harness solves to 1e-13, which converges the curvature to the mesh (S2 at
+  4° within 0.5 % from 20 to 2.5 mm). For the registered SV11 rows (20 mm)
+  the tolerance matters little; see the SV11 section.
+- *Coulomb ranges: the documented radial-only limit.* With the source's
+  radial line forces the sectional range is 1.89 times the measured one for
+  the large tube and 0.45 times for the small tube; with the hoop forces both
+  are too large (2.1 and 2.6 times). The package's full-slip law and the
+  source's Eq. 14 agree to 1 % on the same inputs, so the gap is in the
+  contact forces and in the two-dimensional assumption, which the source
+  closes only with its 3D hoop-contact model (Table 5: 215 / 151
+  microstrain). CableXSec has no hoop contact between helical tubes and
+  fillers; this row documents that limit, it does not test a prediction.
+- *Relevance to the termination route.* The same rig beam supplies the SV11
+  curvature profile. In the one bellmouth where the curvature was measured it
+  is right to about 1° of rocking angle with a stiffness that fits one
+  measured point, so the profile itself is a credible input; the SV11
+  over-prediction comes from what the one-way anchored chain does with it
+  (SV11-SPLIT), not from the profile.
+
 ## Torque balance and twist under tension (gap 3.5: TQ, TQ-KL, TQ-UJ)
 
 Script `validation/scripts/check_torque_balance.py`, tests `tests/test_torque_balance.py`, rows TQ,
