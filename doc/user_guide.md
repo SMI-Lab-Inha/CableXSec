@@ -113,7 +113,8 @@ for screening.
   `cx.compute_tape_fatigue`): slip regime and wear of the armour contacts, the
   wire screen along the {term}`core lay`, and the strain-life of tapes.
 - **{term}`Neutral axis <neutral axis>` under a load history** (`cx.compute_neutral_axes`): where the
-  armour sticks and slips as the {term}`bending direction` turns.
+  armour sticks and slips as the {term}`bending direction` turns, and the biaxial section moment
+  of the history (armour, optionally with the laid-core law: `core_friction`).
 
 ### 2.6 Thermal and electrical
 

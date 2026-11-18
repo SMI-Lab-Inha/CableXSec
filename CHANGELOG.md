@@ -24,6 +24,15 @@ All notable changes to CableXSec are recorded in this file. The format follows
   the bedding alone the work of all four amplitudes is within ±11 %, the moment range 33–48 %
   short (slipping slope near EI_min), and the laid cores change the work by less than 0.2 %.
   The laid-core law stays off by default (registered rule not met).
+- `compute_neutral_axes(..., core_friction=...)`: the biaxial section moment adds the
+  stick-slip law of the laid power cores, their internal wire rings and the filler profiles
+  (`core_friction_history` over the same curvature history), so that a global model's
+  `(kx, ky)` history gives the section moment of the full accounting, not only of the armour.
+  The core contact loads are those of the bounded model at the reference tension (the first
+  sample of the tension history), as in `compute_mkappa`; a planar history gives the moment
+  of `compute_mkappa` with the same options to round-off (tests at 0 and 90 degrees).
+  `NeutralAxisResult.core_moment_Nm` holds the core share and `ei_max_Nm2` adds the core stick
+  stiffness. Without `core_friction` the result is unchanged bit for bit.
 
 - Su et al. (2026) 35 kV torsion checked term by term against the source's analytical model
   (targets registered before the run): armour torque 193.3 / 170.8 kN m² clockwise /

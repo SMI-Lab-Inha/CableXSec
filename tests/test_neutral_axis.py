@@ -383,3 +383,80 @@ def test_inputs_are_checked(cable: cx.CableData) -> None:
         cx.compute_neutral_axes(
             cable, np.zeros(2), np.zeros(2), tension_N=np.array([1.0, -1.0])
         )
+
+
+# -- core friction in the section moment ---------------------------------------
+
+
+_CORES = cx.CoreFrictionSpec(
+    mu_core_filler=0.46, mu_core_core=0.46, mu_core_sheath=0.46, filler_profiles=True
+)
+
+
+@pytest.fixture(scope="module")
+def cored() -> cx.CableData:
+    """The public 66 kV template: laid cores, trefoil wedge and filler profiles."""
+    return cx.load_cable(cx.iea_task49_66kv_yaml_path(), geometry_override=None)
+
+
+@pytest.mark.parametrize("phi", [0.0, 0.5 * math.pi])
+def test_core_friction_moment_is_that_of_compute_mkappa_in_planar_bending(
+    cored: cx.CableData, phi: float
+) -> None:
+    kappa = 0.02 * np.sin(np.linspace(0.0, 4.0 * math.pi, 401))
+    tension = np.full(kappa.size, 50e3)
+    ref = cx.compute_mkappa(
+        cored, kappa, tension_N=50e3, core_friction=_CORES, phi_bend=phi
+    )
+    result = cx.compute_neutral_axes(
+        cored,
+        kappa * math.cos(phi),
+        kappa * math.sin(phi),
+        tension_N=tension,
+        core_friction=_CORES,
+    )
+    along = result.moment_Nm @ np.array([math.cos(phi), math.sin(phi)])
+    scale = float(np.ptp(ref.moment_Nm))
+    np.testing.assert_allclose(along, ref.moment_Nm, rtol=0.0, atol=1e-12 * scale)
+    assert result.ei_max_Nm2 == pytest.approx(ref.EI_max_Nm2, rel=1e-12)
+    assert result.core_moment_Nm is not None
+    # The cores add a hysteresis of their own (a moment at zero curvature).
+    assert float(np.max(np.abs(result.core_moment_Nm))) > 0.05 * scale
+    assert "laid-core law" in " ".join(result.provenance.limitations)
+
+
+def test_core_friction_off_keeps_the_armour_moment_bit_for_bit(
+    cored: cx.CableData,
+) -> None:
+    turn, kx, ky = _rotating(0.01, revolutions=1, per_revolution=120)
+    tension = np.full(kx.size, 50e3)  # no clamping: contact from tension
+    base = cx.compute_neutral_axes(cored, kx, ky, tension_N=tension)
+    off = cx.compute_neutral_axes(cored, kx, ky, tension_N=tension, core_friction=False)
+    np.testing.assert_array_equal(base.moment_Nm, off.moment_Nm)
+    assert base.core_moment_Nm is None and off.core_moment_Nm is None
+    on = cx.compute_neutral_axes(cored, kx, ky, tension_N=tension, core_friction=_CORES)
+    assert on.core_moment_Nm is not None
+    np.testing.assert_allclose(
+        on.moment_Nm - on.core_moment_Nm, base.moment_Nm, rtol=0.0, atol=1e-9
+    )
+    # Friction dissipates under the turning curvature: the core moment leads
+    # it (positive work per unit of anticlockwise rotation).
+    late = slice(60, None)
+    work = kx[late] * on.core_moment_Nm[late, 1] - ky[late] * on.core_moment_Nm[late, 0]
+    assert float(np.mean(work)) > 0.0
+
+
+def test_core_moment_inputs_are_checked(cable: cx.CableData) -> None:
+    layers = _layers(cable)
+    with pytest.raises(CableInputError, match=r"one \(x, y\) pair"):
+        neutral_axes(layers, np.zeros(3), np.zeros(3), core_moment_Nm=np.zeros((2, 2)))  # type: ignore[arg-type]
+    with pytest.raises(CableInputError, match="needs the core moment"):
+        neutral_axes(layers, np.zeros(3), np.zeros(3), core_stick_EI_Nm2=1.0)  # type: ignore[arg-type]
+    with pytest.raises(CableInputError, match="core stick stiffness"):
+        neutral_axes(  # type: ignore[arg-type]
+            layers,
+            np.zeros(3),
+            np.zeros(3),
+            core_moment_Nm=np.zeros((3, 2)),
+            core_stick_EI_Nm2=-1.0,
+        )
