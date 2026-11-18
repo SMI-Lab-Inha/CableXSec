@@ -10,6 +10,17 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Added
 
+- Su et al. (2026) 35 kV torsion checked term by term against the source's analytical model
+  (targets registered before the run): armour torque 193.3 / 170.8 kN m² clockwise /
+  anticlockwise against its Fig. 19 shares 193.0 / 172.3 (band 2 %), and at 1000 N m the
+  separations and pressures of its Table 11 (armour 1–2 and 3–4 open anticlockwise; pressures
+  −7 to +11 %, band 20 %). The benchmark register decomposes the −12.0 % anticlockwise gap to
+  the FE and the test: the source's model ties the ring to the cores (Eq. 36), so it compares
+  with the filled section, not the filler-free one; its polymer share is twice the thin-wall
+  terms of its own Eq. 11 (12.0 against the exact 6.1 kN m²); the rest is the armour's direction
+  dependence (11.3 % here, 10.1 % in the source's model, 4.0 % FE, 4.1 % test), whose FE split
+  and test conditions are not published. No input is changed and the 13 % band stays.
+
 - Validation row CH-GJ (stated, model-to-model, registered before the run): free torsional
   stiffness of the Chae, Nam and Shim (2023) coiling cable at the source's twist of 0.125 rad/m
   (unwinding, zero tension), against the range of the source's three cross-section tools

@@ -2081,6 +2081,64 @@ at both pitches, at 0.88–0.93 of the middle tool at 1.8 m and 0.79–0.84 at 3
   (69.6–25.1 kN m²) is proportional to `1/P²` within 0.2 % and therefore holds
   no pitch-independent `G_c J_c` term; it is not used as a reference here.
 
+### Torsional stiffness of the Su et al. (2026) 35 kV cable
+
+Source: Su, Zhao and Zhu (2026), Ocean Eng. 351, 124344, Tables 1, 6, 11 and
+Figs. 19 and 30. The only measured torsional stiffness of a three-core cable
+in the register: test 209.8 / 201.3 kN m² clockwise / anticlockwise (ends
+fixed axially in the FE; the test arrangement is not described), FE 209.5 /
+201.2, the source's analytical model 205.1 / 184.3. The solved section gives
+199.5 / 177.0 (−4.8 / −12.0 % against the FE; bands 5 / 13 % in
+`tests/test_radial_benchmarks.py`). The terms, at 5000 N m:
+
+| Term (kN m²) | Source analytical model (Fig. 19 shares) | Solved section |
+| --- | --- | --- |
+| Armour, clockwise / anticlockwise | 193.0 / 172.3 (94.1 / 93.5 %) | 193.3 / 170.8 |
+| HDPE sheaths (cores, inner, outer) | 10.7 / 10.7 (5.2 / 5.8 %) | 5.37 |
+| Other layers (conductors, insulation, tapes, binders, filler) | 1.4 / 1.3 (0.7 %) | 0.86 (filler lobes 0.14) |
+| Total | 205.1 / 184.3 | 199.5 / 177.0 |
+
+- **Armour and contact state agree with the source's model.** That model
+  neglects the filler's stiffness, but its Eq. 36 ties the binder ring to the
+  cores' outer radius, so the ring is supported radially as in a filled
+  bundle; it is compared with the filled section. The armour terms agree
+  within 0.2 / 0.9 %, and at 1000 N m the interfaces separate where Table 11
+  separates them (armour 1–2 and 3–4 anticlockwise; 3–4 gap 0.029 against
+  0.031 mm), with pressures within −7 to +11 %
+  (`test_su_2026_35kv_torsion_against_source_analytical_model`). Without the
+  filler, the ring bends into the empty interstices: armour 1 contracts
+  104 µm instead of 23 µm and the anticlockwise value falls to 168.0 kN m².
+  That case is not the source's filler-free model.
+- **Polymer layers.** The section uses the exact `G J` of each annulus,
+  direction-independent. The source's HDPE share (10.67–10.69 kN m²) equals
+  twice the thin-wall term `A G R_c²` of its own Eq. 11 (2 × 5.36 =
+  10.72 kN m²), and its "other layers" share (1.29 / 1.44 kN m², rounded to
+  0.7 %) is close to twice the remaining thin-wall terms (1.28 kN m²). The
+  source does not state the cause of the factor; it is inferred from Fig. 19.
+  The solved armour terms plus twice the thin-wall terms (12.0 kN m²) give
+  205.3 / 182.8 kN m², within +0.1 / −0.8 % of the source's model.
+- **What remains is the armour's direction dependence.** Anticlockwise, the
+  compressed outer armour lifts off armour 3 and expands the outer sheath; it
+  carries 44.9 instead of 64.7 kN m². The clockwise-to-anticlockwise drop is
+  11.3 % in the solved section and 10.1 % in the source's model, against
+  4.0 % FE and 4.1 % test. From Fig. 30 the FE armour carries 94.78 % of
+  209.5 clockwise (198.6 kN m²; rest 10.9). The anticlockwise FE split is not
+  published, so the FE's smaller drop cannot be traced to a term. The FE
+  differs from both analytical models in its end coupling (every end-face
+  node tied to the reference points, length 1.5 m), friction 0.15, a filler
+  that Fig. 9a shows as one body, and wire-to-wire contact (at most 1.7 % in the
+  source's Sec. 7.1.1).
+- **Ruled out by runs.** Core lay (not given in the source; the section has
+  straight cores, as the source's model): any pitch of 1 m or longer, either
+  hand, moves either value by at most 0.8 kN m². Axial end condition: the
+  free-end values are 177.0 / 198.3 kN m². A tension held during the twist
+  (100 kN) lowers the drop from 11.3 to 9.7 % only. Inputs, units and lay
+  angles were checked against Table 1.
+
+No input is changed and the band is not tightened: the model reproduces the
+source's analytical model term by term, and nothing published locates the
+FE's or the test's smaller direction dependence.
+
 ## Planned benchmarks
 
 None of these is a completed comparison. Each will be registered under the

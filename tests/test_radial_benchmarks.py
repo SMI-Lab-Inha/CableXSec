@@ -4,9 +4,10 @@
 
 * Knapp (1979), Tables IV and VI: closed-form tension-torsion stiffness of two
   armoured cables with a compressible core (independent derivation).
-* Su, Zhao and Zhu (2026), 35 kV three-core cable, Tables 1, 6, 7 and 10:
-  three-dimensional FE and test axial stiffness, FE torsional stiffness and
-  the analytical interface-pressure pattern.
+* Su, Zhao and Zhu (2026), 35 kV three-core cable, Tables 1, 6, 7, 10 and
+  11 and Fig. 19: three-dimensional FE and test axial stiffness, FE torsional
+  stiffness, and the armour torque and interface pattern of the source's
+  analytical model.
 * Ménard and Cartraud (2023), Sec. 6.4: printed inner-sheath line load at
   the calibrated 0.3 MPa state. The source filler geometry is not tabulated,
   so only a bracket by the two filler representations is checked.
@@ -169,8 +170,14 @@ def test_su_2026_35kv_axial_and_torsional_stiffness():
     # twist as separate bodies: -4.8 % and -12.0 %. The band of the softer
     # direction was 12 % when the filler added its polar moment about the
     # cable axis (-10.3 %); that bonded term is not supported by the
-    # frictionless filler contacts, and Su's own model without the filler
-    # gives -8.4 %, so the remaining gap is not the filler.
+    # frictionless filler contacts. The remaining gap is the armour's
+    # direction dependence: the outer armour lifts off armour 3 under the
+    # anticlockwise torque and expands the outer sheath (asymmetry 11.3 %;
+    # source analytical model 10.1 %, FE 4.0 %, test 4.1 %). The armour
+    # torque and the contact state agree with the source's analytical model
+    # (test below); the FE's anticlockwise split and the test conditions are
+    # not published, so no cause in the model is identified and the band is
+    # not tightened (doc/benchmarks.md, Su et al. 2026 torsion).
     assert gj[1] == pytest.approx(209.5e3, rel=0.05)
     assert gj[0] == pytest.approx(201.2e3, rel=0.13)
     # The no-radial-interaction bound is about 30 % stiffer than the FE.
