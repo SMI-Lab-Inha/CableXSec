@@ -252,3 +252,21 @@ def test_setting_changes_clear_the_split_cache(monkeypatch):
     cleared.clear()
     sv.use_tendons("round")
     assert cleared == ["cable", "gate", "split"]
+
+
+def test_held_inlet_keeps_the_contact_zone_curvature():
+    # A station in the held inlet takes the held curvature as its history, so
+    # the normalised shape reproduces the beam's contact-zone curvature.
+    case = next(c for c in sv.load_cases() if c.lc == 14)
+    held = sv.predict_case(
+        case, sv.MU_DECLARED, only=("1.1", "2.1"), variant=sv.TermVariant(inlet="hold")
+    )
+    moment, _ei_max, ei_min = sv.backbone(case, sv.MU_DECLARED)
+    beam = sv.Beam(moment, ei_min, case.tension_N)
+    _w, k = beam.peak_profile(case.angle_range_deg / 2)
+    st = held["stations"]
+    assert st["1.1"]["kappa_peak_termination"] == pytest.approx(
+        np.interp(0.0, beam.x, k), rel=1e-12
+    )
+    assert st["1.1"]["kappa_peak_termination"] != st["1.1"]["kappa_peak"]
+    assert st["2.1"]["kappa_peak_termination"] == st["2.1"]["kappa_peak"]
