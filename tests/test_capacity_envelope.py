@@ -83,7 +83,7 @@ def test_zero_curvature_envelope_scans_the_tension_capacity(menard) -> None:
 def test_zero_curvature_envelope_leaves_out_the_loose_screens() -> None:
     iea = bundled("iea_task49_66kv")
     zero = build_capacity_envelope(iea, [0.0, 3.0e5, 6.0e5], curvatures=False)
-    assert zero.kinematic_layers == ("cu_conductor_screen", "cu_wire_screen")
+    assert zero.kinematic_layers == ("conductor_screen", "cu_tape_screen")
     # At zero curvature the utilisation only rises with the tension.
     tension = np.linspace(0.0, 6.0e5, 7)
     usage, _, _ = zero.utilisation(tension, np.zeros(tension.size))

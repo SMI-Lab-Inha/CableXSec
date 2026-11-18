@@ -71,7 +71,9 @@ def _stranded(cable):
 def test_conductor_without_copper_friction_takes_the_screen_value(
     cable, scratch_material
 ):
-    stranded = _stranded(cable)
+    # A copper wire screen with its own coefficient (the template's 0.10 mm
+    # copper tape has none) supplies the value the conductor lacks.
+    stranded = _with_material(_stranded(cable), "cu_tape_screen", "copper_wire_screen")
     conductor = stranded.layers[0]
     name = scratch_material("test_conductor_no_mu", conductor.material, {"mu_on_cu"})
     bare = _with_material(stranded, conductor.name, name)
@@ -92,7 +94,7 @@ def test_layer_without_isotropic_modulus_adds_no_shear_compliance(
 ):
     # The series shear stack loses the layer, so the interface is stiffer and
     # the stick coefficient rises (xi grows with the interface stiffness).
-    screen = next(x for x in _core_layers(cable) if x.material == "copper_wire_screen")
+    screen = next(x for x in _core_layers(cable) if x.material == "copper_tape_screen")
     name = scratch_material("test_screen_no_nu", screen.material, {"nu"})
     stiffer = build_core_friction(
         _with_material(cable, screen.name, name), CoreFrictionSpec(), T

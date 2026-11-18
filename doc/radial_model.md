@@ -194,12 +194,12 @@ The section state minimises the small-strain elastic energy per axial metre with
   `cablexsec/mechanics/core_friction.py`): per core two core-to-core
   forces, the filler-to-core force and the direct core-to-ring force, held
   fixed over the bending history. On the 66 kV template at 50 kN they give
-  12.2 kN/m per core, almost all through the filler.
+  11.4 kN/m per core, almost all through the filler.
 
 ### 3.4 Stated representation choices
 
 - Unlisted gaps inside a core (semiconducting screens) are filled with the softer neighbouring material.
-- Loose (non-structural) core layers, such as copper tape and wire screens, are meshed with their declared material by default (`loose_layers="declared"`), so they carry axial load and torque in the solved section although the fixed-radius stiffness gives them none. `loose_layers="neighbour"` gives each the material of its softer structural neighbour; `torque_balance` uses it by default. On the 66 kV template the declared copper screens raise the solved torque/tension coefficient from 1.50 to 3.24 mm (fixed radius 1.51 mm).
+- Loose (non-structural) core layers, such as copper tape and wire screens, are meshed with their declared material by default (`loose_layers="declared"`), so they carry axial load and torque in the solved section although the fixed-radius stiffness gives them none. `loose_layers="neighbour"` gives each the material of its softer structural neighbour; `torque_balance` uses it by default. On the 66 kV template the declared loose layers (a semiconducting conductor screen and a 0.10 mm copper tape) raise the solved torque/tension coefficient from 1.50 to 1.56 mm (fixed radius 1.53 mm); full copper screen annuli, as an earlier template had, raised it to 3.24 mm.
 - A serving (`construction: serving`: a served yarn or a wound tape) is an annulus, or ring of the three-core mesh, in plane stress along the cable axis: it has the radial and hoop stiffness of its material, so it transmits pressure, but no axial stress and no Saint-Venant torsion. It therefore adds nothing to the solved EA or GJ.
 - Geometric overlaps below 0.5 % of the contact radius are treated as a snug fit (Ménard: 0.067 mm core-to-inner-sheath).
 - A three-core cylindrical layer overlapping the cores is the interstitial filler, with three options:

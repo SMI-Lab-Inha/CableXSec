@@ -192,16 +192,27 @@ def test_conductor_against_its_proof_stress_and_fracture(iea) -> None:
 
 
 def test_loose_screens_are_checked_on_their_kinematic_stress(iea) -> None:
-    response = cx.compute_component_response(iea, 0.1, 0.0, tension_N=80e3)
-    wires = _state(response, "cu_wire_screen")
+    # A copper wire screen in place of the template's copper tape (which has
+    # no yield stress in the library) is checked against its yield.
+    layers = tuple(
+        x.model_copy(update={"material": "copper_wire_screen"})
+        if x.name == "cu_tape_screen"
+        else x
+        for x in iea.layers
+    )
+    wired = iea.model_copy(update={"layers": layers})
+    response = cx.compute_component_response(wired, 0.1, 0.0, tension_N=80e3)
+    wires = _state(response, "cu_tape_screen")
     assert wires.kinematic and wires.basis.startswith(KINEMATIC)
     sigma_y = library.get_property("copper_wire_screen", "sigma_y_Pa")
     assert wires.mechanical_utilization == pytest.approx(
         wires.sigma_equivalent_max_Pa / sigma_y, rel=1e-12
     )
     assert wires.mechanical_utilization > 1.0  # above its yield, flagged
-    tape = _state(response, "cu_conductor_screen")
-    assert tape.kinematic and tape.failure_mode == NO_LIMIT
+    response = cx.compute_component_response(iea, 0.1, 0.0, tension_N=80e3)
+    for name in ("cu_tape_screen", "conductor_screen"):
+        tape = _state(response, name)
+        assert tape.kinematic and tape.failure_mode == NO_LIMIT
     # Outside the load path: an upper bound, never the critical component.
     assert response.critical_component == "cu_conductor"
     sheath = _state(response, "hdpe_outer_sheath")
@@ -251,7 +262,7 @@ def test_iea_envelope_against_the_published_mbl_and_mbr(iea) -> None:
     assert envelope.component_utilisation_factor == 1.0
     assert envelope.governing[0] == "component_limit"
     assert envelope.component_governing[0] == ("cu_conductor", "yielding")
-    assert envelope.kinematic_layers == ("cu_conductor_screen", "cu_wire_screen")
+    assert envelope.kinematic_layers == ("conductor_screen", "cu_tape_screen")
     fine = np.linspace(0.0, 1.0e6, 4001)
     at_zero = envelope.utilisation(fine, np.zeros(fine.size))[0]
     tension_capacity = float(fine[np.flatnonzero(at_zero >= 1.0)[0]])

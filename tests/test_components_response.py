@@ -239,9 +239,7 @@ def test_loose_metal_screens_do_not_bound_the_usage(iea) -> None:
     loose = cx.component_usage_curve(
         iea, 0.0, 0.5, n_kappa=3, directions=(0.0,), include_kinematic=True
     )
-    assert (
-        plain.kinematic == loose.kinematic == ("cu_conductor_screen", "cu_wire_screen")
-    )
+    assert plain.kinematic == loose.kinematic == ("conductor_screen", "cu_tape_screen")
     # The screens are metal without a strain limit: their first yield does not
     # bound the capacity, so including them changes nothing.
     assert loose.names == plain.names

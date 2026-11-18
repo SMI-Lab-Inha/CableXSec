@@ -2100,8 +2100,10 @@ equal while the contact set does not change. Loose core screens
 (non-structural `cylindrical_offset` layers) are meshed with the material of
 their softer structural neighbour (`loose_layers="neighbour"`, the default),
 because the fixed-radius stiffness gives them no axial load; with
-`loose_layers="declared"` the 66 kV template's full copper screens carry
-axial load and double its torque coefficient.
+`loose_layers="declared"` loose screens carry axial load in the solved
+section (on the 66 kV template, whose loose layers are a semiconducting screen
+and a 0.10 mm copper tape, +4 % on the torque coefficient; full copper screen
+annuli doubled it).
 
 `design_torque_balance` varies one armour layer (the outermost structural
 layer by default) to set the torque/tension coefficient at fixed twist to a
@@ -2280,11 +2282,12 @@ fibres to 19 (library Cu–Cu μ = 0.20) or 37 (μ = 0.25). The core lay (4.7°)
 lowers the radial core curvature by 2%, which moves two of the four
 partial-slip wires into gross slip (4 with aligned cores, 2 with the lay).
 
-*IEA 66 kV template:* the copper screens are full annuli (Janocha et al.
-2024, Table 1), so P1 does not apply, and the wet design has no metallic
-sheath, so the sheath route does not apply either. The core-layer strain of
-the screen annulus at the MBR (2.76 m) is 1.12% (free and frictional: the
-cores slip, no clamping is declared) and 2.44% (stuck).
+*IEA 66 kV template:* the metallic screen is a copper tape (its copper area
+is not published; [template_66kv.md](template_66kv.md) Section 2.1), so P1
+does not apply, and the wet design has no metallic sheath, so the sheath
+route does not apply either. The core-layer strain of the tape at the MBR
+(2.76 m) is 1.17% (free and frictional: the cores slip, no clamping is
+declared) and 2.49% (stuck).
 
 ### 13.5 Bend restrictor and bend stiffener fields (P5)
 
