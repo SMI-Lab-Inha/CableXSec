@@ -1883,7 +1883,8 @@ the interface sensitivity below; about two minutes), tests
 `tests/test_anchored_wire_fe.py`, digitised curves
 `validation/paper_data/dong2025_figs9_14_25.csv` and
 `zhu_tan2014_figs4_8.csv` (procedure, calibration, reading uncertainty and
-source SHA-256 in the file headers). **Reported, not gated**: the comparison
+source SHA-256 in the file headers); scorecard rows AW-DONG25 and AW-ZT14
+(code-to-code, INFO). **Reported, not gated**: the comparison
 was run before an agreement criterion existed, and Dong et al.'s two FE
 results for the same wire differ by 8 MPa (below), so no criterion
 independent of the result was available. Nothing is fitted.
@@ -1980,7 +1981,7 @@ its Eq. 9 with the Table 2 shifts (its plotted curves read 0.31 / 1.39,
 | θi | FE anchor / peak | CableXSec anchor / peak | Source model anchor / peak |
 | --- | --- | --- | --- |
 | 0°, 180° | no anchor effect | no anchor effect (exact) | no anchor effect |
-| 45° | 0.97 / 1.59 (165°) | 0.05 / 1.33 (161°) | 0.30 / 1.40 (145°) |
+| 45° | 0.97 / 1.59 (165°) | 0.05 / 1.32 (161°) | 0.30 / 1.40 (145°) |
 | 90° | 2.22 / 2.22 | 1.19 / 1.70 (137°) | 2.16 / 2.16 |
 | 135° | 2.19 / 2.19 | 1.76 / 1.76 | 1.80 / 1.80 |
 

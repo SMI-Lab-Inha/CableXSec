@@ -24,6 +24,11 @@ All notable changes to CableXSec are recorded in this file. The format follows
   the bedding alone the work of all four amplitudes is within ±11 %, the moment range 33–48 %
   short (slipping slope near EI_min), and the laid cores change the work by less than 0.2 %.
   The laid-core law stays off by default (registered rule not met).
+- Scorecard rows AW-DONG25 and AW-ZT14 (code-to-code, stated, not gated): the anchored-wire
+  clamp solver against the published FE of Dong et al. (2025) (anchor 156.4 against 156.9 MPa,
+  peak 207.8 against 204.5 MPa) and Zhu and Tan (2014) (1.19 / 1.70 against 2.22, an FE whose
+  far field is not in slip), so far reported only on the benchmark page.
+
 - `compute_neutral_axes(..., core_friction=...)`: the biaxial section moment adds the
   stick-slip law of the laid power cores, their internal wire rings and the filler profiles
   (`core_friction_history` over the same curvature history), so that a global model's
