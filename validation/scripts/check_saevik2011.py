@@ -54,7 +54,7 @@ import os
 import sys
 import time
 import warnings
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import lru_cache
 from pathlib import Path
 
@@ -218,6 +218,45 @@ def backbone(case: LoadCase, mu: float):  # type: ignore[no-untyped-def]
 # --------------------------------------------------------------------------- #
 # Global tensioned beam in the bellmouth                                       #
 # --------------------------------------------------------------------------- #
+@dataclass(frozen=True)
+class Rig:
+    """Bellmouth rig geometry of the harness beam [m, 1/m].
+
+    ``x`` is measured from the start of the curved bellmouth section. The beam
+    is clamped at ``x_anchor_m`` (the end-fitting face; clamp and bellmouth
+    turn together with the rocker), runs ``free_length_m`` of pipe and
+    ``rigid_right_m`` of rigid arrangement to a pin. The bellmouth surface is
+    ``w = gap + kappa_b0 s^2 / 2 + kappa_b1 s^3 / 6`` for ``0 < s <=
+    bell_end_m``; with ``inlet_bounded`` the pipe between the clamp and the
+    curved section lies in a straight tube with the same gap, otherwise it is
+    free there and only the entrance (``s = 0``) carries the gap. The rocker
+    turns the clamp and the bellmouth about ``x_rotation_m``.
+    """
+
+    x_anchor_m: float
+    free_length_m: float
+    rigid_right_m: float
+    gap_m: float
+    bell_end_m: float
+    kappa_b0: float
+    kappa_b1: float
+    inlet_bounded: bool = True
+    x_rotation_m: float = 0.0
+
+
+def sv11_rig() -> Rig:
+    """The SV11 rig from the module constants (read at call time)."""
+    return Rig(
+        X_ANCHOR_M,
+        FREE_LENGTH_M,
+        RIGID_RIGHT_M,
+        GAP_M,
+        BELL_END_M,
+        KAPPA_B0,
+        KAPPA_B1,
+    )
+
+
 class Beam:
     """Finite-difference tensioned beam with a hysteresis backbone and bounds."""
 
@@ -227,10 +266,13 @@ class Beam:
         ei_min: float,
         tension_N: float,
         h: float = 0.02,
+        rig: Rig | None = None,
     ) -> None:
+        rig = sv11_rig() if rig is None else rig
+        self.rig = rig
         self.h = h
-        x_pin = X_ANCHOR_M + FREE_LENGTH_M + RIGID_RIGHT_M
-        self.x = np.arange(X_ANCHOR_M, x_pin + 0.5 * h, h)
+        x_pin = rig.x_anchor_m + rig.free_length_m + rig.rigid_right_m
+        self.x = np.arange(rig.x_anchor_m, x_pin + 0.5 * h, h)
         self.n = self.x.size
         self.T = tension_N
         self.kmax = float(moment.x[-1])
@@ -240,14 +282,23 @@ class Beam:
         self.moment = moment
         self.dm = moment.derivative()
         self.energy = moment.antiderivative()
-        self.rigid = self.x > X_ANCHOR_M + FREE_LENGTH_M
+        self.rigid = self.x > rig.x_anchor_m + rig.free_length_m
         self.lower = np.full(self.n, -np.inf)
         self.upper = np.full(self.n, np.inf)
-        tube = self.x <= 0.0
-        self.lower[tube], self.upper[tube] = -GAP_M, GAP_M
-        bell = (self.x > 0.0) & (self.x <= BELL_END_M)
+        tube = (
+            self.x <= 0.0
+            if rig.inlet_bounded
+            else np.isclose(self.x, 0.0, atol=1e-6 * h)
+        )
+        if not tube.any():
+            raise ValueError(
+                "the beam mesh has no node at the bellmouth entrance (x = 0): "
+                "choose x_anchor_m as a multiple of the mesh size"
+            )
+        self.lower[tube], self.upper[tube] = -rig.gap_m, rig.gap_m
+        bell = (self.x > 0.0) & (self.x <= rig.bell_end_m)
         s = self.x[bell]
-        wb = GAP_M + KAPPA_B0 * s**2 / 2 + KAPPA_B1 * s**3 / 6
+        wb = rig.gap_m + rig.kappa_b0 * s**2 / 2 + rig.kappa_b1 * s**3 / 6
         self.lower[bell], self.upper[bell] = -wb, wb
         self.fixed = np.zeros(self.n, dtype=bool)
         self.fixed[[0, 1, self.n - 1]] = True
@@ -324,7 +375,7 @@ class Beam:
         w = np.zeros(self.n) if w0 is None else w0.copy()
         x_pin = self.x[-1]
         w[0] = w[1] = 0.0
-        w[-1] = -x_pin * math.sin(half_angle_rad)
+        w[-1] = -(x_pin - self.rig.x_rotation_m) * math.sin(half_angle_rad)
         lo, hi = self.lower.copy(), self.upper.copy()
         lo[self.fixed], hi[self.fixed] = w[self.fixed], w[self.fixed]
         w = np.clip(w, lo, hi)
@@ -389,25 +440,62 @@ def _at_azimuth(values: np.ndarray, azimuth_deg: float) -> np.ndarray:
     return np.asarray((1 - f) * values[i0] + f * values[i1])
 
 
+@dataclass(frozen=True)
+class TermVariant:
+    """Termination-correction variant of the decomposition (SV11-SPLIT).
+
+    ``uniform``: uniform curvature from the end-fitting face instead of the
+    beam profile (the end-fitting anchor alone). ``setback_m``: straight,
+    frictional, uncurved length between the armour anchor and the face (a
+    large value removes the end fitting from the solved chain; ``reach_lengths``
+    must then cover it). ``inlet``: the profile upstream of the curved
+    section as solved (``"beam"``), set to zero (``"zero"``, up to 0.05 m
+    before a station in the inlet) or held at the curvature of the start of
+    the curved section (``"hold"``: the curvature step removed, the contact
+    zone kept). ``stick``: the stick convention of the correction. The
+    registered rows use the default.
+    """
+
+    uniform: bool = False
+    setback_m: float = 0.0
+    reach_lengths: float = 8.0
+    stick: str = "scaled"
+    inlet: str = "beam"
+
+
+REGISTERED = TermVariant()
+
+
 def station_ranges(
     layer,
     peak: float,
     x_s: float,
     azimuth_deg: float,  # type: ignore[no-untyped-def]
     profile: tuple[np.ndarray, np.ndarray] | None,
+    variant: TermVariant | None = None,
+    x_anchor_m: float = X_ANCHOR_M,
 ) -> dict[str, float]:
-    """Axial and single-side ranges [Pa] over the last cycle at one station."""
+    """Axial and single-side ranges [Pa] over the last cycle at one station.
+
+    ``profile=None`` and ``variant=None`` is the sectional result; otherwise
+    the termination correction (``variant`` defaults to the registered one),
+    with the anchor at ``x_anchor_m`` (the rig's end-fitting face).
+    """
     from cablexsec.analysis.fatigue import wire_stress_field  # noqa: PLC0415
     from cablexsec.analysis.termination import TerminationSpec  # noqa: PLC0415
 
     kx = _history(peak)
     ky = np.zeros_like(kx)
     term = None
-    if profile is not None:
+    if profile is not None or variant is not None:
+        v = REGISTERED if variant is None else variant
         term = TerminationSpec(
-            distance_m=x_s - X_ANCHOR_M,
-            curvature_profile=profile,
+            distance_m=x_s - x_anchor_m,
+            curvature_profile=None if v.uniform else profile,
             k_anchor_N_m=K_ANCHOR_N_M,
+            setback_m=v.setback_m,
+            reach_lengths=v.reach_lengths,
+            stick=v.stick,
         )
     field = wire_stress_field(layer, kx, ky, termination=term)
     last = slice(kx.size - 4 * 60 - 1, kx.size)
@@ -432,6 +520,7 @@ def station_ranges(
     out["termination_applied"] = float(bool(inc is not None and inc.applied))
     out["boundary_layer_m"] = float(inc.boundary_layer_m) if inc is not None else 0.0
     out["reach_m"] = float(inc.reach_m) if inc is not None else 0.0
+    out["a_max"] = float(inc.a_max) if inc is not None else 0.0
     return out
 
 
@@ -440,14 +529,21 @@ def predict_case(
     mu: float,
     half_angle_deg: float | None = None,
     only: tuple[str, ...] | None = None,
+    variant: TermVariant | None = None,
+    rig: Rig | None = None,
 ) -> dict:
-    """Station predictions of one load case (all stations, or ``only``)."""
+    """Station predictions of one load case (all stations, or ``only``).
+
+    ``variant`` and ``rig`` change the termination correction and the rig of
+    the curvature profile (decomposition and sensitivity studies only).
+    """
     _state, layer, static = section(case, mu)
     moment, ei_max, ei_min = backbone(case, mu)
-    beam = Beam(moment, ei_min, case.tension_N)
+    beam = Beam(moment, ei_min, case.tension_N, rig=rig)
     half = case.angle_range_deg / 2 if half_angle_deg is None else half_angle_deg
     w, k = beam.peak_profile(half)
-    xp = beam.x - X_ANCHOR_M
+    anchor = beam.rig.x_anchor_m
+    xp = beam.x - anchor
     profile = (xp, k)
     out = {
         "lc": case.lc,
@@ -468,7 +564,17 @@ def predict_case(
             continue
         peak = float(np.interp(x_s, beam.x, k))
         sec = station_ranges(layer, peak, x_s, az, None)
-        term = station_ranges(layer, peak, x_s, az, profile)
+        shape = profile
+        if variant is not None and variant.inlet != "beam":
+            kk = k.copy()
+            if variant.inlet == "zero":
+                kk[(beam.x <= 0.0) & (beam.x < x_s - 0.05)] = 0.0
+            elif variant.inlet == "hold":
+                kk[beam.x <= 0.0] = np.interp(0.0, beam.x, k)
+            else:
+                raise ValueError(f"unknown inlet variant {variant.inlet!r}")
+            shape = (xp, kk)
+        term = station_ranges(layer, peak, x_s, az, shape, variant, anchor)
         out["stations"][name] = {
             "x_m": x_s,
             "azimuth_deg": az,
@@ -548,13 +654,25 @@ def gate_values(mu: float = MU_DECLARED) -> dict:
     }
 
 
-def gjosteen(mu: float, plane_only: bool = False) -> dict:
+def gjosteen(
+    mu: float,
+    plane_only: bool = False,
+    variant: TermVariant | None = None,
+    rig: Rig | None = None,
+) -> dict:
     """SV11-GJ: LC 14 at +-8 deg, absolute ranges [MPa]."""
     case = next(c for c in load_cases() if c.lc == 14)
     names = ("2.1", "2.5", "3.1", "3.5") + (
         () if plane_only else ("2.2", "2.3", "3.2", "3.3", "3.4")
     )
-    res = predict_case(case, mu, half_angle_deg=GJ_HALF_ANGLE_DEG, only=names)
+    res = predict_case(
+        case,
+        mu,
+        half_angle_deg=GJ_HALF_ANGLE_DEG,
+        only=names,
+        variant=variant,
+        rig=rig,
+    )
     meas = measured_gjosteen()
     plane = ["2.1", "2.5", "3.1", "3.5"]
     pred = {s: res["stations"][s]["termination"]["axial_p"] / 1e6 for s in plane}
@@ -588,6 +706,220 @@ def gjosteen(mu: float, plane_only: bool = False) -> dict:
     }
 
 
+# --------------------------------------------------------------------------- #
+# Decomposition of the termination increment (SV11-SPLIT, SV11-REACH)         #
+# --------------------------------------------------------------------------- #
+FAR_ANCHOR = TermVariant(setback_m=20.0, reach_lengths=30.0)
+EF_ONLY = TermVariant(uniform=True)
+SMALL_ANGLE_CASES = (7, 8)  # 0.5 and 1 deg
+
+
+@lru_cache(maxsize=1)
+def split_values(mu: float = MU_DECLARED) -> dict:
+    """Where the termination increment of SV11 comes from (reported rows).
+
+    (a) The end-fitting anchor alone: the same correction with uniform
+    curvature from the end-fitting face, all load cases and SV11-GJ.
+    (b) No end fitting: the armour anchored 20 m upstream of the face
+    (straight, frictional, uncurved set-back), the bellmouth profile
+    unchanged; LC 14 and SV11-GJ against the registered correction.
+    (c) Reach of SV11-PLANE: slip demand ``a_max`` of the correction at the
+    small angles and the load cases whose sectional ratio is outside the band.
+    """
+    plane = plane_stations()
+    reg = gate_values(mu)
+    ef = metrics(
+        [predict_case(c, mu, only=plane, variant=EF_ONLY) for c in load_cases()]
+    )
+    gj_ef = gjosteen(mu, plane_only=True, variant=EF_ONLY)
+    lc14 = next(c for c in load_cases() if c.lc == 14)
+    far14 = metrics([predict_case(lc14, mu, only=plane, variant=FAR_ANCHOR)])
+    gj_far = gjosteen(mu, plane_only=True, variant=FAR_ANCHOR)
+    reg_st = reg["plane"]["cases"][14]["stations"]
+    far_st = far14["cases"][14]["stations"]
+    change = max(
+        abs(far_st[s]["termination"] / reg_st[s]["termination"] - 1.0) for s in plane
+    )
+    reg_gj = reg["gjosteen"]["plane_pred_MPa"]
+    gj_change = max(abs(gj_far["plane_pred_MPa"][s] / reg_gj[s] - 1.0) for s in reg_gj)
+    cases = reg["plane"]["cases"]
+    small = {}
+    for case in load_cases():
+        if case.lc not in SMALL_ANGLE_CASES:
+            continue
+        res = predict_case(case, mu, only=plane)
+        small[case.lc] = {
+            "angle_range_deg": case.angle_range_deg,
+            "a_max": max(v["termination"]["a_max"] for v in res["stations"].values()),
+            "R": cases[case.lc]["R_termination"],
+            "R_sectional": cases[case.lc]["R_sectional"],
+        }
+    outside = sorted(
+        lc for lc, v in cases.items() if not 0.70 <= v["R_sectional"] <= 1.43
+    )
+    return {
+        "ef_only": {
+            "median_R": ef["median_R_termination"],
+            "count_in_band": ef["count_in_band_termination"],
+            "R": {lc: v["R_termination"] for lc, v in ef["cases"].items()},
+            "gj_ratio": gj_ef["ratio_termination"],
+        },
+        "no_end_fitting": {
+            "R_lc14": far14["cases"][14]["R_termination"],
+            "R_lc14_registered": cases[14]["R_termination"],
+            "gj_ratio": gj_far["ratio_termination"],
+            "gj_ratio_registered": reg["gjosteen"]["ratio_termination"],
+            "largest_station_change": change,
+            "largest_gj_change": gj_change,
+        },
+        "registered": {
+            "median_R": reg["plane"]["median_R_termination"],
+            "median_R_sectional": reg["plane"]["median_R_sectional"],
+            "gj_ratio": reg["gjosteen"]["ratio_termination"],
+            "gj_ratio_sectional": reg["gjosteen"]["ratio_sectional"],
+        },
+        "small_angle": small,
+        "sectional_outside_band": outside,
+        "R_sectional_outside": {lc: cases[lc]["R_sectional"] for lc in outside},
+        "R_termination_outside": {lc: cases[lc]["R_termination"] for lc in outside},
+    }
+
+
+def eq88_consistency() -> dict[str, dict[str, float]]:
+    """Radius and slope of Saevik's Eq. 88 at the two published end points.
+
+    Saevik (2011) states a minimum radius of 3.9 m at s = 1.72 m and a slope
+    of 16 deg; Gjosteen et al. (2027) the same radius at s = 1.79 m.
+    """
+    out = {}
+    for s_end in (BELL_END_M, 1.79):
+        kappa = KAPPA_B0 + KAPPA_B1 * s_end
+        slope = KAPPA_B0 * s_end + KAPPA_B1 * s_end**2 / 2
+        out[f"{s_end:.2f}"] = {
+            "radius_m": 1.0 / kappa,
+            "slope_deg": math.degrees(slope),
+        }
+    out["radius_3.9"] = {"s_m": (1.0 / 3.9 - KAPPA_B0) / KAPPA_B1}
+    return out
+
+
+class _NearestHelixStack:
+    """Sensitivity only: Yun shear stack cut at the nearest helical layer below.
+
+    The package sums the shear compliance of every polymer layer between a
+    helical layer and the axis. In this riser the 8.7 mm pressure sheath lies
+    under the steel pressure armour; inside this context the stack restarts
+    above the nearest helical layer below (tensile-armour ``xi`` 0.88 and 0.89
+    instead of 0.52 and 0.51). Not a registered input; undone on exit.
+    """
+
+    def __enter__(self) -> None:
+        import cablexsec.api as api  # noqa: PLC0415
+        import cablexsec.mechanics.stiffness as stiffness  # noqa: PLC0415
+        from cablexsec.cables.schema import HelicalLayer  # noqa: PLC0415
+
+        self._modules = (api, stiffness)
+        original = stiffness.xi_for_layer
+        self._original = original
+
+        def xi_nearest(cable, layer_name, youngs_modulus_Pa=None):  # type: ignore[no-untyped-def]
+            names = [lyr.name for lyr in cable.layers]
+            below = cable.layers[: names.index(layer_name)]
+            helical = [
+                k for k, lyr in enumerate(below) if isinstance(lyr, HelicalLayer)
+            ]
+            if helical:
+                cable = cable.model_copy(
+                    update={"layers": list(cable.layers[helical[-1] + 1 :])}
+                )
+            return original(cable, layer_name, youngs_modulus_Pa=youngs_modulus_Pa)
+
+        for module in self._modules:
+            module.xi_for_layer = xi_nearest  # type: ignore[attr-defined]
+        gate_values.cache_clear()
+
+    def __exit__(self, *exc: object) -> None:
+        for module in self._modules:
+            module.xi_for_layer = self._original  # type: ignore[attr-defined]
+        gate_values.cache_clear()
+
+
+def profile_convergence(
+    mu: float = MU_DECLARED, cases: tuple[int, ...] = (7, 14, 18)
+) -> dict[int, dict[str, float]]:
+    """Station curvatures against solver tolerance and mesh (reported).
+
+    ``tolerance``: largest relative change at 20 mm from the default
+    projected-gradient tolerance (1e-9) to 1e-13; ``mesh``: from 20 to 10 mm,
+    both at 1e-13.
+    """
+    out = {}
+    for case in load_cases():
+        if case.lc not in cases:
+            continue
+        moment, _ei_max, ei_min = backbone(case, mu)
+        peaks = []
+        for h, tol in ((0.02, 1e-9), (0.02, 1e-13), (0.01, 1e-13)):
+            beam = Beam(moment, ei_min, case.tension_N, h=h)
+            w = None
+            k = np.zeros(beam.n)
+            for j in range(1, 13):
+                half = math.radians(case.angle_range_deg / 2 * j / 12)
+                w, k = beam.solve(half, w, tol=tol, max_iter=500)
+            peaks.append(
+                np.array([float(np.interp(x, beam.x, k)) for _n, x, _a in stations()])
+            )
+        out[case.lc] = {
+            "tolerance": float(np.max(np.abs(peaks[1] / peaks[0] - 1.0))),
+            "mesh": float(np.max(np.abs(peaks[2] / peaks[1] - 1.0))),
+        }
+    return out
+
+
+def sensitivity(mu: float = MU_DECLARED) -> dict:
+    """Rig, stick and shear-stack sensitivities of SV11-PLANE and SV11-GJ.
+
+    Reported in doc/benchmarks.md (SV11 decomposition); none is registered.
+    """
+    plane = plane_stations()
+    base = sv11_rig()
+    rigs = {
+        "registered": base,
+        "gap 10 mm": replace(base, gap_m=0.010),
+        "bellmouth end 1.79 m": replace(base, bell_end_m=1.79),
+        "rotation at the end-fitting face": replace(base, x_rotation_m=base.x_anchor_m),
+    }
+    out: dict = {}
+
+    def run(label: str, rig: Rig, variant: TermVariant | None) -> None:
+        res = metrics(
+            [
+                predict_case(c, mu, only=plane, variant=variant, rig=rig)
+                for c in load_cases()
+            ]
+        )
+        gj = gjosteen(mu, plane_only=True, variant=variant, rig=rig)
+        out[label] = {
+            "median_R": res["median_R_termination"],
+            "count": res["count_in_band_termination"],
+            "median_R_sectional": res["median_R_sectional"],
+            "count_sectional": res["count_in_band_sectional"],
+            "gj": gj["ratio_termination"],
+            "gj_sectional": gj["ratio_sectional"],
+            "R": {lc: v["R_termination"] for lc, v in res["cases"].items()},
+            "R_sectional": {lc: v["R_sectional"] for lc, v in res["cases"].items()},
+        }
+
+    for label, rig in rigs.items():
+        run(label, rig, None)
+    run("inlet curvature zero", base, TermVariant(inlet="zero"))
+    run("inlet held at the curved-start curvature", base, TermVariant(inlet="hold"))
+    run("rigid stick in the correction", base, TermVariant(stick="rigid"))
+    with _NearestHelixStack():
+        run("shear stack to the nearest helix", base, None)
+    return out
+
+
 def identify_polymer_modulus() -> float:
     """Polymer modulus that makes EI_min equal 72.8 kN m2 ([Saevik2011] Table 1)."""
     from scipy.optimize import brentq  # noqa: PLC0415
@@ -619,6 +951,12 @@ def main() -> None:
     parser.add_argument("--cases", type=int, nargs="*", default=None)
     parser.add_argument("--tendons", choices=("round", "rectangular"), default="round")
     parser.add_argument(
+        "--sensitivity",
+        action="store_true",
+        help="run the decomposition and the rig, stick and shear-stack "
+        "sensitivities of doc/benchmarks.md and write them to OUTPUT_JSON",
+    )
+    parser.add_argument(
         "--identify",
         action="store_true",
         help="also identify mu on LC 14 (SV11-ID) and predict the others",
@@ -626,6 +964,23 @@ def main() -> None:
     args = parser.parse_args()
     use_tendons(args.tendons)
     t0 = time.time()
+    if args.sensitivity:
+        out_s: dict = {
+            "split": split_values(args.mu),
+            "eq88": eq88_consistency(),
+            "convergence": profile_convergence(args.mu),
+            "sensitivity": sensitivity(args.mu),
+        }
+        out_s["seconds"] = time.time() - t0
+        args.output.write_text(json.dumps(out_s, indent=1), encoding="utf-8")
+        print(json.dumps(out_s["split"], indent=1))
+        for label, v in out_s["sensitivity"].items():
+            print(
+                f"{label}: median R {v['median_R']:.2f} ({v['count']} of 14), "
+                f"sectional {v['median_R_sectional']:.2f} ({v['count_sectional']}); "
+                f"GJ {v['gj']:.2f} (sectional {v['gj_sectional']:.2f})"
+            )
+        return
     cases = [c for c in load_cases() if args.cases is None or c.lc in args.cases]
     results = []
     for case in cases:

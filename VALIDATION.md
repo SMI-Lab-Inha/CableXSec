@@ -68,6 +68,8 @@ afterwards: a comparison that misses its target is reported as failed.
 | **WITZ-ID** | 300-bar loop predicted after identifying the initial pressure at 0 bar | Witz (1996), Figs 5–6 | width 1356 N·m vs 1990–2164; energy −14.2 % | width 1692–2489 N·m; energy ±15 % | **Fail** |
 | **SV11-PLANE** | Inner-armour stress ranges at the bending-plane FBG stations, 14 load cases | Sævik (2011), Figs 17–23 | median ratio 1.62 (3 of 14 in band); sectional 1.00 (11 of 14) | median 0.85–1.18 and ≥12 of 14 in 0.70–1.43 | **Fail** |
 | **SV11-GJ** | Absolute stress ranges near the termination, load case 14 | Gjøsteen et al. (2027), Figs 27–35 | mean ratio 1.80 (sectional 1.24) | 0.72–1.38 | **Fail** |
+| **SV11-SPLIT** | Origin of the termination increment: end-fitting anchor alone (uniform curvature from the face); end fitting removed (anchor 20 m upstream) | Sævik (2011); Gjøsteen et al. (2027) | end fitting alone 1.01 / 1.27 (sectional 1.00 / 1.24); without end fitting unchanged (1.70, 1.80) | stated, not gated | Info |
+| **SV11-REACH** | Small-angle slip demand and the cases outside the band whatever the correction does | Sævik (2011) | a_max below 1 at 0.5° and 1°; sectional outside: LC 4, 7, 8 | stated, not gated | Info |
 | **AW-DONG25** | Armour wire anchored at both ends of one pitch at uniform curvature: stress at the anchor and peak, code-to-code | Dong et al. (2025), FE, Figs 14 and 25 | anchor 156.4 vs 156.9 MPa (source theory 147.8); peak 207.8 vs 204.5 MPa | stated, not gated | Info |
 | **AW-ZT14** | Same at a = 4.92: normalised anchor and peak stress, code-to-code | Zhu and Tan (2014), FE, Figs 4–8 | 1.19 / 1.70 vs 2.22 (the FE far field is not in slip) | stated, not gated | Info |
 | **DAI18-DIG** | Digitised friction loops of armour wire on anti-wear tape, Test 1: loop maximum against the printed static coefficient | Dai, Sævik and Ye (2018), Fig. 4a, p. 428 | 0.2237 / 0.2405 / 0.3786 vs 0.22 / 0.24 / 0.38 | within 0.005 + 0.0021 | Pass |
@@ -98,7 +100,10 @@ quantities are those of the passing rows. In particular:
   WITZ-ID.
 - The termination-corrected (anchored-wire) armour stress is an upper estimate that the
   published near-termination measurements do not support (SV11-PLANE, SV11-GJ); the sectional
-  result is the one that matches them.
+  result is the one that matches them. At this rig the end fitting contributes about 1 % of
+  the correction; the excess comes from the curvature gradients at the bellmouth contact on a
+  one-way curvature field (SV11-SPLIT), and SV11-PLANE cannot pass through any termination
+  correction because its small-angle cases stick (SV11-REACH).
 - The static/dynamic friction law is compared with measured friction loops of armour wire on
   anti-wear tape on one spring-slider, not on a cable section (DAI18 rows): the loops re-stick
   at every reversal (`stick_time_s = 0`), the dynamic level is rate independent at 0.01–0.2 Hz,
