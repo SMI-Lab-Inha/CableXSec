@@ -10,6 +10,15 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Added
 
+- Validation row CH-GJ (stated, model-to-model, registered before the run): free torsional
+  stiffness of the Chae, Nam and Shim (2023) coiling cable at the source's twist of 0.125 rad/m
+  (unwinding, zero tension), against the range of the source's three cross-section tools
+  (Table 5; no measurement). Armour pitch 1.8 / 3.0 m: packaged straight cores 81.9 / 50.5 kN m²;
+  cores laid S as in the source at an assumed pitch of 2.5 m 61.1 / 35.0 and of 3.0 m
+  64.4 / 37.3 kN m² (tools 59.6–83.2 / 34.3–44.7). The packaged file and the benchmark page state
+  that its straight cores raise the free torsional stiffness by 1.3–1.4 times, and why the
+  source's closed form (Eq. 14 as printed) is not a reference.
+
 - Validation row BM1-ID (gap R1b), targets registered before the run: on the Ménard and
   Cartraud (2023) cable with the laid cores, the trefoil wedge and the filler profiles (μ 0.2 on
   every contact), the initial pressure identified on the cycle work of range (b) is 220 kPa

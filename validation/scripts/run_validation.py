@@ -19,6 +19,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from types import ModuleType
 
 import numpy as np
 
@@ -852,7 +853,35 @@ def _torque_rows() -> list[Row]:
             and p["uj_test_max"] <= 1.15
             else "FAIL",
         ),
+        _chae_torsion_row(sv),
     ]
+
+
+def _chae_torsion_row(sv: ModuleType) -> Row:
+    """CH-GJ: model-to-model torsional stiffness of the Chae cable (stated)."""
+    gj = sv.chae_checks()
+    pitches = sorted(sv.CHAE_TABLE5_GJ)
+
+    def pair(values: dict[float, float]) -> str:
+        return " / ".join(f"{values[p] / 1e3:.1f}" for p in pitches)
+
+    tools = " / ".join(
+        f"{min(sv.CHAE_TABLE5_GJ[p]) / 1e3:.1f}-{max(sv.CHAE_TABLE5_GJ[p]) / 1e3:.1f}"
+        for p in pitches
+    )
+    return Row(
+        "2",
+        "CH-GJ",
+        "Chae, Nam and Shim (2023) Table 5: free torsional stiffness at "
+        "0.125 rad/m (unwinding, zero tension), armour pitch 1.8 / 3.0 m, "
+        "against the range of the source's three cross-section tools [kN m^2]: "
+        "packaged straight cores; cores laid S as in the source (Sec. 2.1.2) at "
+        "an assumed pitch of 2.5 m and 3.0 m (the source gives none)",
+        "stated, not gated (model-to-model; no measurement; core pitch not published)",
+        f"tools {tools}; straight {pair(gj['straight'])}; S 2.5 m "
+        f"{pair(gj['S 2.5 m'])}; S 3.0 m {pair(gj['S 3.0 m'])}",
+        "INFO",
+    )
 
 
 def _mkappa_tension_cycle(cable: CableData) -> tuple[float, float]:
