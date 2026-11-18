@@ -20,8 +20,9 @@ bend stiffener); the hysteretic two-way element is stage 2 (Section 7).
 From the CableDyn manual (`doc/driver_format.md`, `doc/outputs.rst`,
 `doc/theory.rst`) for CableDyn 0.4.x. The genuine runs in `tests/data/cabledyn/`
 were written by the CableDyn 0.1.0 driver (`lw24`, `lw128_v010`) and a
-CableDyn 0.4.2 build (`lw128`, and `lw24r` on a mesh the static solve
-refined); where a later release changed a channel, the item says so.
+CableDyn 0.4.2 build (`lw128`; `lw24r` on a mesh the static solve
+refined; `lw24g` with the 0.4.x LINE TYPES tokens); where a later release
+changed a channel, the item says so.
 
 - **Files.** Standalone driver: `<root>.out` (title line, header
   `Time(s)` and the deck `OUTPUTS` tokens, no units row);
@@ -68,6 +69,21 @@ refined); where a later release changed a channel, the item says so.
   dynamics it varies along the line) and `Twist<L>N<J>`, the material twist
   accumulated from End A in degrees.
 - **Pressure.** Not written.
+- **Deck.** `read_cabledyn_deck` reads the tables by position, as CableDyn
+  does: a row without a number token is a column-name or units row, and the
+  token count selects the row form (LINE TYPES 10 or 14 columns, either
+  followed by `Cl [dF cF]`; POINTS 5 or 9; LINES 3, 4 or the stock 7;
+  SECTIONS 4; END CONNECTIONS 6, 10 or 11). The `EI` column may carry
+  bending damping (`EI|Bb`, `EI|-zeta|f`, `EI|-zeta|f1|f2`), the `GJ` column
+  of a 14-column row the torque–tension coupling `K` and torsional damping
+  `Bt` (`GJ|K`, `GJ|K|Bt`); the line type keeps them, resolved as CableDyn
+  resolves them (`bending_damping_Nm2s`, `mass_damping_1_s`,
+  `torque_tension_coupling_Nm`, `torsional_damping`), and they leave the
+  reconstructed histories unchanged, since these come from CableDyn's
+  solution. A line solved in torsion whose type couples torque and tension
+  twists as it stretches, so the reader needs its `Twist` channels even when
+  only one end is restrained. `TorsStiffness` `Free`, `Zero` or `0` leaves an
+  end free in torsion.
 
 ## 2. Section history
 
