@@ -23,6 +23,7 @@ from cablexsec.analysis.sea_state_batch import (
     _json_default,
     _limit_threads,
     _portable,
+    _property_check,
     _restore,
     _termination_record,
     _thermal_record,
@@ -82,6 +83,8 @@ def test_section_checks(args, match):
         ({"tension_basis": "wall"}, "tension_basis"),
         ({"external_diameter_m": 0.0}, "external_diameter_m"),
         ({"property_rtol": 0.0}, "property_rtol"),
+        ({"torsion_rtol": -0.1}, "torsion_rtol"),
+        ({"torsion_rtol": math.inf}, "torsion_rtol"),
     ],
 )
 def test_option_checks(kwargs, match):
@@ -282,3 +285,49 @@ def test_cable_source_is_checked_before_any_run_is_read(tmp_path, cable):
             [SectionRequest("a", 2.0)],
             cable_source=tmp_path / "missing.yaml",
         )
+
+
+def _with_torsion(run, stiffness, gj, k):
+    """The run's deck with a 14-column LINE TYPES row (GJ|K)."""
+    text = run.deck.read_text(encoding="utf-8")
+    old = next(line for line in text.splitlines() if line.startswith("cable "))
+    head = old.split()[:6]
+    row = " ".join([*head, "1e8", f"{gj!r}|{k!r}", "0.1", "0.2", "1.2 0.1 1.0 0.0"])
+    run.deck.write_text(text.replace(old, row), encoding="utf-8")
+
+
+def test_property_check_compares_gj_and_coupling(tmp_path, cable, stiffness):
+    """GJ against K_tt and the coupling ratio K/sqrt(EA GJ) against
+    K_et/sqrt(EA_fixed K_tt), within ``torsion_rtol`` (default 25 %)."""
+    (run,) = _runs(tmp_path, stiffness, amplitudes=(0.01,), probabilities=(1.0,))
+    sections = [SectionRequest("a", 2.0)]
+    options = SeaStateBatchOptions()
+    (record,) = _property_check(cable, [run], sections, options)
+    assert record["GJ_match"] is None and record["K_match"] is None  # 10 columns
+    gj, k = stiffness.gj_Nm2, stiffness.axial_torsion_coupling_Nm
+    ratio = k / math.sqrt(stiffness.ea_fixed_N * gj)
+    _with_torsion(run, stiffness, gj, k)
+    (record,) = _property_check(cable, [run], sections, options)
+    assert record["GJ_match"] and record["K_match"]
+    assert record["global_coupling_ratio"] == pytest.approx(ratio, rel=1e-12)
+    assert record["local_coupling_ratio"] == pytest.approx(ratio, rel=1e-12)
+    # An uncoupled deck of this weakly coupled cable (ratio 0.1) passes.
+    _with_torsion(run, stiffness, 1.2 * gj, 0.0)
+    (record,) = _property_check(cable, [run], sections, options)
+    assert record["GJ_match"] and record["K_match"]
+    _with_torsion(run, stiffness, 1.5 * gj, k)
+    with pytest.raises(CableInputError, match=r"GJ .* N·m² against"):
+        _property_check(cable, [run], sections, options)
+    wrong = -0.2 * math.sqrt(stiffness.ea_fixed_N * gj)
+    _with_torsion(run, stiffness, gj, wrong)
+    with pytest.raises(CableInputError, match=r"K .* \(coupling ratio -0.2\)"):
+        _property_check(cable, [run], sections, options)
+    (record,) = _property_check(
+        cable, [run], sections, SeaStateBatchOptions(allow_property_mismatch=True)
+    )
+    assert record["GJ_match"] and record["K_match"] is False
+    assert record["EA_match"] and record["EI_within_bounds"]
+    (record,) = _property_check(
+        cable, [run], sections, SeaStateBatchOptions(torsion_rtol=0.4)
+    )
+    assert record["K_match"]

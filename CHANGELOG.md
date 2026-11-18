@@ -474,6 +474,51 @@ All notable changes to CableXSec are recorded in this file. The format follows
   one end is restrained, and `section_channels` lists `Twist`/`Torq` for a line restrained at
   either end. `tests/data/cabledyn/lw24g.*` is a CableDyn 0.4.2 run of a deck with these
   tokens.
+- CableDyn reader, remaining differences from CableDyn's deck reader:
+  - `EQUIVALENT BUOYANCY` (also `EQUIVALENT SECTIONS`, `BUOYANCY SECTIONS`) was ignored, so a
+    line type showed the `Diam` and `MassDenInAir` of its LINE TYPES row, not the values CableDyn
+    ran with. As in CableDyn, a row now replaces the diameter and sets the mass to
+    `rhoW π D²/4 + w/g` (deck `rhoW` and `g`); `line_types_diameter_m`, `line_types_mass_kg_m`
+    and `equivalent_submerged_weight_N_m` keep the row's values. CableDyn 0.4.2 gives
+    byte-identical output for the `lw24` deck with the row `buoy 0.30 -100.0` and for the deck
+    with `buoy` written with this diameter and mass. Its checks are mirrored (three columns, a
+    known type, one row per type, `D > 0`, a non-negative mass).
+  - Records are cut and split as CableDyn cuts and splits them: `--` starts a comment at the
+    start of a record or after a separator (a LINES row ending in `-- comment` was refused for
+    its column count), a record holding `---` is a section header named by its other
+    characters, a byte-order mark is dropped, a section header met again continues the section
+    (it was refused as a duplicate), and a token opening with a quote runs past its closing
+    quote to the next separator. `#` and `!` still cut a record anywhere, inside quotes too, as
+    CableDyn does (its `doc/options.rst` says so for file paths). OUTPUTS rows split on spaces,
+    tabs and commas with the quotes dropped, and only an unquoted `END` closes the list (CableDyn
+    reads a quoted one as a channel name).
+  - LINE TYPES rows with a negative `Cd_n`, `Cd_t`, `Ca_n` or `Ca_t`, or a 14-column row whose
+    `GAs`, `GJ`, `Irt` and `Irn` are neither all zero nor all positive, are refused, as by
+    CableDyn.
+  - A line restrained in torsion at one end only is solved in torsion by CableDyn only when
+    every section gives `GJ`, End B is `Fixed`, a dynamic run is force-blended and a restrained
+    End A is on a `Fixed` rod's end or a Rigid6 body if on either; otherwise it runs as without
+    the torsion columns. `CableDynLine.torsion_solved` and `torsion_note` follow these rules (the
+    deck's BODIES and RODS rows are read for them), `section_channels` lists `Twist`/`Torq` only
+    on a solved line (CableDyn refuses them on any other), and `checks["torsion"]` records the
+    result. A solved line restrained at one end without torque–tension coupling twists in the
+    dynamics (torsional waves of its polar inertia, the roll of the restrained end's vessel or
+    body), so a dynamic run of it is now refused without its `Twist` channels, where it was
+    read twist-free: `tests/data/cabledyn/lw24k.*`, the `lw24g` deck with `K = 0` run by
+    CableDyn 0.4.2, twists by up to −1.7e-3° in 1 s (0.18° in a 30 s run). Its statics stay
+    twist-free and are read without them.
+  - The anchor-first swap of a line from a `Fixed` NodeA to a `Free` or `Connect` NodeB applies
+    only when NodeA is not above NodeB, as in CableDyn; a weight hung from an overhead point
+    keeps its written order. A line end on a rod fixed to a body is a point of that body, and a
+    zero-length rod is the point it collapses to.
+- `run_sea_state_batch` compares the deck's `GJ` and torque–tension coupling `K` with the
+  section's lay torsional stiffness `K_tt` and coupling `K_et` (on a 14-column LINE TYPES row;
+  the check compared `EA` and `EI` only). `GJ` must lie within `torsion_rtol` (new option,
+  default 25 %) of `K_tt`, and the coupling ratio `K/sqrt(EA GJ)` within `torsion_rtol` of
+  `K_et/sqrt(EA_fixed K_tt)`. A mismatch stops the batch, as one of `EA` or `EI` does, unless
+  `allow_property_mismatch=True`, and the manifest records both values and the ratios. The
+  tolerance is wider than `property_rtol` because `K_tt` leaves out the components' own torsion
+  and the radial relaxation of the layers.
 - `read_cabledyn_sections` closes every output file it reads. The per-line `.p.out` and
   `.t.out` readers were left open after a read (and after a failed one) until garbage
   collection, which raised `ResourceWarning`. The files of one run must now also end on the same

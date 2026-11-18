@@ -80,10 +80,31 @@ changed a channel, the item says so.
   resolves them (`bending_damping_Nm2s`, `mass_damping_1_s`,
   `torque_tension_coupling_Nm`, `torsional_damping`), and they leave the
   reconstructed histories unchanged, since these come from CableDyn's
-  solution. A line solved in torsion whose type couples torque and tension
-  twists as it stretches, so the reader needs its `Twist` channels even when
-  only one end is restrained. `TorsStiffness` `Free`, `Zero` or `0` leaves an
-  end free in torsion.
+  solution. `TorsStiffness` `Free`, `Zero` or `0` leaves an end free in
+  torsion. `CableDynLine.torsion_solved` tells whether CableDyn solves a
+  line's torsion: restrained at both ends, or at one end when every section
+  gives `GJ`, End B is `Fixed`, a dynamic run is force-blended and a
+  restrained End A on a rod or body is on a `Fixed` rod or a Rigid6 body
+  (CableDyn's rules; otherwise `torsion_note` gives the reason and the line
+  runs as without the torsion columns). A LINE TYPES row with a negative drag
+  or added-mass coefficient, or a 14-column row whose `GAs`, `GJ`, `Irt` and
+  `Irn` are neither all zero nor all positive, is refused, as by CableDyn.
+- **Equivalent buoyancy.** An `EQUIVALENT BUOYANCY` row
+  (`LineType Diam SubmergedWeight`) makes CableDyn run the type with the
+  row's diameter `D` and the dry mass `rhoW π D²/4 + w/g` of its submerged
+  weight `w` [N/m]. The line type's `diameter_m` and `mass_kg_m` are these
+  values; `line_types_diameter_m` and `line_types_mass_kg_m` keep the LINE
+  TYPES row, and `equivalent_submerged_weight_N_m` the row's `w`. The deck's
+  `rhoW` and `g` (or CableDyn's defaults) resolve it; in a coupled run whose
+  host sets other values, CableDyn uses the host's.
+- **Records.** As in CableDyn, `#` and `!` start a comment anywhere in a
+  record, inside a quoted token too (a quoted file path cannot hold them),
+  and `--` starts one at the start of a record or after a space or tab,
+  unless the record holds a `---` rule. A record holding `---` is a section
+  header, named by its other characters; a section met again continues. A
+  token that opens with a quote runs to its closing quote, spaces included,
+  and on to the next separator. OUTPUTS names are separated by spaces, tabs
+  or commas, with the quotes dropped; an unquoted `END` closes the list.
 
 ## 2. Section history
 
@@ -124,13 +145,24 @@ time; this is the material frame of a torque-free isotropic rod.
 `frame="section"` transports the section's own axes in time and needs only
 the channels near the section. Where `Twist` channels bracket a section the
 axes are turned right-handed about `t` by the material twist from End A. A
-line restrained in torsion at both ends without these channels is rejected; a
-line restrained at one end only is read with its `Twist` channels when they
-are written; restrained at End B only, its End A turns freely with the line's
-twist, which the reader, whose axes start at End A, does not represent. The
+line restrained in torsion at both ends without these channels is rejected.
+So is a dynamic run of a line restrained at one end whose torsion CableDyn
+solves: its statics are twist-free (a free end carries no torque), but in the
+dynamics its polar inertia `Irn` carries torsional waves and a roll of the
+restrained end's vessel or body twists it (CableDyn `doc/theory.rst`, a free
+end). The CableDyn 0.4.2 run `tests/data/cabledyn/lw24k`, a lazy wave clamped
+and restrained at End A on a vessel, free in torsion at End B and without
+torque–tension coupling, twists by up to −1.7e-3° at the sag bend in 1 s and
+0.18° in a 30 s run. With coupling (`GJ|K`) the stretch twists the line in
+the statics too, so its channels are needed in any run. A line restrained at
+one end whose torsion CableDyn does not solve runs as one without the torsion
+columns and is read twist-free; `checks["torsion"]` records which case was
+read. Restrained at End B only, a line's End A turns freely with its twist,
+which the reader, whose axes start at End A, does not represent. The
 hang-off's rotation about its own
-tangent (vessel yaw at a vertical hang-off) is not visible in the geometry and
-is not represented.
+tangent (vessel yaw at a vertical hang-off, the roll of a restrained End A)
+is not visible in the geometry and is not represented: the `Twist` channels
+start at 0 at End A.
 
 `rotation_curvature_x/y` are the components of `κ` on (`e1`, `e2`): a lazy
 wave in the `x–z` plane bends about `e2` (sag bend `κ·e2 < 0`, hog bend
@@ -206,9 +238,9 @@ nodes cannot be placed: the positions are read at the deck nodes,
 **Deck outputs.** `section_channels(deck, sections)` lists the `OUTPUTS`
 channels the tangent source needs for the section frame: `Dec`/`Azi` on the
 window, `Ten`, `Curv` and `p{x,y,z}` at the bracketing nodes, and
-`Twist`/`Torq` on a line restrained at both ends (request them too on a line
-restrained at one end). The arc frame also needs the line's `p`
-flag. Adding `t` gives the element tensions.
+`Twist`/`Torq` on a line CableDyn solves in torsion (`torsion_solved`;
+CableDyn refuses them on any other line). The arc frame also needs the
+line's `p` flag. Adding `t` gives the element tensions.
 
 ### 2.1 CableDyn 0.4.0 signed curvature components
 
@@ -303,9 +335,17 @@ result.sections["sag"].long_term.annual_damage, result.sections["sag"].life_year
   probability among its seeds).
 - Before reading, the deck `EA` at each section is compared with the
   section's `EA_fixed` and the deck `EI` with the section's full-slip to
-  no-slip range (`property_rtol`, default 5%); a mismatch stops the batch
-  unless `allow_property_mismatch=True` is declared, and the comparison is
-  written to the manifest either way.
+  no-slip range (`property_rtol`, default 5%). On a 14-column LINE TYPES row
+  the deck `GJ` is compared with the section's lay torsional stiffness
+  `K_tt` and its torque–tension coupling `K` with `K_et`, as the coupling
+  ratio `c = K/sqrt(EA GJ)` against `K_et/sqrt(EA_fixed K_tt)` (`|c| < 1`;
+  the free-twist axial stiffness is `EA (1 − c²)`), both within
+  `torsion_rtol` (default 25 %). `K_tt` leaves out the components' own
+  torsion and the radial relaxation of the layers, which move a section's
+  torsional stiffness by tens of percent either way (benchmark CH-GJ), hence
+  the wider tolerance; a 10-column row gives no `GJ` and is not compared. A
+  mismatch stops the batch unless `allow_property_mismatch=True` is
+  declared, and the comparison is written to the manifest either way.
 - Workers: `workers` processes (at most `MAX_WORKERS = 8`), one numerical
   thread each, spawned; results do not depend on the worker count.
 - Output folder (must not exist): `manifest.json` (SHA-256 of every CableDyn

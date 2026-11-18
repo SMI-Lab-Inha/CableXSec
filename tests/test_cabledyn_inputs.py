@@ -93,12 +93,6 @@ def test_at_least_one_section(tmp_path):
         ("cable 0.2 40.0", "cable abc 40.0", "not numeric"),
         ("cable 0.2 40.0", "cable inf 40.0", "not finite"),
         (
-            "--------------------- OPTIONS ---\n",
-            "--------------------- SECTIONS ---\n1 cable 10.0 100\n"
-            "--------------------- OPTIONS ---\n",
-            "duplicate deck section",
-        ),
-        (
             "ID Type X Y Z\n(-) (-) (m) (m) (m)\n1 Coupled 0 0 -10\n2 Fixed 10 0 -12\n",
             "",
             "POINTS has no data rows",
@@ -740,7 +734,324 @@ def test_finite_ei_line_to_a_rod_end_is_swapped(tmp_path):
 
 
 def test_outputs_end_closes_the_channel_list(tmp_path):
+    """An unquoted ``END`` closes the list; CableDyn takes a quoted one as a name."""
     path = _deck(tmp_path / "d.dat", channels=["FairTen1", "END", "AnchTen1"])
+    assert read_cabledyn_deck(path).channels == ("FairTen1", "END", "AnchTen1")
+    _edit(path, '"END"\n', "end\n")
     assert read_cabledyn_deck(path).channels == ("FairTen1",)
     _edit(path, '"FairTen1"\n', '"FairTen1","Ten1N2" Curv1N2\n')
     assert read_cabledyn_deck(path).channels == ("FairTen1", "Ten1N2", "Curv1N2")
+
+
+# --------------------------------------------------------------------------- #
+# Records as CableDyn reads them                                              #
+# --------------------------------------------------------------------------- #
+def test_comments_and_headers_as_cabledyn_reads_them(tmp_path):
+    """``scan_comment`` and ``is_section_header`` of the CableDyn deck reader.
+
+    ``--`` starts a comment at the start of a record or after a separator,
+    unless the record holds a ``---`` rule; ``#`` and ``!`` start one
+    anywhere. A record holding ``---`` is a header named by its other
+    characters, a byte-order mark is dropped and a section met again goes on.
+    """
+    path = _deck(tmp_path / "d.dat")
+    _edit(path, "1 1 2 pt\n", "1 1 2 pt -- the only line\n")
+    _edit(path, "--------------------- POINTS ---\n", "POINTS -------- # points\n")
+    _edit(path, "1 Coupled 0 0 -10\n", "1 Coupled 0 0 -10\t--hang-off\n")
+    _edit(
+        path,
+        "--------------------- OPTIONS ---\n",
+        "--- SECTIONS ---\n1 cable 2.0 20\n--------------------- OPTIONS ---\n",
+    )
+    path.write_bytes(b"\xef\xbb\xbf" + path.read_bytes())
+    deck = read_cabledyn_deck(path)
+    line = deck.line(1)
+    assert line.outputs == "pt" and deck.point_types["1"] == "coupled"
+    assert [sec.length_m for sec in line.sections] == [10.0, 2.0]
+    # Not a comment: '--' inside a token, after which the row has 5 columns.
+    _edit(path, "1 1 2 pt -- the only line\n", "1 1 2 pt a--b\n")
+    with pytest.raises(CableSchemaError, match="LINES row of line 1 has 5 columns"):
+        read_cabledyn_deck(path)
+
+
+@pytest.mark.parametrize("mark", ["#", "!"])
+def test_comment_marks_cut_quoted_tokens_too(tmp_path, mark):
+    """CableDyn cuts a record at ``#`` or ``!`` even inside quotes
+    (``doc/options.rst``, file paths); the reader does the same."""
+    path = _deck(tmp_path / "d.dat")
+    _edit(path, _ROW_10, _ROW_10.replace("cable", f'"armoured{mark}cable"'))
+    # The cut row holds no number: a header row to CableDyn, so no type is left.
+    with pytest.raises(CableSchemaError, match="LINE TYPES has no data rows"):
+        read_cabledyn_deck(path)
+
+
+def test_quoted_token_runs_to_the_next_separator(tmp_path):
+    """A token opening with a quote runs past its closing quote to the next
+    separator (CableDyn ``token_bounds``), so ``"a b"c`` is one token."""
+    path = _deck(tmp_path / "d.dat")
+    _edit(path, _ROW_10, _ROW_10.replace("cable", '"armoured cable"x'))
+    _edit(path, "1 cable 10.0 100\n", '1 "armoured cable"x 10.0 100\n')
+    deck = read_cabledyn_deck(path)
+    assert deck.line(1).sections[0].line_type == "armoured cablex"
+
+
+# --------------------------------------------------------------------------- #
+# LINE TYPES checks                                                           #
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize(
+    "row",
+    [
+        "cable 0.2 40.0 5e8 0.0 2e4 -1.2 0.1 1.0 0.0\n",
+        "cable 0.2 40.0 5e8 0.0 2e4 1.2 0.1 1.0 -0.1 0.8\n",
+        _row_14("1.5e4").replace(" 1.0 0.0\n", " -1.0 0.0\n"),
+    ],
+)
+def test_negative_drag_or_added_mass_is_refused(tmp_path, row):
+    with pytest.raises(CableSchemaError, match="must be non-negative"):
+        read_cabledyn_deck(_line_types(tmp_path, row))
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        "cable 0.2 40.0 5e8 0.0 2e4 0 1.5e4 0.1 0.2 1.2 0.1 1.0 0.0\n",
+        "cable 0.2 40.0 5e8 0.0 2e4 1.9e8 0 0.1 0.2 1.2 0.1 1.0 0.0\n",
+        "cable 0.2 40.0 5e8 0.0 2e4 1.9e8 1.5e4 -0.1 0.2 1.2 0.1 1.0 0.0\n",
+        "cable 0.2 40.0 5e8 0.0 2e4 1.9e8 1.5e4 0.1 0 1.2 0.1 1.0 0.0\n",
+    ],
+)
+def test_finite_ei_columns_are_all_positive_or_all_zero(tmp_path, row):
+    with pytest.raises(CableSchemaError, match="GAs/GJ/Irt/Irn must all be > 0"):
+        read_cabledyn_deck(_line_types(tmp_path, row))
+
+
+def test_finite_ei_columns_all_zero_give_no_gj(tmp_path):
+    row = "cable 0.2 40.0 5e8 0.0 2e4 0 0 0 0 1.2 0.1 1.0 0.0\n"
+    line_type = read_cabledyn_deck(_line_types(tmp_path, row)).line_type("cable")
+    assert line_type.gj_Nm2 == 0.0 and line_type.polar_inertia_kg_m == 0.0
+
+
+# --------------------------------------------------------------------------- #
+# EQUIVALENT BUOYANCY                                                         #
+# --------------------------------------------------------------------------- #
+_EQUIVALENT = (
+    "--------------------- EQUIVALENT BUOYANCY ---\n"
+    "LineType Diam SubmergedWeight\n(-) (m) (N/m)\n"
+)
+
+
+def _equivalent(tmp_path, rows):
+    path = _deck(tmp_path / "d.dat")
+    _edit(
+        path,
+        "--------------------- POINTS ---\n",
+        _EQUIVALENT + rows + "--------------------- POINTS ---\n",
+    )
+    return path
+
+
+def test_equivalent_buoyancy_replaces_diameter_and_mass(tmp_path):
+    """CableDyn's ``apply_equivalent_buoyancy``: ``Diam`` becomes the row's and
+    the mass ``rhoW pi D^2/4 + w/g``; the LINE TYPES values are kept apart.
+
+    Checked against CableDyn 0.4.2: the ``lw24`` deck with the row
+    ``buoy 0.30 -100.0`` and the same deck with ``buoy`` written as
+    ``Diam 0.30`` and this mass give byte-identical ``.static.out``,
+    ``.out`` and line files.
+    """
+    path = _equivalent(tmp_path, "cable 0.30 -100.0\n")
+    line_type = read_cabledyn_deck(path).line_type("cable")
+    mass = 1025.0 * math.pi / 4.0 * 0.30**2 - 100.0 / 9.81
+    assert line_type.diameter_m == 0.30
+    assert line_type.mass_kg_m == pytest.approx(mass, rel=1e-15)
+    assert (line_type.line_types_diameter_m, line_type.line_types_mass_kg_m) == (
+        0.2,
+        40.0,
+    )
+    assert line_type.equivalent_submerged_weight_N_m == -100.0
+    plain = read_cabledyn_deck(_deck(tmp_path / "p.dat")).line_type("cable")
+    assert (plain.diameter_m, plain.line_types_diameter_m) == (0.2, 0.2)
+    assert plain.equivalent_submerged_weight_N_m is None
+    # Without g and rhoW in the deck, CableDyn's defaults resolve it.
+    _edit(path, "9.81 g - gravity\n1025.0 rhoW - density\n", "")
+    default = read_cabledyn_deck(path).line_type("cable")
+    assert default.mass_kg_m == pytest.approx(
+        1025.0 * math.pi / 4.0 * 0.30**2 - 100.0 / 9.80665, rel=1e-15
+    )
+
+
+@pytest.mark.parametrize(
+    ("rows", "match"),
+    [
+        ("cable 0.30\n", "needs 3 columns"),
+        ("rope 0.30 -100.0\n", "unknown LineType 'rope'"),
+        ("cable 0.30 -100.0\nCABLE 0.31 -90.0\n", "duplicate EQUIVALENT BUOYANCY"),
+        ("cable 0.0 -100.0\n", "needs Diam > 0"),
+        ("cable 0.1 -1000.0\n", "negative dry mass"),
+        ("cable 0.3 x\n", "submerged weight of cable is not numeric"),
+    ],
+)
+def test_equivalent_buoyancy_errors(tmp_path, rows, match):
+    with pytest.raises(CableSchemaError, match=match):
+        read_cabledyn_deck(_equivalent(tmp_path, rows))
+
+
+# --------------------------------------------------------------------------- #
+# Which lines CableDyn solves in torsion                                      #
+# --------------------------------------------------------------------------- #
+def _one_end(tmp_path, *, row=None, end="A", extra=""):
+    """The synthetic line restrained in torsion at one end only."""
+    tmp_path.mkdir(exist_ok=True)
+    path = _deck(tmp_path / "d.dat", torsion=True)
+    _edit(path, _ROW_10, row or _row_14("1.5e4"))
+    kept = f"1 {end} Rigid 1 0 0 Rigid 0 1 0 0\n"
+    _edit(
+        path,
+        "1 A Rigid 1 0 0 Rigid 0 1 0 0\n1 B Rigid 1 0 0 Rigid 0 1 0 0\n",
+        kept,
+    )
+    if extra:
+        _edit(path, "--------------------- OPTIONS ---\n", extra)
+    return path
+
+
+def test_one_end_torsion_follows_cabledyns_rules(tmp_path):
+    """CableDyn ``resolve_one_end_torsion``: the line is solved in torsion
+    only when every section gives GJ, End B is Fixed and a dynamic run is
+    force-blended; otherwise it runs as without the columns and section
+    channels does not ask for Twist (CableDyn refuses Twist channels there)."""
+    line = read_cabledyn_deck(_one_end(tmp_path / "a")).line(1)
+    assert line.torsion_solved and line.torsion_note == ""
+    assert "Twist1N51" in section_channels(_one_end(tmp_path / "b"), {"mid": 5.05})
+    no_gj = _one_end(tmp_path / "c", row=_ROW_10)
+    line = read_cabledyn_deck(no_gj).line(1)
+    assert not line.torsion_solved and "give no GJ" in line.torsion_note
+    assert not any(n.startswith("Twist") for n in section_channels(no_gj, {"m": 5.0}))
+    blend = _one_end(
+        tmp_path / "d",
+        extra="--------------------- OPTIONS ---\nFalse alpha_force_blend\n",
+    )
+    assert "alpha_force_blend" in read_cabledyn_deck(blend).line(1).torsion_note
+    _edit(blend, "1.0 TMax - duration\n", "0.0 TMax - duration\n")
+    assert read_cabledyn_deck(blend).line(1).torsion_solved  # a static run
+    moving = _one_end(tmp_path / "e")
+    _edit(moving, "2 Fixed 10 0 -12\n", "2 Coupled 10 0 -12\n")
+    line = read_cabledyn_deck(moving).line(1)
+    assert not line.torsion_solved and "not a Fixed point" in line.torsion_note
+    both = read_cabledyn_deck(_deck(tmp_path / "both.dat", torsion=True)).line(1)
+    assert both.torsion_solved and both.torsion_restrained
+
+
+_RODS = (
+    "--------------------- RODS ---\n"
+    "ID RodType Type XA YA ZA XB YB ZB NumSegs Outputs\n"
+    "1 tube {kind} 0 0 -12 0 0 -10 4 -\n"
+)
+_BODIES = (
+    "--------------------- BODIES ---\n"
+    "ID Type X Y Z Rot1 Rot2 Rot3 Mass Vol C33 C44 C55 CdA Ca\n"
+    "1 {kind} 0 0 -10 0 0 0 1e5 0 0 0 0 0 0\n"
+)
+
+
+@pytest.mark.parametrize(
+    ("end_a", "block", "solved"),
+    [
+        ("R1B", _RODS.format(kind="Fixed"), True),
+        ("R1B", _RODS.format(kind="Anchor"), True),
+        ("Rod1B", _RODS.format(kind="Pinned"), False),
+        ("R1B", _RODS.format(kind="Vessel"), False),
+        ("R1B", _RODS.format(kind="Body1") + _BODIES.format(kind="Rigid6"), True),
+        ("3", _BODIES.format(kind="Rigid6"), True),
+        ("3", _BODIES.format(kind="Coupled"), True),
+        ("3", _BODIES.format(kind="Point3"), False),
+    ],
+)
+def test_restrained_end_a_on_a_rod_or_body(tmp_path, end_a, block, solved):
+    """A restrained End A holds the torque on a Fixed rod's end or a Rigid6
+    body only (a rod fixed to a body is a point of the body)."""
+    path = _one_end(tmp_path)
+    _edit(path, "1 1 2 pt\n", f"1 {end_a} 2 pt\n")
+    _edit(path, "2 Fixed 10 0 -12\n", "2 Fixed 10 0 -12\n3 Body1 0 0 -10\n")
+    _edit(
+        path,
+        "--------------------- LINES ---\n",
+        block + "--------------------- LINES ---\n",
+    )
+    line = read_cabledyn_deck(path).line(1)
+    assert line.torsion_solved == solved, line.torsion_note
+
+
+def test_free_point_below_a_fixed_node_a_is_not_swapped(tmp_path):
+    """CableDyn swaps a line from a Fixed NodeA to a Free/Connect NodeB only
+    when NodeA is not above it: a weight hung from an overhead point keeps
+    its written order."""
+    path = _deck(tmp_path / "d.dat")
+    _edit(
+        path,
+        "1 Coupled 0 0 -10\n2 Fixed 10 0 -12\n",
+        "1 Fixed 0 0 -10\n2 Free 0 0 -20\n",
+    )
+    assert not read_cabledyn_deck(path).line(1).reversed_by_parser
+    _edit(path, "2 Free 0 0 -20\n", "2 Connect 0 0 -5\n")
+    assert read_cabledyn_deck(path).line(1).reversed_by_parser
+
+
+def test_line_restrained_at_one_end_needs_twist_in_a_dynamic_run(tmp_path):
+    positions = _bending_case(np.full(3, 0.02), np.zeros(3), 3)
+    root, deck = _write_case(tmp_path, positions, deck_kwargs={"torsion": True})
+    _edit(deck, _ROW_10, _row_14("1.5e4"))
+    _edit(deck, "1 B Rigid 1 0 0 Rigid 0 1 0 0\n", "")
+    with pytest.raises(CableSchemaError, match="CableDyn solves its torsion"):
+        read_cabledyn_sections(root, deck, {"s": 3.95}, pressure="none")
+    # Without GJ CableDyn does not solve the torsion: read twist-free.
+    _edit(deck, _row_14("1.5e4"), _ROW_10)
+    read = read_cabledyn_sections(root, deck, {"s": 3.95}, pressure="none")
+    assert read.histories["s"].twist_rad is None
+    assert read.checks["torsion"]["solved"] is False
+    assert "give no GJ" in read.checks["torsion"]["not_solved_because"]
+
+
+@pytest.mark.parametrize(
+    ("block", "match"),
+    [
+        (_RODS.replace(" 4 -\n", "\n").replace(" -12 0", " -12"), "RODS row has 8"),
+        (_BODIES.format(kind="Rigid6").replace(" 0 0\n", "\n"), "BODIES row has 13"),
+    ],
+)
+def test_rod_and_body_rows_are_counted(tmp_path, block, match):
+    path = _one_end(tmp_path)
+    _edit(
+        path,
+        "--------------------- LINES ---\n",
+        block + "--------------------- LINES ---\n",
+    )
+    with pytest.raises(CableSchemaError, match=match):
+        read_cabledyn_deck(path)
+
+
+def test_zero_length_rod_is_the_point_it_collapses_to(tmp_path):
+    """A zero-length rod is a point (CableDyn ``collapse_zero_length_rods``):
+    a Fixed one holds a restrained End A like a Fixed point; a Free one
+    makes End A a Free point, from which a Fixed NodeB below is no swap."""
+    path = _one_end(tmp_path)
+    _edit(path, "1 1 2 pt\n", "1 R1A 2 pt\n")
+    rods = _RODS.format(kind="Fix").replace(" 4 -\n", " 0 -\n")
+    _edit(
+        path,
+        "--------------------- LINES ---\n",
+        rods + "--------------------- LINES ---\n",
+    )
+    line = read_cabledyn_deck(path).line(1)
+    assert line.torsion_solved and not line.reversed_by_parser
+    _edit(path, "1 tube Fix ", "1 tube Body2 ")
+    line = read_cabledyn_deck(path).line(1)
+    assert line.torsion_solved  # a point of body 2, which the deck does not define
+
+
+def test_alpha_force_blend_must_be_logical(tmp_path):
+    path = _one_end(
+        tmp_path, extra="--------------------- OPTIONS ---\nmaybe alpha_force_blend\n"
+    )
+    with pytest.raises(CableSchemaError, match="alpha_force_blend 'maybe'"):
+        read_cabledyn_deck(path)
