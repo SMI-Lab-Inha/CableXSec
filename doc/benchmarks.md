@@ -82,13 +82,14 @@ model) is the full construction.
 | Armour compression: Malta et al. (2022), sheath-only FE | MM | Reported only: screen 49% below the FE limit load (conservative) |
 | Ménard and Cartraud (2023) full-slip stiffness | MM | PASS |
 | Ménard and Cartraud (2023) six measured bending ranges, moment | M | Moment errors 2.71–10.55% (transfer) |
-| Ménard and Cartraud (2023) six measured bending ranges, work | M | PASS at the retained 10% target (range b, +8.8 %; +12.9 % with the former capstan bound); ranges (a), (c), (d) +32 to +47 % |
+| Ménard and Cartraud (2023) six measured bending ranges, work | M | Unreliable reference, stated, not gated since 2026-11-18 (evidence in its section); range (b) +8.8 % (registered 10 % target met); ranges (a), (c), (d) +32 to +47 % |
 | Armour longitudinal displacement, Ménard and Cartraud FE | MM | Phase and scale reproduced; peaks over-predicted |
 | Tjahjanto et al. (2017), Leroy et al. (2017) FE armour slip | MM | Qualitative agreement only |
 | Sævik and Bruaseth (2005) umbilical axial stiffness | M | NOT VALIDATED |
 | CIGRE TB880 conductor temperature | MM | PARTIAL |
 | Global–local consistency, floating-wind application | I | Full-slip results are upper estimates |
-| Laid-core friction (gap R1b), Ménard and Cartraud (2023) six ranges | M | With the transferred 0.3 MPa the cores raise the work (range (b) +27.2 %); identified on (b) with the full accounting, predictions (a) and (c) FAIL (+26.0, +23.7 %), (d)–(f) within 13 % |
+| Laid-core friction (gap R1b), Ménard and Cartraud (2023) six ranges | M | Stated, not gated (unreliable reference). With the transferred 0.3 MPa the cores raise the work (range (b) +27.2 %); identified on (b) with the full accounting, predictions (a) and (c) outside the registered target (+26.0, +23.7 %), (d)–(f) within 13 % |
+| Zeidan (2025) four-point loops, 112 mm three-core cable (Z-EI, Z-ID) | M | FAIL: measured stick secant 141–240 kN·m² against the packaged no-slip EI_max of 12.0 kN·m² (armour ξ 0.009/0.016 from the series stack that counts the 8.75 mm EPR of the cores); no initial pressure reaches the measured 40 mm work (largest 41.9 against 445.1 J/m). Measured curvature axis is the loading-point formula applied to the mid-span deflection (+26 to +29 % on the central curvature of the source's Fig. 18) |
 | Fretting regime and wear (gap 3.1): Mindlin/Cattaneo closed forms, Fouvry ratios, limits, rotation | A | PASS |
 | Fretting transition, Fouvry et al. (1995) Table 4 | MM | PASS with the printed shear moduli; 1.6–1.7 × the measurements with G = E/2(1 + ν) (stated) |
 | Fretting wear volume, crossed steel wires (Poon et al. 2024; Cruzado et al. 2013) | M | PASS (consistency: coefficient identified on the same tests) |
@@ -228,7 +229,49 @@ Scorecard gate:
 
 | ID | Class | Target | Result | Status |
 | --- | --- | --- | --- | --- |
-| BM1-loop | M | Range (b), transferred inputs: ordered RMSE < 5%; matched work within 10% | RMSE 2.71%; work 67.8 vs 62.3 J/m, +8.8% (former bound: 3.16 %, 70.4 J/m, +12.9 %, FAIL) | PASS |
+| BM1-loop | M | Range (b), transferred inputs: ordered RMSE < 5%; matched work within 10% | RMSE 2.71%; work 67.8 vs 62.3 J/m, +8.8% (former bound: 3.16 %, 70.4 J/m, +12.9 %, FAIL) | INFO: unreliable reference, stated, not gated (registered target PASS) |
+
+### Reliability of the Ménard and Cartraud (2023) test (rows BM1-loop, BM1-loop-uniform, BM1-ID: stated, not gated)
+
+Since 2026-11-18 the rows that compare with the measured loops of this test
+are reported as INFO, "stated, not gated"; each keeps its registered target
+and its verdict against it in the scorecard (BM1-loop and BM1-loop-uniform
+PASS, BM1-ID FAIL). The change was made after those results were known; its
+reason is the evidence below about the reference, not a model result. BM1
+(full-slip EI_min against the source's analytical value) is not a comparison
+with the test and is unchanged.
+
+1. **The source states the limits of its own test.** One specimen; a 1.25 m
+   uniform-moment zone against armour and core pitches of 0.64–0.73 m, with
+   end effects "not investigated" (Sec. 6.1); achieved curvature ranges that
+   differ from the targets, the midpoint-sensor curvature used during the test
+   disagreeing with the three-sensor curvature computed afterwards, named "the
+   main source of error" in the energies (Sec. 6.1); slip-state stiffnesses
+   that differ between ranges and between loading and unloading (3083–3990
+   N·m² in Table 3; 3677 against 3083 N·m² on the [0, 0.2] cycle),
+   attributed to residual stresses from storage.
+2. **Table and figure disagree.** The tabulated energies of ranges of equal
+   span, [−0.10, 0.10] against [0, −0.20] and [0, 0.20], are 61.60 against
+   52.25 and 52.98 J (−15 %), while the plotted traces give 62.3 against 65.0
+   and 69.2 J/m (+4, +11 %): the sign of the difference flips. The tabulated
+   energies differ from the trace integrals by +8.5, −5.5, −20 and −23 % in
+   ranges (a), (d), (e) and (f).
+3. **An independent reconstruction does not match.** Kwon, Hoang, Kim and
+   Choung (2026, Int. J. Nav. Archit. Ocean Eng. 18, 100775, Sec. 3.2 and
+   Fig. 7) rebuilt the test as a 3D FE model of the 1.25 m zone with the
+   source's moduli and 0.3 MPa: "complete agreement with the experimental
+   results was not achieved"; their loops are narrower than the measured ones
+   although their friction coefficient (0.5) is 2.5 times the source's. They
+   name the unspecified curvature definition (end slope or three points) and
+   local denting at the loading points.
+4. **The source's agreement is a calibration.** Friction and pressure are "two
+   unknowns" (Sec. 5.3); the friction was fixed at 0.2 and the pressure fitted
+   on range (a). The same group needed 3.5 MPa for the cable of Zeidan (2025)
+   with the same cell (section below): the surrogate pressure is a fitted,
+   cable-specific number, not a transferable state.
+5. **CableXSec.** With the transferred inputs the small ranges (a), (c), (d)
+   are 32–47 % above the measured work while (b), (e), (f) are within 9 %;
+   identified on (b), ranges (a) and (c) remain +26.0 and +23.7 % (BM1-ID).
 
 Since gap T1 the row is computed through the test's four-point arrangement
 (moment `Fa L1`, curvature from a parabola through three LVDTs between the
@@ -287,8 +330,8 @@ registered before the runs; nothing was refitted.
 | Janocha (2024) 66 kV, 50 kN, Fig. 6 loop half-height at κ = 0 | C2C (FE, no initial contact state) | reported (about 1.0 kN·m) | 0.115 kN·m (solved) | 0.209 kN·m (μ 0.46, Table 2); 0.409 kN·m with the filler profiles | reported |
 | Same, slipping slope; IEA Wind Task 49 Table 13 (its row cites the same source) | C2C | reported (42.47 kN·m²; Fig. 6 about 29) | 21.7 kN·m² | 21.7 kN·m² | reported |
 | Same, Fig. 12b moment at 0.01 1/m and stick slope | — | retired (below) | 0.23 / 0.37 / 0.53 kN·m | 0.25 / 0.57 / 0.93 kN·m | retired |
-| Ménard (2023) range (b), transferred inputs (0.3 MPa of the source FE), core μ 0.2 as in the source FE | M | RMSE < 5 %; work within 10 % (BM1-loop) | 2.71 %; +8.8 % | 5.15 %; +27.2 % | FAIL with the cores |
-| Ménard (2023) ranges (a), (c)–(f), work | M | — | +47.2, +44.7, +32.0, +2.2, −3.6 % | +63.1, +59.8, +46.2, +19.3, +12.6 % | (worse) |
+| Ménard (2023) range (b), transferred inputs (0.3 MPa of the source FE), core μ 0.2 as in the source FE | M | RMSE < 5 %; work within 10 % (BM1-loop) | 2.71 %; +8.8 % | 5.15 %; +27.2 % | FAIL with the cores against the BM1-loop target; stated, not gated (unreliable reference) |
+| Ménard (2023) ranges (a), (c)–(f), work | M | — | +47.2, +44.7, +32.0, +2.2, −3.6 % | +63.1, +59.8, +46.2, +19.3, +12.6 % | (worse); stated, not gated |
 
 - **Janocha.** The source is a finite-element model, not a test, and states
   no initial contact state; its figures are compared code to code and not
@@ -370,7 +413,8 @@ identified initial pressure is 220 kPa with the full contact accounting and
 | (f) | 69.2 | −11.7 %, 4.45 % | −11.4 %, 4.29 % | PASS |
 
 The registered target fails on ranges (a) and (c), the two small-amplitude
-ranges. The full accounting brings every small-amplitude prediction closer
+ranges. Since 2026-11-18 the row is stated, not gated (see "Reliability of
+the Ménard and Cartraud (2023) test"). The full accounting brings every small-amplitude prediction closer
 than the armour law identified the same way ((a) +35.8 % → +26.0 %, (c)
 +33.5 % → +23.7 %, (d) +21.7 % → +12.9 %) and leaves the large ranges (e)
 and (f) unchanged within 0.6 %. What remains is an over-prediction of the work
@@ -413,10 +457,182 @@ source, is likewise reported code to code.
 
 ### Default of the laid-core law
 
-The law stays off by default. The registered Ménard prediction fails on
-the small ranges, and a cable without a declared clamping state has almost
-no core friction at low tension, so switching the law on would change
-results without a validated gain.
+The law stays off by default. The Ménard test is no longer a gate (its
+reliability is discussed in its section), so the decision rests on the
+Zeidan (2025) loops and its registered rule (next section): the packaged law
+cannot be identified on that test because the armour stick coefficient of
+the section is far too low for a cable with soft core insulation, and in a
+diagnostic with a concentric stick coefficient the cores change the loop work
+by less than 0.2 %. A cable without a declared clamping state and without
+tension carries no core friction, so the default would change nothing there,
+and where it would change results (the Janocha 66 kV template and the Ménard
+cable) no measurement shows a gain.
+
+## Zeidan (2025) four-point loops of a 112 mm three-core cable (Z-EI, Z-ID)
+
+Sources: L. Zeidan, PhD thesis, École Centrale de Nantes (defended
+8 December 2025), Chapter 5 (Sec. 5.2–5.5, Tables 5.2–5.4, Eq. 5.1,
+Figs 5.5–5.10); L. Zeidan, P. Cartraud, G. Marckmann, L. Stainier, Int. J.
+Solids Struct. 338 (2026) 114089, Sec. 5 (Tables 3–5, Figs 15–21). Cable
+input `cablexsec/cables/zeidan2025.yaml`; digitised records and their
+provenance in `validation/paper_data/zeidan2025_*` and
+`zeidan2026_fig18_deflection.csv` (`validation/scripts/digitise_zeidan2025.py`).
+
+### The test (read from the sources)
+
+- **Specimen.** Three-core 12/20 kV dynamic cable, 112 mm, two armour layers of
+  75 and 82 galvanised wires of 3.5 mm (pitches +913 and −1233 mm), core lay
+  −800 mm, EPR cores in MDPE sheaths, LDPE filler, HDPE bedding and sheath
+  (paper Table 3). It is not the Ménard and Cartraud (2023) cable (101 mm,
+  55 + 63 wires of 4 mm): a different specimen, laboratory and campaign. The
+  two tables disagree on the core build-up (thesis: EPR to 25 mm, screens to
+  27 mm and a metallic screen of unstated size; paper: one EPR layer from 14
+  to 31.5 mm); the paper's layers are used.
+- **Arrangement.** Supports 2.000 m apart (pin and roller), loading points
+  1.050 m apart through articulated saddles, shear span `a` = 0.475 m;
+  specimens about 2.2 m long; displacement control, period 50 s; zero axial
+  tension (thesis Sec. 5.3).
+- **Reduction.** `M = F a` and `κ = 6 y / (a (3 L_t − 4 a))` (thesis Eq. 5.1,
+  the elastic deflection formula of the loading point); the paper instead
+  states a circle fitted through camera-tracked points. The plotted curvature
+  amplitudes, 0.0925, 0.1233, 0.1542 and 0.1850 1/m, are Eq. 5.1 with
+  y = 30, 40, 50 and 60 mm to four digits.
+- **Which displacement.** Paper Fig. 18 (measured and computed deflection along
+  the half span) puts 30.0, 40.0, 50.0 and 60.0 mm at mid-span and 19.9, 26.9,
+  33.6 and 40.6 mm at the loading points. A parabola through the Fig. 18
+  deflection between x = 0.5 and 1.0 m gives a central curvature of 0.073,
+  0.098, 0.120 and 0.143 1/m, 0.77–0.79 of the plotted amplitudes: the
+  plotted curvature is the loading-point formula applied to the mid-span
+  deflection. Reading R2 (primary): `y` is the mid-span deflection. Reading R1
+  (reported): `y` is the loading-point deflection, as Eq. 5.1 states.
+- **Records.** Thesis Fig. 5.5 (first series) and Fig. 5.6 (the same specimen
+  after more than 1000 cycles at ±60 mm; paper Fig. 17 shows the same record:
+  its outlines lie within 0.23–0.32 pt median, 0.57 pt at the 95th
+  percentile, of the thesis polylines against a 0.54 pt half-thickness),
+  five cycles per amplitude, native PDF polylines.
+- **Measured loops, Fig. 5.6** (mean over the complete cycles; spread in
+  brackets; centre = mean of the moments at the two reversals):
+
+  | Amplitude | Work [J/m] | Moment range [kN·m] | Centre [kN·m] | Half-height at κ = 0 [kN·m] |
+  | --- | --- | --- | --- | --- |
+  | 30 mm (0.0925 1/m) | 297.9 (291.4–301.0) | 3.49 | +0.71 | 0.92 |
+  | 40 mm (0.1233 1/m) | 445.1 (442.9–447.3) | 4.14 | +0.66 | 1.01 |
+  | 50 mm (0.1542 1/m) | 592.1 (590.5–593.8) | 4.68 | +0.66 | 1.05 |
+  | 60 mm (0.1850 1/m) | 751.1 (747.6–753.2) | 5.16 | +0.69 | 1.11 |
+
+  The first series (Fig. 5.5) dissipates 20–37 % more (400.7–414.5,
+  564.4–581.7, 731.7–754.1 and 885.4–917.8 J/m) with centres +0.82 to
+  +0.90 kN·m. Reading resolution of the polylines: 1.2e-5 1/m and 0.29 N·m.
+
+### Registered targets (registered before any run of this cable)
+
+Registered on 2026-11-18 in the first commit that adds the cable and the
+data, before `zeidan2025.yaml` was evaluated by any analysis.
+
+**Model.** `zeidan2025.yaml`, bounded contact chain, zero tension, armour
+μ 0.2, the laid-core law with the trefoil wedge and the filler profiles
+(`CoreFrictionSpec(filler_profiles=True)`, μ 0.2 on every core and profile
+contact; the source gives 0.20–0.24 for all interfaces). The test is
+simulated in its arrangement (`simulate_bending_test`, `FourPoint(2.0, 1.05)`):
+reading R2, the mid-span deflection driven to ±y, three cycles, the last
+retained; `M = F a` per loading point and `κ = 6 w_mid / (a (3 L_t − 4 a))`,
+the test's own reduction. Reading R1 drives the loading-point deflection to
+±y and reduces it with Eq. 5.1.
+
+**Clamping states.** S0: none (no initial pressure; zero tension). ST: the
+source's FE calibration transferred, 3.5 MPa external pressure
+(`published_calibration`, scope `all_contacts`). SI: the initial external
+pressure `P0` identified so that the model's cycle work at 40 mm (the
+amplitude on which the paper calibrated its FE pressure) equals the measured
+445.1 J/m (bisection to 0.1 %).
+
+**Comparison metrics.** Last measured complete cycle against the model's last
+cycle; ascending and descending branches compared at the measured curvature
+samples; the measured centre moment is removed before the moment comparison
+(the record starts from a bent, loaded state, thesis Sec. 5.4; the work is
+unaffected). Branch RMSE is normalised by the measured moment range.
+
+| ID | Quantity | Target | Gated |
+| --- | --- | --- | --- |
+| Z-EI | Bounds, parameter-free: the measured stick secant (from each reversal over 30 % of the moment range), converted to the true central curvature by the elastic factor of reading R2 (1.425), does not exceed the section's no-slip EI_max; the measured slip slope (ascending branch, κ from 0 to 0.8 of the amplitude) is not below EI_min | both hold at every amplitude | yes |
+| Z-ID | SI, full accounting: 40 mm branch RMSE (identified; shape check); 30, 50 and 60 mm predicted | 40 mm RMSE < 5 %; 30, 50, 60 mm: work within ±20 %, branch RMSE < 10 %, moment range within ±10 % | yes |
+| — | SI with the armour law alone; reading R1; μ 0.24; S0; ST; the first series (Fig. 5.5) predicted with the stabilised P0 | the same metrics | reported |
+| — | Model central curvature at the 60 mm reversal and ratio of loading-point to mid-span deflection against Fig. 18 (0.143 1/m; 40.6/60.0 = 0.677) | — | reported |
+| — | Stick secant and slip slope, model against measured; the source's bilinear fit (K1 106 kN·m², K2 9.00 kN·m², M_y 1.83 kN·m) against the measured loops | — | reported |
+
+**Default of the laid-core law (decision rule, registered with the
+targets).** The law is recommended for default-on only if (i) Z-ID passes
+with the full accounting, (ii) the full accounting is not worse than the armour
+law alone on the mean absolute work error of the three predicted amplitudes,
+and (iii) with no declared clamping state and zero tension (S0) the cores
+carry no friction moment, so that the default changes nothing where it has no
+input.
+
+### Results against the registered targets
+
+`python validation/scripts/check_zeidan2025.py` (one thread, about 30 min;
+the two registered rows run in the validation report).
+
+| ID | Result | Status |
+| --- | --- | --- |
+| Z-EI | Measured stick secant ×1.425: 141–240 kN·m² against the no-slip EI_max of 12.0 kN·m² (armour ξ 0.009 inner, 0.016 outer); plane-section reference 335 kN·m² (not exceeded). Measured slip slope 8.65–9.70 kN·m² against EI_min 2.72 kN·m² | FAIL |
+| Z-ID | No initial pressure reaches the measured 40 mm work: the largest is 41.9 J/m (at 150 kPa) against 445.1 J/m; above about 0.5 MPa the armour stays stuck and the work vanishes | FAIL |
+
+Reported variants (packaged law, reading R2 unless stated):
+
+| Variant | Result |
+| --- | --- |
+| S0 (no clamping, zero tension), with and without the cores | no dissipation; moment range 353 / 471 / 588 / 706 N·m (EI_min) against 3490–5159 N·m |
+| ST (the source's 3.5 MPa transferred) | stuck: no dissipation; range 984–1969 N·m with the cores, 906–1813 N·m without |
+| Armour law alone | largest 40 mm work 41.9 J/m (150 kPa) |
+| Reading R1 | largest 59.5 J/m (200 kPa) |
+| μ 0.24 | largest 44.0 J/m (100 kPa) |
+
+**Why.** The no-slip stiffness of the packaged law is set by the Yun
+coefficient of each armour layer, whose series shear stack
+(`xi_for_layer`) counts every polymer layer inside the armour, the layers of
+the offset cores included. Here the 8.75 mm EPR insulation (E = 6 MPa)
+dominates that stack, so ξ is 0.009 and 0.016 and the stuck armour carries
+7 kN·m²: one twentieth of the measured stick slope, while the published
+section's plane-section value is 335 kN·m². The two counter-wound armour
+layers bear directly on each other (no inter-armour layer is listed), which
+a stack of the core layers does not describe. The test shows that the
+armour stick is not decoupled by the soft core insulation; this is a
+limitation of the stick coefficient for offset-core sections, not of the
+friction laws.
+
+**Diagnostic (not a registered model, not gated).** With the armour ξ taken
+from the concentric support alone (the 2.5 mm HDPE bedding: ξ 0.832 and
+0.897), the identification works:
+
+| Model | P0 | 30 mm work / RMSE / range | 40 mm (identified) | 50 mm | 60 mm |
+| --- | --- | --- | --- | --- | --- |
+| Full accounting (cores, wedge, filler profiles) | 762 kPa | +10.3 % / 14.0 % / −32.5 % | −0.0 % / 13.6 % / −39.4 % | −5.1 % / 14.6 % / −43.1 % | −9.6 % / 15.3 % / −45.4 % |
+| Armour law alone | 764 kPa | +10.5 % / 14.7 % / −34.8 % | +0.1 % / 14.3 % / −41.9 % | −5.0 % / 15.5 % / −45.9 % | −9.5 % / 16.3 % / −48.5 % |
+
+The work of all four amplitudes is then within ±11 %, and at 60 mm the
+simulated central curvature (0.142 1/m) and loading-point to mid-span
+deflection ratio (0.673) reproduce Fig. 18 (0.143 1/m, 0.677), which confirms
+reading R2. The moment range is 33–48 % short, because the slipping slope
+of the model (2.1–2.5 kN·m², near EI_min) is a quarter of the measured
+8.65–9.70 kN·m²; the half-height at 60 mm is 0.95 against 1.11 kN·m. The
+laid-core law changes the work by less than 0.2 % and the moment range by 2–3
+points: with an EPR insulation of 6 MPa the core stick coefficient is almost
+zero, so the cores barely engage.
+
+**Against the source's own fit.** A kinematic bilinear loop with the
+published K1 106 kN·m², K2 9.00 kN·m², M_y 1.83 kN·m has a half-height of
+1.675 kN·m (measured 0.92–1.11) and works of 503, 710, 916 and 1123 J/m
+(measured 298, 445, 592 and 751 J/m, +50 to +69 %). The published forces
+(4.65–5.90 kN, M = F a = 2.21–2.80 kN·m) match neither the plotted peaks
+(2.47–3.31 kN·m) nor the half-ranges (1.75–2.58 kN·m). The fit and the
+forces are therefore not used as targets.
+
+**Default of the laid-core law (registered rule).** (i) Z-ID fails with the
+full accounting; (ii) in the diagnostic the full accounting and the armour
+law have the same mean absolute work error over 30, 50 and 60 mm (8.3 % both);
+(iii) S0 holds: without clamping or tension the cores carry no moment. Rule
+(i) fails, so the law stays off by default.
 
 ## Out and von Morgen (1997), frictionless slip bounds (OvM, Out89)
 
@@ -2248,7 +2464,6 @@ quoted.
 | Benchmark | Class | Quantity | Prerequisite |
 | --- | --- | --- | --- |
 | Skeie, Sødahl and Steinkjer (2012), Fig. 10 | MM | Armour stress hysteresis at several helix locations; rectangular 5 × 10 mm armour, 38 + 42 elements, axial force 1000 kN, curvature to ±0.3 1/m | Rectangular wire sections are in place (gap G1); remaining: core support and loading conventions from the source and registered targets; no equivalent circular diameter, because it would not reproduce the rectangular section's bending stress or inertia |
-| Zeidan (2025) PhD thesis; Zeidan et al. (2026) | M | Four-point bending of a 112 mm three-core 12/20 kV cable: stick and slip stiffness and slip threshold (reported K1 106 kN·m², K2 9.00 kN·m², M_y 1.83 kN·m) and loop shape | Construction and contact inputs from the thesis; target declared before running; identified and transferred states separated |
 | Tan, Quiggin and Sheldrake (2009), closed curvature path | MM | Moment trajectory on the path κx to 0.09 1/m, then κy to 0.09, then κx removed, then κy removed (Figs. 16–17), against a resultant-curvature vector model and a per-wire model | Implement the vector model as a reference; same construction inputs for all models; no measured 3D data exist |
 | Karlsen-Husøy et al. (2026), Adaptive Hysteresis Model | MM | Conductor strain under identical tension and biaxial curvature histories; projection onto eight fixed orientations with a multilinear operator (Eqs. 6–10, Tables 3–4) | Rebuild the model from the published parameters; comparison of reversal laws only, since the calibration is to a proprietary cross-section model |
 | Cen et al. (2026), cable recovery | MM | Slip stiffness against tension and armour and lead-sheath stress laws (Table 4, Figs. 12–16) | Construction from Tables 1–2; quasi-static, no fatigue |

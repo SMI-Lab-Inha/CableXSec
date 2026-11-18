@@ -42,7 +42,12 @@ def test_bending_work_report_compares_identical_measured_paths_and_units():
     assert "67.8 J/m vs measured 62.3 J/m" in row.value
     assert "difference 8.8%" in row.value
     assert "within 10%" in row.target
-    assert row.status.startswith("PASS")
+    # The Menard test is an unreliable reference (doc/benchmarks.md): the
+    # row is stated, not gated, and keeps its verdict against the target.
+    assert row.status == (
+        "INFO (unreliable reference, stated not gated; registered target "
+        "PASS (published calibration transfer))"
+    )
 
 
 _XSEC = run_validation.Row(
