@@ -1418,8 +1418,9 @@ target):
   demand `a = κ/κ_c ≈ 27`; the anchored-wire law amplifies the peak friction
   force by about `1 + 0.54 √a ≈ 3.8` there. Holding the inlet at the
   curvature of the start of the curved section (removing the step, not the
-  contact) lowers the median only to 1.46 (table below): both ends of
-  the contact zone contribute.
+  contact) leaves the median at 1.61 and lowers GJ only to 1.57 (table
+  below): the step at the start of the curved section is not the main source;
+  the gradients across the contact zone are.
 - *The beam does not carry it.* The profile is taken from a beam with the
   sectional backbone, so the wire forces that the anchored chain builds next
   to the inlet never stiffen the pipe there. The consistent two-way solution
@@ -1444,7 +1445,7 @@ target):
 | bellmouth end 1.79 m | 1.62 (3) | 1.00 (11) | 1.80 / 1.24 |
 | rotation at the end-fitting face | 1.25 (6) | 1.09 (11) | 1.50 / 1.26 |
 | inlet curvature zero | 1.61 (3) | 1.00 (11) | 1.86 / 1.24 |
-| inlet held at the curved-start curvature | 1.46 (5) | 1.00 (11) | 1.57 / 1.24 |
+| inlet held at the curved-start curvature | 1.61 (3) | 1.00 (11) | 1.57 / 1.24 |
 | rigid stick in the correction | 2.30 (2) | 1.00 (11) | 2.24 / 1.24 |
 | shear stack to the nearest helix | 2.17 (3) | 1.19 (12) | 2.07 / 1.27 |
 

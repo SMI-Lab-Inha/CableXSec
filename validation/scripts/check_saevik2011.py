@@ -571,6 +571,7 @@ def predict_case(
         peak = float(np.interp(x_s, beam.x, k))
         sec = station_ranges(layer, peak, x_s, az, None)
         shape = profile
+        peak_t = peak
         if variant is not None and variant.inlet != "beam":
             kk = k.copy()
             if variant.inlet == "zero":
@@ -580,11 +581,16 @@ def predict_case(
             else:
                 raise ValueError(f"unknown inlet variant {variant.inlet!r}")
             shape = (xp, kk)
-        term = station_ranges(layer, peak, x_s, az, shape, variant, anchor)
+            # The correction normalises the shape at the section; a station in
+            # the modified inlet takes the modified curvature as its history,
+            # so the field elsewhere (the contact zone) keeps its values.
+            peak_t = float(np.interp(x_s, beam.x, kk))
+        term = station_ranges(layer, peak_t, x_s, az, shape, variant, anchor)
         out["stations"][name] = {
             "x_m": x_s,
             "azimuth_deg": az,
             "kappa_peak": peak,
+            "kappa_peak_termination": peak_t,
             "sectional": sec,
             "termination": term,
         }
