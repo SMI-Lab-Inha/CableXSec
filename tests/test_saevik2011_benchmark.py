@@ -228,3 +228,27 @@ def test_rig_anchor_sets_the_termination_coordinates():
     term = res["stations"]["2.1"]["termination"]
     assert term["termination_applied"] == 1.0
     assert term["axial_p"] > 0.0
+
+
+def test_setting_changes_clear_the_split_cache(monkeypatch):
+    # split_values is cached by mu only: changing the tendon definition or the
+    # anchor stiffness must drop it together with gate_values.
+    cleared = []
+
+    class Spy:
+        def __init__(self, name):
+            self.name = name
+
+        def cache_clear(self):
+            cleared.append(self.name)
+
+    monkeypatch.setattr(sv, "gate_values", Spy("gate"))
+    monkeypatch.setattr(sv, "split_values", Spy("split"))
+    monkeypatch.setattr(sv, "cable", Spy("cable"))
+    monkeypatch.setattr(sv, "TENDONS", sv.TENDONS)
+    monkeypatch.setattr(sv, "K_ANCHOR_N_M", sv.K_ANCHOR_N_M)
+    sv.use_anchor(None)
+    assert cleared == ["gate", "split"]
+    cleared.clear()
+    sv.use_tendons("round")
+    assert cleared == ["cable", "gate", "split"]

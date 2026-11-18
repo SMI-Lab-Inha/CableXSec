@@ -98,7 +98,7 @@ def use_tendons(tendons: str) -> None:
         raise ValueError("tendons must be 'round' or 'rectangular'")
     TENDONS = tendons
     cable.cache_clear()
-    gate_values.cache_clear()
+    _clear_results()
 
 
 def use_anchor(k_anchor_N_m: float | None) -> None:
@@ -109,7 +109,13 @@ def use_anchor(k_anchor_N_m: float | None) -> None:
     """
     global K_ANCHOR_N_M
     K_ANCHOR_N_M = k_anchor_N_m
+    _clear_results()
+
+
+def _clear_results() -> None:
+    """Drop every cached result that depends on the module settings."""
     gate_values.cache_clear()
+    split_values.cache_clear()
 
 
 @dataclass(frozen=True)
@@ -836,12 +842,12 @@ class _NearestHelixStack:
 
         for module in self._modules:
             module.xi_for_layer = xi_nearest  # type: ignore[attr-defined]
-        gate_values.cache_clear()
+        _clear_results()
 
     def __exit__(self, *exc: object) -> None:
         for module in self._modules:
             module.xi_for_layer = self._original  # type: ignore[attr-defined]
-        gate_values.cache_clear()
+        _clear_results()
 
 
 def profile_convergence(
