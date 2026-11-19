@@ -2197,16 +2197,19 @@ def _rows() -> list[Row]:
 
 
 _TAXONOMY_MARKERS = ("analytical_sanity", "independent_method", "full_scale")
+_NUMBA_CACHE_ENV = "NUMBA_CACHE_DIR"
 
 
 class _TaxonomyRun:
     """One marker group of the test taxonomy, run by pytest in a subprocess.
 
     The output goes to temporary files rather than pipes, so that a run started
-    before the rows are evaluated never blocks on a full pipe.
+    before the rows are evaluated never blocks on a full pipe. A run beside other
+    processes takes its own ``numba_cache`` directory (see :func:`_isolated_pool`);
+    under xdist, ``tests/conftest.py`` gives each worker a subdirectory of it.
     """
 
-    def __init__(self, marker: str, jobs: int) -> None:
+    def __init__(self, marker: str, jobs: int, numba_cache: Path | None = None) -> None:
         command = [
             sys.executable,
             "-m",
@@ -2227,8 +2230,11 @@ class _TaxonomyRun:
         # summary() or stop() closes them.
         self._stdout: IO[str] = tempfile.TemporaryFile("w+")  # noqa: SIM115
         self._stderr: IO[str] = tempfile.TemporaryFile("w+")  # noqa: SIM115
+        env = None
+        if numba_cache is not None:
+            env = {**os.environ, _NUMBA_CACHE_ENV: str(numba_cache)}
         self._process = subprocess.Popen(
-            command, cwd=ROOT, stdout=self._stdout, stderr=self._stderr
+            command, cwd=ROOT, env=env, stdout=self._stdout, stderr=self._stderr
         )
 
     def stop(self) -> None:
@@ -2420,24 +2426,59 @@ def _group_result(future: Future[list[tuple[str, ...]]]) -> list[Row]:
     return [Row(*fields) for fields in future.result()]
 
 
-def _evaluate_rows(jobs: int, core_lay: bool) -> list[Row]:
-    """``_rows()``, with the independent groups in ``jobs`` worker processes."""
-    if jobs == 1:
-        return _rows()
-    module = globals()
-    with ProcessPoolExecutor(
-        max_workers=min(jobs, len(_PARALLEL_GROUPS)),
+def _isolated_pool(numba_cache: Path, core_lay: bool) -> ProcessPoolExecutor:
+    """A one-process pool whose worker writes its own numba cache directory.
+
+    numba numbers a new cache entry from the index it last read, so two processes
+    that compile the same kernel for different signatures at the same time can
+    overwrite each other's entries. The worker is started while ``NUMBA_CACHE_DIR``
+    names its own directory, and inherits it.
+    """
+    pool = ProcessPoolExecutor(
+        max_workers=1,
         mp_context=multiprocessing.get_context("spawn"),
         initializer=_worker_start,
         initargs=(core_lay,),
-    ) as pool:
-        for name in _PARALLEL_GROUPS:
-            module[name] = partial(_group_result, pool.submit(_group_rows, name))
+    )
+    previous = os.environ.get(_NUMBA_CACHE_ENV)
+    os.environ[_NUMBA_CACHE_ENV] = str(numba_cache)
+    try:
+        pool.submit(os.getpid).result()  # the worker process now exists
+    finally:
+        if previous is None:
+            del os.environ[_NUMBA_CACHE_ENV]
+        else:
+            os.environ[_NUMBA_CACHE_ENV] = previous
+    return pool
+
+
+def _evaluate_rows(
+    jobs: int, core_lay: bool, numba_cache: Path | None = None
+) -> list[Row]:
+    """``_rows()``, with the independent groups in ``jobs`` worker processes.
+
+    The groups go to the workers in turn, slowest first; each worker keeps its
+    own numba cache below ``numba_cache`` (a temporary directory by default).
+    """
+    if jobs == 1:
+        return _rows()
+    module = globals()
+    pools: list[ProcessPoolExecutor] = []
+    with tempfile.TemporaryDirectory(
+        prefix="cablexsec-rows-", ignore_cleanup_errors=True
+    ) as scratch:
+        root = numba_cache or Path(scratch)
         try:
+            for index in range(min(jobs, len(_PARALLEL_GROUPS))):
+                pools.append(_isolated_pool(root / f"rows-{index}", core_lay))
+            for index, name in enumerate(_PARALLEL_GROUPS):
+                future = pools[index % len(pools)].submit(_group_rows, name)
+                module[name] = partial(_group_result, future)
             return _rows()
         finally:
             module.update(_PARALLEL_GROUPS)
-            pool.shutdown(cancel_futures=True)
+            for pool in pools:
+                pool.shutdown(cancel_futures=True)
 
 
 def main() -> None:
@@ -2461,16 +2502,23 @@ def main() -> None:
     if core_lay:
         _apply_core_lay_stage()
     started: dict[str, _TaxonomyRun] = {}
-    try:
-        if jobs > 1:
-            # The marker groups run beside the rows; each on its own xdist workers.
-            workers = jobs if importlib.util.find_spec("xdist") is not None else 1
-            started = {m: _TaxonomyRun(m, workers) for m in _TAXONOMY_MARKERS}
-        rows = _evaluate_rows(jobs, core_lay)
-        tax = _taxonomy_counts(started)
-    finally:
-        for run in started.values():
-            run.stop()
+    with tempfile.TemporaryDirectory(
+        prefix="cablexsec-validation-", ignore_cleanup_errors=True
+    ) as scratch:
+        try:
+            if jobs > 1:
+                # The marker groups run beside the rows, each on its own xdist
+                # workers and with its own numba cache.
+                workers = jobs if importlib.util.find_spec("xdist") is not None else 1
+                started = {
+                    m: _TaxonomyRun(m, workers, Path(scratch) / m)
+                    for m in _TAXONOMY_MARKERS
+                }
+            rows = _evaluate_rows(jobs, core_lay, Path(scratch) / "rows")
+            tax = _taxonomy_counts(started)
+        finally:
+            for run in started.values():
+                run.stop()
     lines = [
         "<!-- SPDX-License-Identifier: Apache-2.0 -->",
         "",

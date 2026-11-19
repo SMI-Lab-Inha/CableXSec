@@ -160,6 +160,7 @@ jobs:
     needs: [coverage-suite, validation-report]
     if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: The coverage gate and the validation report check passed
         shell: bash
