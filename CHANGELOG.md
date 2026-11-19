@@ -340,8 +340,10 @@ All notable changes to CableXSec are recorded in this file. The format follows
 ### Changed
 
 - CI runs the tests in parallel: the test matrix, the NumPy reference path and both coverage
-  passes run on one pytest-xdist worker per core (`pytest-xdist` joins the `dev` extra), and
-  each worker keeps its own numba cache. `release/check_coverage.py --numprocesses N` and
+  passes run on one pytest-xdist worker per core (`pytest-xdist` joins the `dev` extra).
+  Every concurrent process writes its own numba cache: numba numbers a new cache entry from
+  the index it last read, so two processes compiling one kernel for different signatures at
+  once can overwrite each other's entries. `release/check_coverage.py --numprocesses N` and
   `run_validation.py --jobs=N` take a worker count; `--jobs` evaluates the independent row
   groups in worker processes and runs the three taxonomy groups concurrently. The coverage
   run and the validation report check run side by side in two jobs, and the required check
