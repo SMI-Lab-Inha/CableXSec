@@ -449,9 +449,11 @@ All notable changes to CableXSec are recorded in this file. The format follows
   be evaluated left no trace; it now warns (`ExtrapolationWarning`), and a cable without a
   yield-stressed armour layer, which has no bound, is skipped as before. The bending-test
   inversion returned its closest cached point as converged when it had no new point to try; it
-  raises `CableSolverError` with the miss. A kinematic history whose laid cores have no
-  friction law held them to the cable axis silently; it warns and records it in the
-  provenance.
+  bisects the bracket first (a target inside a step a few ulps wide, where the
+  interpolants round onto cached points, is resolved to the step) and raises
+  `CableSolverError` with the miss only when no point is left. A kinematic history whose
+  laid cores have no friction law held them to the cable axis silently; it warns and records
+  it in the provenance.
 - `compute_sheave` and the rig-test M-kappa loops ran their internal calls under
   `warnings.simplefilter("ignore")`, dropping a wire-yield or clamping warning about the
   caller's own curvature; each distinct warning is now relayed once

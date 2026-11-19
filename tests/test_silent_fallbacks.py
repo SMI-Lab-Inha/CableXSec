@@ -102,6 +102,29 @@ def test_stalled_bending_test_inversion_is_refused():
     np.testing.assert_allclose(v, [0.25, 0.5], atol=1e-12)
 
 
+@pytest.mark.parametrize("frac", [0.1, 0.27, 0.5, 0.9])
+def test_inversion_resolves_a_target_inside_a_round_off_step(frac):
+    """A target inside a step of u (2.3e-7 against a tolerance of 1.9e-9 over a
+    few ulps of v, as the distributed friction model gave on the three-point
+    test) is resolved to the step: the interpolants round onto cached points
+    there, and that stall was refused although bisection closes the bracket."""
+    from cablexsec.analysis.beam_test import _MonotoneInverse
+
+    rng = np.random.default_rng(1)
+    step = 2.3e-7
+    for c in rng.uniform(0.001, 0.01, 100):
+        inv = _MonotoneInverse(
+            lambda v, c=c: 86000.0 * v + step * (v >= c),
+            slope_min=5.0e4,
+            slope_max=9.0e4,
+            tol=1.9e-9,
+        )
+        target = 86000.0 * c + frac * step
+        v, u = inv.solve(np.array([target]))
+        assert abs(v[0] - c) <= 4e-16 * c
+        assert abs(u[0] - target) <= step
+
+
 def test_laid_cores_without_a_friction_law_are_said_to_be_held(monkeypatch):
     """The kinematic history fell back to cores held to the cable axis on any
     error of the core friction law, without a trace."""
