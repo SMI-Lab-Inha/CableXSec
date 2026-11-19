@@ -272,7 +272,10 @@ def packaged_section(
 def concentric_xi(cable: CableData) -> list[float]:
     """Armour stick coefficients from the concentric support (the bedding)
     alone, in the order of the helical layers ([Yun2020] with one shear
-    layer); the packaged stack also counts the layers of the offset cores."""
+    layer). The diagnostic predates the support-cut stack (2026-11-19): the
+    packaged stack, which then counted the layers of the offset cores, now
+    gives the same inner coefficient and 1 for the outer armour, which bears
+    on the inner one without a layer between them."""
     from cablexsec.materials import library  # noqa: PLC0415
     from cablexsec.mechanics.yun_coefficient import (  # noqa: PLC0415
         series_shear_stiffness,

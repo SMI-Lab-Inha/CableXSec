@@ -815,44 +815,44 @@ def eq88_consistency() -> dict[str, dict[str, float]]:
     return out
 
 
-class _NearestHelixStack:
-    """Sensitivity only: Yun shear stack cut at the nearest helical layer below.
+class _FormerFullStack:
+    """Sensitivity only: the Yun shear stack before 2026-11-19.
 
-    The package sums the shear compliance of every polymer layer between a
-    helical layer and the axis. In this riser the 8.7 mm pressure sheath lies
-    under the steel pressure armour; inside this context the stack restarts
-    above the nearest helical layer below (tensile-armour ``xi`` 0.88 and 0.89
-    instead of 0.52 and 0.51). Not a registered input; undone on exit.
+    The package cuts the stack of a helical layer at the first helical layer
+    inside it (``yun_shear_stack``). Before, it summed the shear compliance of
+    every cylindrical layer between the helical layer and the axis; in this
+    riser that ran through the steel pressure armour into the 8.7 mm pressure
+    sheath (tensile-armour ``xi`` 0.52 and 0.51 instead of 0.88 and 0.89).
+    Kept to show what the change moves. Not a registered input; undone on exit.
     """
 
     def __enter__(self) -> None:
-        import cablexsec.api as api  # noqa: PLC0415
         import cablexsec.mechanics.stiffness as stiffness  # noqa: PLC0415
-        from cablexsec.cables.schema import HelicalLayer  # noqa: PLC0415
+        from cablexsec.cables.schema import (  # noqa: PLC0415
+            CylindricalLayer,
+            CylindricalOffsetLayer,
+        )
 
-        self._modules = (api, stiffness)
-        original = stiffness.xi_for_layer
-        self._original = original
+        self._original = stiffness.yun_shear_stack
 
-        def xi_nearest(cable, layer_name, youngs_modulus_Pa=None):  # type: ignore[no-untyped-def]
+        def former(cable, layer_name):  # type: ignore[no-untyped-def]
             names = [lyr.name for lyr in cable.layers]
-            below = cable.layers[: names.index(layer_name)]
-            helical = [
-                k for k, lyr in enumerate(below) if isinstance(lyr, HelicalLayer)
-            ]
-            if helical:
-                cable = cable.model_copy(
-                    update={"layers": list(cable.layers[helical[-1] + 1 :])}
-                )
-            return original(cable, layer_name, youngs_modulus_Pa=youngs_modulus_Pa)
+            return tuple(
+                lyr
+                for lyr in cable.layers[: names.index(layer_name)]
+                if isinstance(lyr, CylindricalLayer | CylindricalOffsetLayer)
+                and stiffness._has_modulus(lyr.material)
+                and not stiffness.is_interstitial_filler(lyr, cable)
+                and (lyr.r_outer_m or 0.0) - (lyr.r_inner_m or 0.0) > 0.0
+            )
 
-        for module in self._modules:
-            module.xi_for_layer = xi_nearest  # type: ignore[attr-defined]
+        stiffness.yun_shear_stack = former  # type: ignore[assignment]
         _clear_results()
 
     def __exit__(self, *exc: object) -> None:
-        for module in self._modules:
-            module.xi_for_layer = self._original  # type: ignore[attr-defined]
+        import cablexsec.mechanics.stiffness as stiffness  # noqa: PLC0415
+
+        stiffness.yun_shear_stack = self._original  # type: ignore[assignment]
         _clear_results()
 
 
@@ -927,8 +927,8 @@ def sensitivity(mu: float = MU_DECLARED) -> dict:
     run("inlet curvature zero", base, TermVariant(inlet="zero"))
     run("inlet held at the curved-start curvature", base, TermVariant(inlet="hold"))
     run("rigid stick in the correction", base, TermVariant(stick="rigid"))
-    with _NearestHelixStack():
-        run("shear stack to the nearest helix", base, None)
+    with _FormerFullStack():
+        run("former shear stack (through the pressure armour)", base, None)
     return out
 
 

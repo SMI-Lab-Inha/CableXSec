@@ -89,6 +89,7 @@ __all__ = [
     "ea_free",
     "load_sharing",
     "xi_for_layer",
+    "yun_shear_stack",
     "BendingStiffnessContribution",
     "bending_stiffness_by_layer",
 ]
@@ -498,6 +499,46 @@ def ei_max_stuck(cable: CableData, xi_map: dict[str, float] | None = None) -> fl
 # --------------------------------------------------------------------------- #
 # Yun xi with the wire-contact shear width                                    #
 # --------------------------------------------------------------------------- #
+def yun_shear_stack(
+    cable: CableData, layer_name: str
+) -> tuple[CylindricalLayer | CylindricalOffsetLayer, ...]:
+    """Layers that shear in series under a helical layer ([Yun2020]).
+
+    Walks inward from ``layer_name`` (the YAML order is the radial order,
+    checked by the schema) and returns, from the outside in, the concentric
+    cylindrical layers with an isotropic modulus and a positive thickness.
+    An interstitial filler lies beside the cores and is skipped; a shell
+    layer is not counted. The walk stops at the first helical layer inside,
+    which is the support, and at the first layer of laid power cores (any
+    offset layer other than a single core at zero offset), whose bundle is
+    the support. See :func:`xi_for_layer` for the physical basis.
+    """
+    names = [lyr.name for lyr in cable.layers]
+    if layer_name not in names or not isinstance(
+        cable.layers[names.index(layer_name)], HelicalLayer
+    ):
+        raise CableInputError(f"{layer_name!r} is not a helical layer of the cable")
+    stack: list[CylindricalLayer | CylindricalOffsetLayer] = []
+    for lyr in reversed(cable.layers[: names.index(layer_name)]):
+        if isinstance(lyr, HelicalLayer):
+            break
+        if isinstance(lyr, CylindricalOffsetLayer) and not (
+            lyr.n_cores == 1 and lyr.r_offset_m == 0.0
+        ):
+            break
+        if not isinstance(lyr, CylindricalLayer | CylindricalOffsetLayer):
+            continue
+        if not _has_modulus(lyr.material) or is_interstitial_filler(lyr, cable):
+            # A filler lies beside the cores, not between them and the armour:
+            # counted as a concentric layer its radial depth would add a shear
+            # compliance the section does not have.
+            continue
+        if (lyr.r_outer_m or 0.0) - (lyr.r_inner_m or 0.0) <= 0.0:
+            continue
+        stack.append(lyr)
+    return tuple(stack)
+
+
 def xi_for_layer(
     cable: CableData,
     layer_name: str,
@@ -506,13 +547,32 @@ def xi_for_layer(
 ) -> float:
     """Yun shear coefficient for a helical layer ([Yun2020]).
 
-    The intervening polymer cylindrical layers (radially inside the helical
-    layer) shear in series; an interstitial filler, which lies beside the
-    cores, is not one of them. The spring and axial rigidity both refer to one
-    wire, as in Yun et al. (2020), Eqs. (9)--(12). The supporting width is
-    approximated by the wire diameter, not the combined width of every wire.
-    The series stack is a support-compliance approximation, not a resolved
-    shear solution of an offset three-core bundle.
+    ``xi = K_G / (K_G + EA_w sin^2(a) / r_h^2)`` with ``K_G`` the series shear
+    stiffness ``1 / sum(t_i / (G_i b))`` of the layers between the wire and
+    the surface that supports it (:func:`yun_shear_stack`). Walking inward
+    from the helical layer, every concentric cylindrical layer with an
+    isotropic modulus and a positive thickness is in the stack; an
+    interstitial filler, which lies beside the cores, is not. The walk stops
+    at the first helical layer inside, which is the support, and at the laid
+    power cores, whose bundle is the support: the layers of an offset core
+    are never in the stack. The concentric layers of a single core on the
+    cable axis are concentric layers and stay in it.
+
+    Physical basis: a stuck wire follows the plane-section strain of the
+    surface it bears on, less the shear lag of the layers between them. A
+    steel helical layer inside is such a surface, orders of magnitude stiffer
+    than the tapes, and the compliance under it enters its own ``xi``. Laid
+    cores bear on the bedding in line contact and bend about their own axes;
+    their insulation is loaded by the core's own bending, not by a shear in
+    series between the armour and the cable axis (the cores' own stick is the
+    laid-core law, :mod:`cablexsec.mechanics.core_friction`).
+
+    The spring and axial rigidity both refer to one wire, as in Yun et al.
+    (2020), Eqs. (9)--(12). The supporting width is approximated by the wire
+    surface width, not the combined width of every wire. The series stack is
+    a support-compliance approximation, not a resolved shear solution of the
+    section. ``youngs_modulus_Pa`` (keyed by layer name) replaces the library
+    moduli of the wire and of the stack layers, for example at a temperature.
     """
     layer = cable.get_layer(layer_name)
     assert isinstance(layer, HelicalLayer)
@@ -524,29 +584,14 @@ def xi_for_layer(
     )
     b = layer.wire_surface_width_m
     stack: list[tuple[float, float, float]] = []
-    for lyr in cable.layers:
-        if lyr.name == layer_name:
-            break
-        if isinstance(lyr, CylindricalLayer | CylindricalOffsetLayer):
-            if not _has_modulus(lyr.material):
-                continue
-            if is_interstitial_filler(lyr, cable):
-                # It lies beside the cores, not between them and the armour:
-                # counted as a concentric layer its radial depth would add a
-                # shear compliance the section does not have.
-                continue
-            ri = lyr.r_inner_m or 0.0
-            ro = lyr.r_outer_m or 0.0
-            t = ro - ri
-            if t <= 0.0:
-                continue
-            g = shear_modulus(
-                youngs_modulus_Pa[lyr.name]
-                if youngs_modulus_Pa is not None
-                else _E(lyr.material),
-                library.get_property(lyr.material, "nu"),
-            )
-            stack.append((t, g, b))
+    for lyr in yun_shear_stack(cable, layer_name):
+        g = shear_modulus(
+            youngs_modulus_Pa[lyr.name]
+            if youngs_modulus_Pa is not None
+            else _E(lyr.material),
+            library.get_property(lyr.material, "nu"),
+        )
+        stack.append(((lyr.r_outer_m or 0.0) - (lyr.r_inner_m or 0.0), g, b))
     k_g = series_shear_stiffness(stack)
     e_wire = (
         youngs_modulus_Pa[layer.name]

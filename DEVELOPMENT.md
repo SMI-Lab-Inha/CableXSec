@@ -37,10 +37,13 @@ python -m pytest -q -m full_scale                     # published full-scale dat
 python -m pytest -q --cov --cov-branch --cov-report=term-missing
 ```
 
-The whole suite takes about 20 minutes on one core. Do not run it with several
-workers on a shared machine without limiting the threads of each worker; set
-`OMP_NUM_THREADS`, `MKL_NUM_THREADS`, `OPENBLAS_NUM_THREADS` and `NUMBA_NUM_THREADS`
-to `1`. The tests import the reproduction scripts of `validation/scripts/` by name
+The whole suite takes about 20 minutes on one core. `python -m pytest -q -n 4` runs it
+on four pytest-xdist workers (CI uses `-n auto --dist worksteal`); each worker keeps its
+own numba cache (`tests/conftest.py`). Do not run it with several workers without
+limiting the threads of each worker; set `OMP_NUM_THREADS`, `MKL_NUM_THREADS`,
+`OPENBLAS_NUM_THREADS` and `NUMBA_NUM_THREADS` to `1`. The coverage gate
+`python release/check_coverage.py --fail-under 95` takes `--numprocesses 4` in the same
+way. The tests import the reproduction scripts of `validation/scripts/` by name
 (`tests/conftest.py` puts that folder on the import path).
 
 | Marker | Tests |
@@ -58,6 +61,10 @@ value. Do not replace such a test with a snapshot of CableXSec output.
 python validation/scripts/run_validation.py          # regenerate validation/validation_report.md
 python validation/scripts/run_validation.py --check  # fail if the committed report is stale
 ```
+
+`--jobs=N` (or `--jobs=auto`) evaluates the independent row groups in N processes and runs
+the three marker groups concurrently, each on N pytest-xdist workers; the rows and the
+report are those of the serial run.
 
 The script recomputes every row from the live code, runs the three marker groups for
 the test taxonomy, and exits non-zero while any row is `FAIL` or `REVIEW`; the failed

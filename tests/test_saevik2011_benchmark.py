@@ -123,18 +123,20 @@ def test_registered_targets_and_results_are_pinned(rows):
         "median R in [0.85, 1.18] and >= 12 of 14 R in [0.70, 1.43] "
         "(R = mean predicted / mean measured, bending-plane stations)"
     )
-    # Signed capstan bound; the former symmetric cap gave median R 1.65
-    # (0.45-3.65) and sectional median 1.03 (0.45-2.28). The stick load
-    # cases are unchanged, the slipping ones fall by 3-5 %.
+    # Support-cut shear stack (tensile-armour xi 0.88 / 0.89); the former
+    # stack (0.52 / 0.51) gave median R 1.62 (0.45-3.59), sectional 1.00
+    # (0.45-2.17), 11 of 14. Signed capstan bound; the former symmetric cap
+    # gave median R 1.65 (0.45-3.65) and sectional median 1.03 (0.45-2.28).
     assert plane.value == (
-        "median R 1.62 (0.45-3.59), 3 of 14 in band; sectional median 1.00 "
-        "(0.45-2.17), 11 of 14"
+        "median R 2.17 (0.79-5.14), 3 of 14 in band; sectional median 1.19 "
+        "(0.76-2.39), 12 of 14"
     )
     assert plane.status == "FAIL"
     gj = rows["SV11-GJ"]
     assert gj.target == "mean ratio in [0.72, 1.38]"
-    # Former symmetric cap: 1.90 (sectional 1.32).
-    assert gj.value == "1.80 (sectional 1.24); static stress 271 MPa"
+    # Former shear stack: 1.80 (sectional 1.24); former symmetric cap: 1.90
+    # (sectional 1.32).
+    assert gj.value == "2.07 (sectional 1.27); static stress 271 MPa"
     assert gj.status == "FAIL"
 
 
@@ -191,15 +193,18 @@ def test_split_rows_are_pinned():
     rows = {r.ident: r for r in run_validation._saevik_split_rows()}
     split = rows["SV11-SPLIT"]
     assert split.target == "stated, not gated"
+    # Support-cut shear stack; with the former stack (a) 1.01 (11 of 14),
+    # GJ 1.27; (b) 1.70, 1.80; REACH a_max 0.26 and 0.36, R 0.45 and 0.54,
+    # outside the band LC 4 2.17, LC 7 0.45, LC 8 0.54.
     assert split.value == (
-        "(a) median R 1.01 (11 of 14 in band), GJ 1.27; (b) LC 14 R 1.70, GJ "
-        "1.80, largest change against the registered correction below 1e-12; "
-        "registered 1.62 and 1.80, sectional 1.00 and 1.24"
+        "(a) median R 1.23 (11 of 14 in band), GJ 1.36; (b) LC 14 R 2.09, GJ "
+        "2.07, largest change against the registered correction below 1e-12; "
+        "registered 2.17 and 2.07, sectional 1.19 and 1.27"
     )
     reach = rows["SV11-REACH"]
     assert reach.value == (
-        "a_max 0.26 and 0.36; R corrected 0.45 and 0.54 (sectional 0.45 and "
-        "0.54); sectional outside the band: LC 4 2.17, LC 7 0.45, LC 8 0.54"
+        "a_max 0.37 and 0.64; R corrected 0.79 and 0.86 (sectional 0.79 and "
+        "0.86); sectional outside the band: LC 4 2.39, LC 6 1.48"
     )
     eq = rows["SV11-EQ88"]
     assert eq.value == (
