@@ -57,7 +57,7 @@ from typing import TYPE_CHECKING, Literal
 import numpy as np
 
 from cablexsec.exceptions import CableInputError
-from cablexsec.provenance import Provenance
+from cablexsec.provenance import Provenance, relayed_warnings
 
 if TYPE_CHECKING:
     from cablexsec.analysis.capacity_check import CapacityEnvelope
@@ -324,8 +324,7 @@ def compute_sheave(
     q0 = 2.0 * tension_N / D
     p0 = q0 / d
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
+    with relayed_warnings():
         loop = compute_mkappa(
             cable,
             np.linspace(0.0, kappa, 50),
