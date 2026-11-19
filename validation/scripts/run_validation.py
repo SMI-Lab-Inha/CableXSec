@@ -7,19 +7,32 @@ consistency and measured response comparisons are distinct assessments;
 their targets and unresolved discrepancies remain visible. Every input is a
 published value or a file in this repository.
 
-Usage: ``python validation/scripts/run_validation.py [--check]``.
+Usage: ``python validation/scripts/run_validation.py [--check] [--jobs=N]``.
+
+``--jobs=N`` (a number or ``auto``) evaluates the independent row groups in N worker
+processes and runs the three test-taxonomy groups concurrently, each on N
+pytest-xdist workers. The rows, their order and the report are those of the serial
+run (the default, ``--jobs=1``).
 """
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import math
+import multiprocessing
+import os
 import re
 import subprocess
 import sys
-from dataclasses import dataclass
+import tempfile
+from collections.abc import Callable
+from concurrent.futures import Future, ProcessPoolExecutor
+from dataclasses import astuple, dataclass
+from functools import partial
 from pathlib import Path
 from types import ModuleType
+from typing import IO
 
 import numpy as np
 
@@ -2183,35 +2196,66 @@ def _rows() -> list[Row]:
     return rows
 
 
-def _taxonomy_counts() -> dict[str, str]:
-    out: dict[str, str] = {}
-    for marker in ("analytical_sanity", "independent_method", "full_scale"):
-        proc = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "pytest",
-                "tests/",
-                "-m",
-                marker,
-                "-q",
-                "-o",
-                "addopts=",
-                "-p",
-                "no:cacheprovider",
-            ],
-            cwd=ROOT,
-            capture_output=True,
-            text=True,
-            check=False,
+_TAXONOMY_MARKERS = ("analytical_sanity", "independent_method", "full_scale")
+
+
+class _TaxonomyRun:
+    """One marker group of the test taxonomy, run by pytest in a subprocess.
+
+    The output goes to temporary files rather than pipes, so that a run started
+    before the rows are evaluated never blocks on a full pipe.
+    """
+
+    def __init__(self, marker: str, jobs: int) -> None:
+        command = [
+            sys.executable,
+            "-m",
+            "pytest",
+            "tests/",
+            "-m",
+            marker,
+            "-q",
+            "-o",
+            "addopts=",
+            "-p",
+            "no:cacheprovider",
+        ]
+        if jobs > 1:
+            command += ["-n", str(jobs)]
+        self.marker = marker
+        # Read back in the locale encoding, as ``subprocess.run(text=True)`` would;
+        # summary() or stop() closes them.
+        self._stdout: IO[str] = tempfile.TemporaryFile("w+")  # noqa: SIM115
+        self._stderr: IO[str] = tempfile.TemporaryFile("w+")  # noqa: SIM115
+        self._process = subprocess.Popen(
+            command, cwd=ROOT, stdout=self._stdout, stderr=self._stderr
         )
-        if proc.returncode != 0:
-            detail = (proc.stdout + "\n" + proc.stderr).strip()
+
+    def stop(self) -> None:
+        """End the run if it is still going (another part of the report failed)."""
+        if self._process.poll() is None:
+            self._process.kill()
+            self._process.wait()
+        self._stdout.close()
+        self._stderr.close()
+
+    def summary(self) -> str:
+        """Wait for the run; its passed count, as the report states it."""
+        returncode = self._process.wait()
+        output = []
+        for stream in (self._stdout, self._stderr):
+            stream.seek(0)
+            output.append(stream.read())
+            stream.close()
+        stdout, stderr = output
+        marker = self.marker
+        if returncode != 0:
+            detail = (stdout + "\n" + stderr).strip()
             raise RuntimeError(
                 f"pytest taxonomy {marker!r} failed with exit code "
-                f"{proc.returncode}:\n{detail}"
+                f"{returncode}:\n{detail}"
             )
-        summaries = [line for line in proc.stdout.splitlines() if " passed" in line]
+        summaries = [line for line in stdout.splitlines() if " passed" in line]
         if not summaries:
             raise RuntimeError(f"pytest taxonomy {marker!r} emitted no pass summary")
         stable_summary = summaries[-1].split(" in ", maxsplit=1)[0]
@@ -2220,7 +2264,15 @@ def _taxonomy_counts() -> dict[str, str]:
         stable_parts = [
             part.strip() for part in stable_summary.split(",") if "passed" in part
         ]
-        out[marker] = ", ".join(stable_parts)
+        return ", ".join(stable_parts)
+
+
+def _taxonomy_counts(started: dict[str, _TaxonomyRun] | None = None) -> dict[str, str]:
+    """Passed count of each marker group; groups not ``started`` run in turn."""
+    out: dict[str, str] = {}
+    for marker in _TAXONOMY_MARKERS:
+        run = (started or {}).get(marker) or _TaxonomyRun(marker, 1)
+        out[marker] = run.summary()
     return out
 
 
@@ -2324,6 +2376,70 @@ def _apply_core_lay_stage() -> None:
     beam_test._prepare_mkappa_law = prepare  # type: ignore[assignment]
 
 
+# Row groups that depend on nothing else in the report, slowest first. With
+# --jobs=N they run in worker processes while _rows assembles the report, and
+# _rows takes each group's rows at the place where it calls the group.
+_PARALLEL_GROUPS: dict[str, Callable[[], list[Row]]] = {
+    "_saevik_split_rows": _saevik_split_rows,
+    "_zeidan_rows": _zeidan_rows,
+    "_saevik_rows": _saevik_rows,
+    "_anchored_wire_fe_rows": _anchored_wire_fe_rows,
+    "_dai2020_rows": _dai2020_rows,
+    "_torque_rows": _torque_rows,
+    "_hu_rows": _hu_rows,
+    "_witz_rows": _witz_rows,
+    "_dai2018_rows": _dai2018_rows,
+}
+_JOBS_FLAG = "--jobs="
+
+
+def _jobs(arguments: list[str]) -> int:
+    """Worker count of ``--jobs=N`` (``auto``: one per CPU); 1 without the flag."""
+    values = [arg[len(_JOBS_FLAG) :] for arg in arguments if arg.startswith(_JOBS_FLAG)]
+    if not values:
+        return 1
+    value = values[-1]
+    if value == "auto":
+        return max(1, os.cpu_count() or 1)
+    if not value.isdigit() or int(value) < 1:
+        raise SystemExit(f"--jobs takes a positive integer or auto, not {value!r}")
+    return int(value)
+
+
+def _worker_start(core_lay: bool) -> None:
+    if core_lay:
+        _apply_core_lay_stage()
+
+
+def _group_rows(name: str) -> list[tuple[str, ...]]:
+    """Rows of one group, as plain tuples (worker process side)."""
+    return [astuple(row) for row in _PARALLEL_GROUPS[name]()]
+
+
+def _group_result(future: Future[list[tuple[str, ...]]]) -> list[Row]:
+    return [Row(*fields) for fields in future.result()]
+
+
+def _evaluate_rows(jobs: int, core_lay: bool) -> list[Row]:
+    """``_rows()``, with the independent groups in ``jobs`` worker processes."""
+    if jobs == 1:
+        return _rows()
+    module = globals()
+    with ProcessPoolExecutor(
+        max_workers=min(jobs, len(_PARALLEL_GROUPS)),
+        mp_context=multiprocessing.get_context("spawn"),
+        initializer=_worker_start,
+        initargs=(core_lay,),
+    ) as pool:
+        for name in _PARALLEL_GROUPS:
+            module[name] = partial(_group_result, pool.submit(_group_rows, name))
+        try:
+            return _rows()
+        finally:
+            module.update(_PARALLEL_GROUPS)
+            pool.shutdown(cancel_futures=True)
+
+
 def main() -> None:
     # Some Windows consoles retain a locale encoding (for example CP949) even
     # when the source and generated artefacts are UTF-8. Reporting must never
@@ -2334,13 +2450,27 @@ def main() -> None:
 
     core_lay = _CORE_LAY_FLAG in sys.argv[1:]
     check_only = "--check" in sys.argv[1:] or core_lay
-    unknown = [arg for arg in sys.argv[1:] if arg not in ("--check", _CORE_LAY_FLAG)]
+    unknown = [
+        arg
+        for arg in sys.argv[1:]
+        if arg not in ("--check", _CORE_LAY_FLAG) and not arg.startswith(_JOBS_FLAG)
+    ]
     if unknown:
         raise SystemExit(f"unknown argument(s): {' '.join(unknown)}")
+    jobs = _jobs(sys.argv[1:])
     if core_lay:
         _apply_core_lay_stage()
-    rows = _rows()
-    tax = _taxonomy_counts()
+    started: dict[str, _TaxonomyRun] = {}
+    try:
+        if jobs > 1:
+            # The marker groups run beside the rows; each on its own xdist workers.
+            workers = jobs if importlib.util.find_spec("xdist") is not None else 1
+            started = {m: _TaxonomyRun(m, workers) for m in _TAXONOMY_MARKERS}
+        rows = _evaluate_rows(jobs, core_lay)
+        tax = _taxonomy_counts(started)
+    finally:
+        for run in started.values():
+            run.stop()
     lines = [
         "<!-- SPDX-License-Identifier: Apache-2.0 -->",
         "",
