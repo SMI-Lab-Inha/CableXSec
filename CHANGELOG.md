@@ -482,8 +482,7 @@ All notable changes to CableXSec are recorded in this file. The format follows
   it), kept for later batches. Each worker locks its slot itself for as long as it runs (so
   the slot stays taken even if the calling process ends first), a batch beside another takes
   the next free slots, and a worker without a free slot or a writable folder gets a temporary
-  cache. Results are unchanged, and runs go to whichever worker is
-  free, as before.
+  cache. Results are unchanged, and runs go to whichever worker is free, as before.
 
 - `SectionLaw.from_cable` reads the cable's own materials (its `materials:` block) when the law
   is built and every time it is evaluated. Outside `simulate_bending_test` it read the library
