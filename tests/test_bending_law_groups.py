@@ -257,6 +257,41 @@ def test_group_csv_files(iea66, tmp_path):
     assert [float(x.split(",")[0]) for x in text[1:]] == [0.0, 2.0e4]
 
 
+def test_group_csv_file_names_stay_in_the_directory(iea66, tmp_path):
+    from cablexsec.analysis.bending_law import _file_stem, _file_stems
+
+    assert _file_stem("armour/inner") == "armour_inner"
+    assert _file_stem("../../etc") == ".._.._etc"
+    assert _file_stem("..") == "group" and _file_stem("") == "group"
+    assert _file_stem("C:\\x y") == "C__x_y"
+    assert _file_stems(["a/b", "a_b", "A_B", "laid_cores"]) == [
+        "a_b",
+        "a_b_2",
+        "A_B_3",
+        "laid_cores",
+    ]
+    names = {"inner_armour": "armour/inner", "outer_armour": "../outer"}
+    layers = tuple(
+        x.model_copy(update={"name": names[x.name]}) if x.name in names else x
+        for x in iea66.layers
+    )
+    renamed = iea66.model_copy(update={"layers": layers})
+    export = export_bending_law(
+        renamed, tensions_N=[2.0e4], kappa_max_1_m=2e-3, n_points=20, slip_scale=True
+    )
+    folder = tmp_path / "out"
+    paths = export.to_group_csv(folder)
+    assert [p.name for p in paths] == [
+        "armour_inner_backbone.csv",
+        "armour_inner_slip_scale.csv",
+        ".._outer_backbone.csv",
+        ".._outer_slip_scale.csv",
+    ]
+    assert all(p.parent == folder and p.is_file() for p in paths)
+    first = paths[0].read_text("utf-8").splitlines()[0]
+    assert first.startswith("# friction group armour/inner (armour_layer)")
+
+
 def test_group_law_checks(iea66):
     plain = export_bending_law(
         iea66, tensions_N=[2.0e4], kappa_max_1_m=2e-3, n_points=20

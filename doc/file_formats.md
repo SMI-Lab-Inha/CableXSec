@@ -690,7 +690,10 @@ starts at zero tension (guide Section 8.1).
 for a global model that sums them: `<group>_backbone.csv` (the backbone of the
 group at the reference state on the export grid, after two comment lines that
 name the group and give the slope beyond the last point) and
-`<group>_slip_scale.csv` (the group's own scale `s_g`):
+`<group>_slip_scale.csv` (the group's own scale `s_g`). `<group>` is the group name
+with every character other than a letter, a digit, `.`, `-` or `_` replaced by
+`_` (a numbered suffix where two names would meet); the comment line keeps the
+name itself:
 
 ```text
 # friction group laid_cores (laid_cores); scale s_laid_cores(T) in the group's scale table; M_g(kappa, T) = s B(kappa / s)

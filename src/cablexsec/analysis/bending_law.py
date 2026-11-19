@@ -1011,16 +1011,24 @@ class BendingLawExport:
 
         The backbone files hold the reference backbone of every group
         (:meth:`SlipGroupLaw.backbone_csv_text`), the scale files its own
-        ``s_g(T)`` (:meth:`SlipGroupLaw.scale_csv_text`). Returns the paths in
-        group order, backbone before scale.
+        ``s_g(T)`` (:meth:`SlipGroupLaw.scale_csv_text`). ``<group>`` is the
+        group name made a safe file name (:func:`_file_stem`: letters,
+        digits, ``.``, ``-`` and ``_`` kept, anything else ``_``, a numbered
+        suffix where two names would meet); the first comment line of the
+        backbone file keeps the name itself. Every file lies in
+        ``directory``. Returns the paths in group order, backbone before
+        scale.
         """
         folder = Path(directory)
         folder.mkdir(parents=True, exist_ok=True)
+        groups = self.slip_group_laws()
         paths: list[Path] = []
-        for group in self.slip_group_laws():
-            backbone = folder / f"{group.name}_backbone.csv"
+        for group, stem in zip(
+            groups, _file_stems([g.name for g in groups]), strict=True
+        ):
+            backbone = folder / f"{stem}_backbone.csv"
             backbone.write_text(group.backbone_csv_text(), encoding="utf-8")
-            scale = folder / f"{group.name}_slip_scale.csv"
+            scale = folder / f"{stem}_slip_scale.csv"
             scale.write_text(group.scale_csv_text(), encoding="utf-8")
             paths += [backbone, scale]
         return paths
@@ -1382,6 +1390,36 @@ def _friction_cap(spec: HelicalLayerSpec) -> float:
         * spec.r_helix_m
         * np.sum(bound * np.abs(c))
     )
+
+
+def _file_stem(name: str) -> str:
+    """A group name as one safe file-name component.
+
+    Letters, digits, ``.``, ``-`` and ``_`` are kept and every other
+    character becomes ``_``; a stem of dots only (``.``, ``..``) or an empty
+    one becomes ``group``, so the component never leaves its directory.
+    """
+    stem = "".join(
+        c if (c.isascii() and c.isalnum()) or c in "._-" else "_" for c in name
+    )
+    if not stem.strip("."):
+        return "group"
+    return stem
+
+
+def _file_stems(names: Sequence[str]) -> list[str]:
+    """Distinct safe stems (case-insensitive) of the group names, in order."""
+    stems: list[str] = []
+    taken: set[str] = set()
+    for name in names:
+        base = stem = _file_stem(name)
+        count = 1
+        while stem.lower() in taken:
+            count += 1
+            stem = f"{base}_{count}"
+        taken.add(stem.lower())
+        stems.append(stem)
+    return stems
 
 
 def _default_table_tensions(tensions: FloatArray) -> FloatArray:
