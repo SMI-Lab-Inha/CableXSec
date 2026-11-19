@@ -472,6 +472,15 @@ All notable changes to CableXSec are recorded in this file. The format follows
   at 0.1 (2e-9 at 0.02). The README and quickstart outputs, which had drifted before this
   change (peak 548 N m and 219.8 J/m printed against 541 N m and 212.0 J/m computed), are
   regenerated.
+
+- `run_sea_state_batch` with `workers > 1`: each worker process writes its own numba cache
+  directory for the batch (removed afterwards) instead of sharing the caller's. numba numbers a
+  new on-disk cache entry from the index it last read and saves the index before the data, so
+  two workers compiling one kernel for different signatures at the same time could leave the
+  index pointing at the other's machine code, which a later process would load. Each worker
+  now compiles the kernels it uses; results are unchanged, and runs go to whichever worker is
+  free, as before.
+
 - `SectionLaw.from_cable` reads the cable's own materials (its `materials:` block) when the law
   is built and every time it is evaluated. Outside `simulate_bending_test` it read the library
   instead, and a layer whose material the library lacks silently dropped out of the stiffness

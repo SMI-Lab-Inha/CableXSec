@@ -39,7 +39,9 @@ and section named.
 Parallel execution
 ------------------
 Runs are processed in worker processes (``workers``, at most
-:data:`MAX_WORKERS`), each limited to one numerical thread. Results do not
+:data:`MAX_WORKERS`), each limited to one numerical thread and writing its own
+numba cache directory for the batch, so concurrent workers never share one
+on-disk kernel cache; each compiles the kernels it uses. Results do not
 depend on the worker count. The output directory, if given, must not exist:
 results are written once, with a manifest of SHA-256 digests of every input
 file, the cable definition and the options.
@@ -54,9 +56,10 @@ import os
 import pickle
 import platform
 import sys
+import tempfile
 import warnings
 from collections.abc import Mapping, Sequence
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from types import MappingProxyType
@@ -109,6 +112,7 @@ _THREAD_VARIABLES = (
     "NUMBA_NUM_THREADS",
     "NUMEXPR_NUM_THREADS",
 )
+_NUMBA_CACHE_VARIABLE = "NUMBA_CACHE_DIR"
 
 __all__ = [
     "MAX_WORKERS",
@@ -466,6 +470,66 @@ def _fretting_summary(result: Any) -> dict[str, dict[str, Any]]:
             "D_plain_per_year": np.asarray(face.D_plain_per_year).tolist(),
         }
     return out
+
+
+def _worker_pools(count: int, cache_root: Path) -> list[ProcessPoolExecutor]:
+    """``count`` one-process spawn pools, each worker with its own numba cache.
+
+    numba numbers a new on-disk cache entry from the index it last read and
+    saves the index before the data, so two processes that compile one kernel
+    for different signatures at the same time can both take the same data file
+    and leave the index pointing at the other's machine code. Each worker is
+    therefore started while ``NUMBA_CACHE_DIR`` names its own directory below
+    ``cache_root``, which it inherits before numba is imported.
+    """
+    import multiprocessing  # noqa: PLC0415
+
+    context = multiprocessing.get_context("spawn")
+    previous = os.environ.get(_NUMBA_CACHE_VARIABLE)
+    pools: list[ProcessPoolExecutor] = []
+    try:
+        for index in range(count):
+            pool = ProcessPoolExecutor(
+                max_workers=1, mp_context=context, initializer=_limit_threads
+            )
+            pools.append(pool)
+            os.environ[_NUMBA_CACHE_VARIABLE] = str(cache_root / f"worker-{index}")
+            pool.submit(os.getpid).result()  # the worker now runs with it
+    except BaseException:
+        for pool in pools:
+            pool.shutdown(cancel_futures=True)
+        raise
+    finally:
+        if previous is None:
+            os.environ.pop(_NUMBA_CACHE_VARIABLE, None)
+        else:
+            os.environ[_NUMBA_CACHE_VARIABLE] = previous
+    return pools
+
+
+def _evaluate_in_pools(
+    tasks: Sequence[_Task], pools: Sequence[ProcessPoolExecutor]
+) -> list[dict[str, Any]]:
+    """Outcomes of ``tasks`` in order; each pool takes the next task when free."""
+    outcomes: dict[int, dict[str, Any]] = {}
+    queue = iter(enumerate(tasks))
+    pending: dict[Future[dict[str, Any]], tuple[int, ProcessPoolExecutor]] = {}
+
+    def feed(pool: ProcessPoolExecutor) -> None:
+        item = next(queue, None)
+        if item is not None:
+            index, task = item
+            pending[pool.submit(_evaluate_in_worker, task)] = (index, pool)
+
+    for pool in pools:
+        feed(pool)
+    while pending:
+        done, _ = wait(pending, return_when=FIRST_COMPLETED)
+        for future in done:
+            index, pool = pending.pop(future)
+            outcomes[index] = future.result()
+            feed(pool)
+    return [outcomes[index] for index in range(len(tasks))]
 
 
 def _evaluate_in_worker(task: _Task) -> dict[str, Any]:
@@ -979,20 +1043,23 @@ def run_sea_state_batch(
     if opts.workers == 1 or len(tasks) == 1:
         outcomes = [_evaluate(task) for task in tasks]
     else:
-        import multiprocessing  # noqa: PLC0415
-
-        context = multiprocessing.get_context("spawn")
         saved = {name: os.environ.get(name) for name in _THREAD_VARIABLES}
+        pools: list[ProcessPoolExecutor] = []
         try:
             # Spawned workers inherit one-thread settings before any import.
             for name in _THREAD_VARIABLES:
                 os.environ[name] = "1"
-            with ProcessPoolExecutor(
-                max_workers=min(opts.workers, len(tasks)),
-                mp_context=context,
-                initializer=_limit_threads,
-            ) as pool:
-                outcomes = list(pool.map(_evaluate_in_worker, tasks))
+            with tempfile.TemporaryDirectory(
+                prefix="cablexsec-batch-numba-", ignore_cleanup_errors=True
+            ) as cache_root:
+                try:
+                    pools = _worker_pools(
+                        min(opts.workers, len(tasks)), Path(cache_root)
+                    )
+                    outcomes = _evaluate_in_pools(tasks, pools)
+                finally:
+                    for pool in pools:
+                        pool.shutdown(cancel_futures=True)
         finally:
             for name, value in saved.items():
                 if value is None:
