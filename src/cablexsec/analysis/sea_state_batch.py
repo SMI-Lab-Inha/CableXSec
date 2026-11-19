@@ -43,8 +43,8 @@ Runs are processed in worker processes (``workers``, at most
 its compiled kernels in a numba cache of its own: a slot directory
 ``slot-<i>`` under ``cablexsec/numba-batch`` in the user cache directory, or
 under ``CABLEXSEC_BATCH_CACHE_DIR`` when that is set, which later batches
-reuse. A slot is locked while its worker runs, so no two processes write one
-cache; a batch beside another takes the next free slots, and a worker
+reuse. Each worker locks its slot itself for as long as it runs, so no two
+processes write one cache; a batch beside another takes the next free slots, and a worker
 without one gets a temporary cache. Results do not depend on the worker
 count. The output directory, if given, must not exist:
 results are written once, with a manifest of SHA-256 digests of every input
@@ -64,7 +64,7 @@ import tempfile
 import warnings
 from collections.abc import Iterator, Mapping, Sequence
 from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
-from contextlib import ExitStack, contextmanager
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from types import MappingProxyType
@@ -532,87 +532,110 @@ def _unlock(handle: Any) -> None:
         fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
-@contextmanager
-def _slot_lock(path: Path) -> Iterator[bool]:
-    """Hold the lock file ``path`` while the block runs; yield whether it was won.
-
-    The operating system also releases the lock if the holding process ends.
-    """
+def _slot_is_free(path: Path) -> bool:
+    """True if no process holds the slot lock ``path`` (it is not kept)."""
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        handle = open(path, "a+b")  # noqa: SIM115 - closed below
+        with open(path, "a+b") as handle:
+            if not _lock(handle):
+                return False
+            _unlock(handle)
     except OSError:
-        yield False
-        return
-    with handle:
-        won = _lock(handle)
-        try:
-            yield won
-        finally:
-            if won:
-                _unlock(handle)
+        return False
+    return True
 
 
-@contextmanager
-def _worker_caches(count: int) -> Iterator[list[Path]]:
-    """``count`` numba cache directories, each written by one process only.
+#: The slot lock a worker process holds for its lifetime (see _claim_slot).
+_SLOT_HANDLE: Any = None
 
-    numba numbers a new on-disk cache entry from the index it last read and
-    saves the index before the data, so two processes that compile one kernel
-    for different signatures at the same time can both take the same data file
-    and leave the index pointing at the other's machine code. The first free
-    slots of :func:`_batch_cache_directory` are locked for the batch and kept
-    for later batches; a worker without a free slot gets a temporary
-    directory, removed afterwards.
+
+def _claim_slot(path: str) -> bool:
+    """Worker side: lock the slot ``path`` for the rest of this process.
+
+    The worker, not the caller, holds the lock, so the slot stays taken while
+    the worker can still write its cache, even if the caller has ended; the
+    operating system releases it when the worker ends.
     """
-    root = _batch_cache_directory()
-    with ExitStack() as stack:
-        caches: list[Path] = []
-        for slot in range(_CACHE_SLOTS):
-            if len(caches) == count:
-                break
-            if stack.enter_context(_slot_lock(root / f"slot-{slot}.lock")):
-                caches.append(root / f"slot-{slot}")
-        if len(caches) < count:
-            scratch = stack.enter_context(
-                tempfile.TemporaryDirectory(
-                    prefix="cablexsec-batch-numba-", ignore_cleanup_errors=True
-                )
-            )
-            missing = count - len(caches)
-            caches += [Path(scratch) / f"worker-{i}" for i in range(missing)]
-        yield caches
+    global _SLOT_HANDLE
+    try:
+        handle = open(path, "a+b")  # noqa: SIM115 - held for the process
+    except OSError:
+        return False
+    if not _lock(handle):
+        handle.close()
+        return False
+    _SLOT_HANDLE = handle
+    return True
 
 
-def _worker_pools(caches: Sequence[Path]) -> list[ProcessPoolExecutor]:
-    """One-process spawn pools; worker ``i`` writes the numba cache ``caches[i]``.
+def _start_worker(cache: Path) -> ProcessPoolExecutor:
+    """A one-process spawn pool whose worker writes the numba cache ``cache``.
 
-    Each worker is started while ``NUMBA_CACHE_DIR`` names its directory, and
-    inherits it before numba is imported (see :func:`_worker_caches`).
+    The worker is started while ``NUMBA_CACHE_DIR`` names ``cache`` and
+    inherits it before numba is imported; the caller's value is restored.
     """
     import multiprocessing  # noqa: PLC0415
 
-    context = multiprocessing.get_context("spawn")
+    pool = ProcessPoolExecutor(
+        max_workers=1,
+        mp_context=multiprocessing.get_context("spawn"),
+        initializer=_limit_threads,
+    )
     previous = os.environ.get(_NUMBA_CACHE_VARIABLE)
-    pools: list[ProcessPoolExecutor] = []
+    os.environ[_NUMBA_CACHE_VARIABLE] = str(cache)
     try:
-        for cache in caches:
-            pool = ProcessPoolExecutor(
-                max_workers=1, mp_context=context, initializer=_limit_threads
-            )
-            pools.append(pool)
-            os.environ[_NUMBA_CACHE_VARIABLE] = str(cache)
-            pool.submit(os.getpid).result()  # the worker now runs with it
+        pool.submit(os.getpid).result()  # the worker now runs with it
     except BaseException:
-        for pool in pools:
-            pool.shutdown(cancel_futures=True)
+        pool.shutdown(cancel_futures=True)
         raise
     finally:
         if previous is None:
             os.environ.pop(_NUMBA_CACHE_VARIABLE, None)
         else:
             os.environ[_NUMBA_CACHE_VARIABLE] = previous
-    return pools
+    return pool
+
+
+@contextmanager
+def _workers(count: int) -> Iterator[list[ProcessPoolExecutor]]:
+    """``count`` worker pools, each writing a numba cache no other process writes.
+
+    numba numbers a new on-disk cache entry from the index it last read and
+    saves the index before the data, so two processes that compile one kernel
+    for different signatures at the same time can both take the same data file
+    and leave the index pointing at the other's machine code. A worker takes
+    the next free slot of :func:`_batch_cache_directory` and locks it itself
+    before it runs anything (:func:`_claim_slot`); if another process won the
+    slot meanwhile, the worker is replaced and the next slot tried. The slots
+    are kept for later batches; a worker without a free slot gets a temporary
+    cache, removed after the batch.
+    """
+    root = _batch_cache_directory()
+    pools: list[ProcessPoolExecutor] = []
+    scratch: tempfile.TemporaryDirectory[str] | None = None
+    try:
+        for slot in range(_CACHE_SLOTS):
+            if len(pools) == count:
+                break
+            lock = root / f"slot-{slot}.lock"
+            if not _slot_is_free(lock):
+                continue
+            pool = _start_worker(root / f"slot-{slot}")
+            pools.append(pool)
+            if not pool.submit(_claim_slot, str(lock)).result():
+                pools.pop().shutdown()
+        if len(pools) < count:
+            scratch = tempfile.TemporaryDirectory(
+                prefix="cablexsec-batch-numba-", ignore_cleanup_errors=True
+            )
+            for index in range(count - len(pools)):
+                pools.append(_start_worker(Path(scratch.name) / f"worker-{index}"))
+        yield pools
+    finally:
+        for pool in pools:
+            pool.shutdown(cancel_futures=True)
+        if scratch is not None:
+            scratch.cleanup()
 
 
 def _evaluate_in_pools(
@@ -1152,18 +1175,12 @@ def run_sea_state_batch(
         outcomes = [_evaluate(task) for task in tasks]
     else:
         saved = {name: os.environ.get(name) for name in _THREAD_VARIABLES}
-        pools: list[ProcessPoolExecutor] = []
         try:
             # Spawned workers inherit one-thread settings before any import.
             for name in _THREAD_VARIABLES:
                 os.environ[name] = "1"
-            with _worker_caches(min(opts.workers, len(tasks))) as caches:
-                try:
-                    pools = _worker_pools(caches)
-                    outcomes = _evaluate_in_pools(tasks, pools)
-                finally:
-                    for pool in pools:
-                        pool.shutdown(cancel_futures=True)
+            with _workers(min(opts.workers, len(tasks))) as pools:
+                outcomes = _evaluate_in_pools(tasks, pools)
         finally:
             for name, value in saved.items():
                 if value is None:
