@@ -10,10 +10,10 @@ bend stiffener); the hysteretic two-way element is stage 2 (Section 7).
 
 | Piece | Where |
 |---|---|
-| Reader | `cablexsec.io.cabledyn`: `read_cabledyn_deck`, `read_cabledyn_sections`, `section_channels`, `CableDynSectionHistory` |
+| Reader | `cablexsec.io.cabledyn`: `read_cabledyn_deck`, `read_cabledyn_sections`, `section_channels`, `CableDynSectionHistory`, `read_cabledyn_range_graph`, `read_cabledyn_lift` |
 | Sea-state batch | `cablexsec.analysis.sea_state_batch`: `run_sea_state_batch`, `SeaStateRun`, `SectionRequest`, `SeaStateBatchOptions`, `load_batch_spec` |
 | Command line | `cablexsec-batch batch.json --output-directory <new folder>` |
-| Tests | `tests/test_cabledyn_reader.py`, `tests/test_sea_state_batch.py`; genuine CableDyn output in `tests/data/cabledyn/` |
+| Tests | `tests/test_cabledyn_reader.py`, `tests/test_cabledyn_outputs.py`, `tests/test_sea_state_batch.py`; genuine CableDyn output in `tests/data/cabledyn/` |
 
 ## 1. What CableDyn writes
 
@@ -21,8 +21,10 @@ From the CableDyn manual (`doc/driver_format.md`, `doc/outputs.rst`,
 `doc/theory.rst`) for CableDyn 0.4.x. The genuine runs in `tests/data/cabledyn/`
 were written by the CableDyn 0.1.0 driver (`lw24`, `lw128_v010`) and a
 CableDyn 0.4.2 build (`lw128`; `lw24r` on a mesh the static solve
-refined; `lw24g` with the 0.4.x LINE TYPES tokens); where a later release
-changed a channel, the item says so.
+refined; `lw24g` with the 0.4.x LINE TYPES tokens) and a development build
+of CableDyn after 0.4.2 (`lw24v`, the `lw24` deck with VIV lift in a current
+and the flags `ptVr`; `lw24t.Line1.range.out` of a line restrained in
+torsion); where a later release changed a channel, the item says so.
 
 - **Files.** Standalone driver: `<root>.out` (title line, header
   `Time(s)` and the deck `OUTPUTS` tokens, no units row);
@@ -33,8 +35,23 @@ changed a channel, the item says so.
   `<root>.CD.out` with a header `Time` and a units row, and
   `<root>.CD.static.out`; there are no per-line position or tension files.
   Fields are
-  TAB-separated; values have 8 significant digits, time 17. The output step is
-  always `dtM`.
+  TAB-separated; values have 8 significant digits, time 17. The standalone
+  output step is `dtM` and a run ends at `TMax` (a deck without `TMax`, or with
+  `TMax 0`, runs static: one `t = 0` row); OpenFAST rounds `dtM` to whole glue
+  steps and runs on the host's clock.
+- **Range graphs and VIV lift.** The flag `r` writes
+  `<root>.Line<L>.range.out` (OpenFAST `<root>.CD.Line<L>.range.out`): a title
+  with the sample count and the window from `RangeStart`, a header `Node
+  ArcLength` and `<Quantity>Min Max Mean` triples (tension, curvature, bend
+  moment, declination, with a seabed the clearance, with torsion the torque and
+  twist), a units row and a row per node of the final mesh. The flag `V`
+  writes `<root>.Line<L>.V.out`, the VIV force `Node<J>LiftX/Y/Z(N)` at every
+  node, with a `# DeckNode` line on a refined mesh. `read_cabledyn_range_graph`
+  and `read_cabledyn_lift` read them, checking every column, unit and node;
+  the range extremes equal those of the node channels exactly
+  (`tests/test_cabledyn_outputs.py`). When either file lies next to a run,
+  `read_cabledyn_sections` checks its mesh, and the range window against the
+  output rows, and records its digest.
 - **Order and frame.** Node 1 is End A (hang-off), node N End B; the parser
   swaps a line listed anchor first. Global axes are right-handed, `z` up,
   still water at `z = 0`, all SI, angles in degrees.
@@ -81,7 +98,12 @@ changed a channel, the item says so.
   `torque_tension_coupling_Nm`, `torsional_damping`), and they leave the
   reconstructed histories unchanged, since these come from CableDyn's
   solution. `TorsStiffness` `Free`, `Zero` or `0` leaves an end free in
-  torsion. `CableDynLine.torsion_solved` tells whether CableDyn solves a
+  torsion. `CableDynLine.end_connections` keeps every END CONNECTIONS row
+  (bending `Pinned`/`Rigid`/stiffness, `Ez`, torsion, `Nx` orthonormalised
+  against `Ez`, `Pretwist`), checked as CableDyn checks it (one row per line
+  end, a finite-EI line, non-zero `Ez`, a usable `Nx` at a restrained end); the
+  anchor-first swap negates `Ez` and `Pretwist`. `end_kinds` names what holds
+  each end. `CableDynLine.torsion_solved` tells whether CableDyn solves a
   line's torsion: restrained at both ends, or at one end when every section
   gives `GJ`, End B is `Fixed`, a dynamic run is force-blended and a
   restrained End A on a rod or body is on a `Fixed` rod or a Rigid6 body
@@ -104,7 +126,11 @@ changed a channel, the item says so.
   header, named by its other characters; a section met again continues. A
   token that opens with a quote runs to its closing quote, spaces included,
   and on to the next separator. OUTPUTS names are separated by spaces, tabs
-  or commas, with the quotes dropped; an unquoted `END` closes the list.
+  or commas, with the quotes dropped; an unquoted `END` closes the list. A
+  header naming no CableDyn section, a record longer than 512 bytes without
+  a comment in them, a NUL or non-ASCII whitespace character outside a comment
+  and a subnormal number stop the reader with the deck line, as they stop
+  CableDyn; bytes that are not UTF-8 are kept.
 
 ## 2. Section history
 
@@ -157,12 +183,43 @@ torque–tension coupling, twists by up to −1.7e-3° at the sag bend in 1 s an
 the statics too, so its channels are needed in any run. A line restrained at
 one end whose torsion CableDyn does not solve runs as one without the torsion
 columns and is read twist-free; `checks["torsion"]` records which case was
-read. Restrained at End B only, a line's End A turns freely with its twist,
-which the reader, whose axes start at End A, does not represent. The
-hang-off's rotation about its own
-tangent (vessel yaw at a vertical hang-off, the roll of a restrained End A)
-is not visible in the geometry and is not represented: the `Twist` channels
-start at 0 at End A.
+read.
+
+**Hang-off rotation.** The `Twist` channels start at 0 at End A, and the
+hang-off's turn about its own tangent (vessel yaw at a vertical hang-off) is
+not visible in the geometry. It turns the material frame when CableDyn solves
+the line in torsion with End A restrained: End A's frame is then held by what
+holds it, which turns `Nx` (with `Ez`), carried to the line tangent by the
+smallest rotation. With `frame="arc"` the reader follows it from the first
+row: a `Fixed` point or `Fixed` rod holds it still, a `Body<N>` turns it with
+its `Body<N>Rx/Ry/Rz` channels, and a `Coupled`/`Vessel` point or a turbine,
+whose vessel or platform attitude the output does not record, needs
+`hang_off_rotation`: the holder's attitude matrices or its roll about the End
+A tangent at every output row (`ψ = ∫ω·t dt`; `yaw cos D` at a hang-off of
+declination `D` on a vessel turning in yaw only), or `"none"` to declare it
+still. Without it such a run is refused. A line turned rigidly with its body
+keeps its components to round-off (`tests/test_cabledyn_outputs.py`); the
+twist-free transport in time would turn them by the yaw times the vertical
+component of the hang-off tangent. Restrained at End B only, the free End A
+turns by `−Twist<L>` against End B's frame carried along the line, which the
+reader builds from the positions of every node and the `Twist<L>` channel.
+`frame="section"` represents neither and is refused where either applies;
+`checks["hang_off"]` records the rule and the extent of the turn.
+
+**Section axes of a torsion line.** On a line CableDyn solves in torsion the
+reader's axes are CableDyn's section axes, those of `CurvX`/`CurvY`: the first
+axis starts at End A's torsion normal `Nx` (End B's, rolled by its `Pretwist`,
+carried back on a line restrained at End B only), is carried along the line and
+turned by the twist; the reference vector is not used there and
+`frame="section"` is refused. The reconstructed components are then
+`(-CurvY, CurvX)` to the reconstruction's accuracy: 0.3 to 1.2 % on the coupled
+VolturnUS-S run `tests/data/cabledyn/vu_torsion` (1.15 % at 21 m, 0.33 % at 59 m
+and 131 m), where axes seeded by the reference vector stood 90° away.
+`curvature_source="components"` reads `CurvX`/`CurvY` at the deck nodes around
+each section directly: exact on CableDyn's axes, with no node positions or
+angles (on an OpenFAST run only the channels written). OpenFAST writes its own
+`<root>.out` beside `<root>.CD.out`; the reader takes the CableDyn file and
+refuses only a CableDyn driver table there.
 
 `rotation_curvature_x/y` are the components of `κ` on (`e1`, `e2`): a lazy
 wave in the `x–z` plane bends about `e2` (sag bend `κ·e2 < 0`, hog bend

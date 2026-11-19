@@ -16,6 +16,9 @@ corrupt a fatigue number — the reader is plumbing, gated by a known-answer tes
 - :func:`~cablexsec.io.cabledyn.read_cabledyn_sections` — CableDyn driver and
   OpenFAST module outputs: section histories with reconstructed signed
   curvature components (doc/global_local_guide.md).
+- :func:`~cablexsec.io.cabledyn.read_cabledyn_range_graph` and
+  :func:`~cablexsec.io.cabledyn.read_cabledyn_lift` — CableDyn range graphs
+  (``.Line<L>.range.out``) and VIV lift forces (``.Line<L>.V.out``).
 - :func:`~cablexsec.io.cabledyn_components.read_cabledyn_station_table` —
   CableDyn 0.4.0 station tables with signed curvature components (``CurvX``,
   ``CurvY``), sign-mapped to the strain gradient.
@@ -26,8 +29,12 @@ corrupt a fatigue number — the reader is plumbing, gated by a known-answer tes
 from __future__ import annotations
 
 from cablexsec.io.cabledyn import (
+    CableDynLift,
+    CableDynRangeGraph,
     CableDynSectionHistory,
     read_cabledyn_deck,
+    read_cabledyn_lift,
+    read_cabledyn_range_graph,
     read_cabledyn_sections,
     section_channels,
 )
@@ -46,11 +53,15 @@ from cablexsec.io.synthetic import jonswap_series
 from cablexsec.io.time_history_csv import read_time_history_csv
 
 __all__ = [
+    "CableDynLift",
+    "CableDynRangeGraph",
     "CableDynSectionHistory",
     "LoadCaseSeries",
     "fatigue_from_series",
     "jonswap_series",
     "read_cabledyn_deck",
+    "read_cabledyn_lift",
+    "read_cabledyn_range_graph",
     "read_cabledyn_sections",
     "read_cabledyn_station_table",
     "read_riflex_ascii",

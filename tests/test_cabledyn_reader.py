@@ -124,12 +124,14 @@ def _write_case(
     time = np.arange(nt) * 0.1 if time is None else time
     tension = np.full((nt, nn - 1), 5000.0) if tension is None else tension
     channels = {} if channels is None else channels
+    # The run ends at TMax, as the standalone driver's does.
+    deck_kwargs = {"t_max": round(float(time[-1]), 12), **(deck_kwargs or {})}
     deck = _deck(
         tmp_path / f"{root}.dat",
         n_elements=nn - 1,
         outputs=outputs,
         channels=list(channels),
-        **(deck_kwargs or {}),
+        **deck_kwargs,
     )
     names = list(channels)
     with open(tmp_path / f"{root}.out", "w", encoding="utf-8") as f:
@@ -461,17 +463,18 @@ def test_material_twist_turns_the_section_axes(tmp_path):
     root, deck = _write_case(
         tmp_path, positions, channels=channels, deck_kwargs={"torsion": True}
     )
+    # The synthetic hang-off (a Coupled point) does not turn.
     history = read_cabledyn_sections(
-        root, deck, {"s": 3.95}, pressure="none"
+        root, deck, {"s": 3.95}, pressure="none", hang_off_rotation="none"
     ).histories["s"]
     twist = np.radians(twist_deg)
     assert np.allclose(history.twist_rad, twist)
     assert np.allclose(history.torque_Nm, 12.5)
     assert np.allclose(
-        history.rotation_curvature_x_1_m, kappa * np.sin(twist), atol=2e-6
+        history.rotation_curvature_x_1_m, kappa * np.cos(twist), atol=2e-6
     )
     assert np.allclose(
-        history.rotation_curvature_y_1_m, kappa * np.cos(twist), atol=2e-6
+        history.rotation_curvature_y_1_m, -kappa * np.sin(twist), atol=2e-6
     )
 
 
@@ -1084,9 +1087,18 @@ def test_real_cabledyn_run_with_damped_coupled_line_types(tmp_path):
     assert deck.channels[-1] == "L1N14Azi" and "Ignored1" not in deck.channels
 
     sections = {"upper": 10.0, "sag": 58.4}
+    # The clamped hang-off turns with the RAO vessel, whose attitude the
+    # output does not record: refused unless given, here declared still.
+    with pytest.raises(CableSchemaError, match="Pass hang_off_rotation"):
+        read_cabledyn_sections(DATA / "lw24g", deck, sections, curvature_check_rtol=0.5)
     read = read_cabledyn_sections(
-        DATA / "lw24g", deck, sections, curvature_check_rtol=0.5
+        DATA / "lw24g",
+        deck,
+        sections,
+        curvature_check_rtol=0.5,
+        hang_off_rotation="none",
     )
+    assert read.checks["hang_off"]["source"].startswith("declared still")
     rows = (DATA / "lw24g.out").read_text(encoding="utf-8").splitlines()
     header = rows[1].split("\t")
     channel = np.array(
@@ -1132,8 +1144,8 @@ def test_real_run_of_a_line_restrained_at_one_end_twists_dynamically(tmp_path):
     no torque), but in the dynamics the polar inertia carries torsional waves
     and the line twists (``Twist1N<J>`` up to -1.7e-3 deg in this 1 s run,
     0.18 deg in a 30 s run of the deck): without the channels it is refused,
-    with them read as written. The same deck read as a static run
-    (``TMax 0``) needs no channels.
+    with them read as written. A static deck (``TMax 0``) runs to the single
+    ``t = 0`` row, so it cannot have produced this output.
     """
     deck = read_cabledyn_deck(DATA / "lw24k.dat")
     line = deck.line(1)
@@ -1149,8 +1161,13 @@ def test_real_run_of_a_line_restrained_at_one_end_twists_dynamically(tmp_path):
     )
     assert np.all(channel[0] == 0.0) and np.all(channel[1:] < 0.0)
     sections = {"upper": 10.0, "sag": 58.4}
+    # The vessel's turn is not in the output: declared still for this test.
     read = read_cabledyn_sections(
-        DATA / "lw24k", deck, sections, curvature_check_rtol=0.5
+        DATA / "lw24k",
+        deck,
+        sections,
+        curvature_check_rtol=0.5,
+        hang_off_rotation="none",
     )
     weight = (58.4 - 8 * 68.114 / 10) / (68.114 / 10)
     np.testing.assert_allclose(
@@ -1182,8 +1199,10 @@ def test_real_run_of_a_line_restrained_at_one_end_twists_dynamically(tmp_path):
     (tmp_path / "lw24k.dat").write_text(
         text.replace("1.0      TMax", "0.0      TMax"), encoding="utf-8"
     )
-    static = read_cabledyn_sections(
-        tmp_path / "lw24k", tmp_path / "lw24k.dat", sections, curvature_check_rtol=0.5
-    )
-    assert static.histories["sag"].twist_rad is None
-    assert static.checks["torsion"]["material_twist"] == "none (twist-free)"
+    with pytest.raises(CableSchemaError, match="TMax is 0, so the standalone driver"):
+        read_cabledyn_sections(
+            tmp_path / "lw24k",
+            tmp_path / "lw24k.dat",
+            sections,
+            curvature_check_rtol=0.5,
+        )

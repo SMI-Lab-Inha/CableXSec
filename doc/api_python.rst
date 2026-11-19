@@ -62,4 +62,6 @@ Global results
 .. autofunction:: cablexsec.read_time_history_csv
 .. autofunction:: cablexsec.read_riflex_ascii
 .. autofunction:: cablexsec.read_cabledyn_sections
+.. autofunction:: cablexsec.read_cabledyn_range_graph
+.. autofunction:: cablexsec.read_cabledyn_lift
 .. autofunction:: cablexsec.run_sea_state_batch
