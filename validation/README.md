@@ -53,6 +53,7 @@ registered measured comparisons listed in [`VALIDATION.md`](../VALIDATION.md#sum
 | `concentric_conductor_bend.py` | Bending reference with coupled axial slip in concentric wire rings |
 | `helical_hertz_reference.py` | Independent local Hertz reference for helically swept circular sections |
 | `benchmark_fatigue_counter.py`, `profile_release.py` | Timing of the fatigue counter and call profiles on public inputs |
+| `benchmark_throughput.py` | One-core throughput of sea-state fatigue on the 66 kV template (direction-tied and distributed models, all wires or 12 positions, 4 or 32 fibres), damage differences from an earlier build, and the sea-state batch against the worker count |
 | `fowt_construction.py`, `fowt_section_checks.py` | Construction and mass inputs of the floating-wind application, and the bending-range check of the metallic sheath |
 
 The tests in `tests/` import these scripts by name; `tests/conftest.py` puts this folder

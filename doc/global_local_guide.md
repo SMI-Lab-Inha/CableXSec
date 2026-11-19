@@ -346,8 +346,10 @@ result.sections["sag"].long_term.annual_damage, result.sections["sag"].life_year
   the wider tolerance; a 10-column row gives no `GJ` and is not compared. A
   mismatch stops the batch unless `allow_property_mismatch=True` is
   declared, and the comparison is written to the manifest either way.
-- Workers: `workers` processes (at most `MAX_WORKERS = 8`), one numerical
-  thread each, spawned; results do not depend on the worker count.
+- Workers: `workers` processes, one numerical thread each, spawned, at most
+  one per run; there is no upper limit, so choose the count for the machine
+  (the runs are independent and the batch scales with the worker count while
+  there are runs for every worker). Results do not depend on the worker count.
 - Output folder (must not exist): `manifest.json` (SHA-256 of every CableDyn
   file and deck, the cable definition and YAML file, options, property check,
   reader checks per run, results, and `inputs_sha256` over all of them);

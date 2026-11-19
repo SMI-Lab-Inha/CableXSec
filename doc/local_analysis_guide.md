@@ -1532,10 +1532,13 @@ histories.
 On one thread the Step 3 path takes 0.76 s per section-hour for 118 wires × 32
 fibres and 42 001 samples (600 s initialisation plus a 3600 s retained hour);
 `parallel=True` spreads wires over threads.
-`compute_fatigue` uses the compiled slip kernel and, through
-`fast_rainflow.miner_rows`, the compiled counter for each fibre; its damage is
-bitwise equal to the reference counter, still available with
-`rainflow_counter="reference"`.
+`compute_fatigue` uses the compiled slip kernel, assembles the stress field in
+one compiled pass (`fast_field.assemble_wire_field`) and counts every fixed
+fibre with `fast_rainflow.fibre_miner_damage`, the compiled counter applied to
+each fibre history as it is formed; its damage is bitwise equal to the
+reference counter, still available with `rainflow_counter="reference"`.
+`validation/scripts/benchmark_throughput.py` records the one-core throughput
+of this route on a one-hour sea state of the 66 kV template.
 
 The pure-Python routines remain the reference implementation.
 `tests/test_fast_slip.py` and `tests/test_fast_rainflow.py` require the

@@ -29,11 +29,17 @@ counter instead (see :mod:`cablexsec._numba`).
 stress-range factor, and flags any row for which the reference would raise
 (non-finite or non-positive amplified range, S-N life outside floating-point
 range) so that the caller can rerun it on the reference path.
+
+:func:`fibre_miner_damage` gives the same sums at every fixed fibre of a
+(wire, time) stress field without forming the fibre histories: each history
+is reduced to its turning points while it is formed from the field
+components, and one count serves every stress-range factor.
 """
 
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -48,6 +54,7 @@ __all__ = [
     "HAVE_NUMBA",
     "fatigue_rows",
     "fibre_fatigue",
+    "fibre_miner_damage",
     "miner_rows",
     "rainflow_table",
 ]
@@ -520,6 +527,293 @@ def miner_rows(
         rows = stress.shape[0]
         return np.zeros(rows), np.ones(rows, dtype=np.bool_)
     return damage, (flags != 0.0) | ~np.isfinite(damage)
+
+
+# --------------------------------------------------------------------------- #
+# Fused fixed-fibre Miner damage (compute_fatigue)                             #
+# --------------------------------------------------------------------------- #
+@njit(cache=True)
+def _cycle_damage(
+    span: float,
+    factor: float,
+    m1: float,
+    log_c1: float,
+    m2: float,
+    log_c2: float,
+    knee: float,
+    threshold: float,
+) -> tuple[float, bool]:
+    """``(1 / life, flag)`` of one counted range, as :func:`_add_cycle`.
+
+    The range is scaled as ``span / 1e6 * factor``; the flag marks where the
+    reference Miner sum raises (see :func:`_add_cycle`).
+    """
+    stress = span / 1.0e6 * factor
+    life = _cycles_to_failure(stress, m1, log_c1, m2, log_c2, knee, threshold)
+    thresholded = threshold >= 0.0 and stress <= threshold
+    flag = not (0.0 < stress < math.inf) or not (thresholded or 0.0 < life < math.inf)
+    return life, flag
+
+
+@njit(cache=True)
+def _count_turning_points(
+    red: FloatArray,
+    k: int,
+    stack: FloatArray,
+    factor0: float,
+    factor1: float,
+    two: bool,
+    out: FloatArray,
+    m1: float,
+    log_c1: float,
+    m2: float,
+    log_c2: float,
+    knee: float,
+    threshold: float,
+) -> None:
+    """Steps 2 and 3 of :func:`_count_one` on the turning points ``red[:k]``.
+
+    The reversal scan feeds the three-point stack directly, point by point,
+    and the Miner sums of one or two range factors are accumulated in cycle
+    order: ``out = (damage0, damage1, flag0, flag1)``. ``k >= 2``.
+    """
+    d0 = 0.0
+    d1 = 0.0
+    g0 = False
+    g1 = False
+    head = 0
+    top = 0
+    x = red[1]
+    d_last = x - red[0]
+    x_next = x
+    for j in range(1, k + 1):
+        # The reversal scan: red[0], the reversals of red[1:k-1], red[k-1].
+        if j == 1:
+            value = red[0]
+        elif j < k:
+            x_next = red[j]
+            if x_next == x:
+                continue
+            d_next = x_next - x
+            reversal = d_last * d_next < 0
+            value = x
+            x = x_next
+            d_last = d_next
+            if not reversal:
+                continue
+        else:
+            value = x_next
+        stack[top] = value
+        top += 1
+        while top - head >= 3:
+            x1 = stack[top - 3]
+            x2 = stack[top - 2]
+            x3 = stack[top - 1]
+            if abs(x3 - x2) < abs(x2 - x1):
+                break
+            if top - head == 3:
+                span = abs(stack[head] - stack[head + 1])
+                count = 0.5
+                head += 1
+            else:
+                span = abs(x1 - x2)
+                count = 1.0
+                top -= 3
+                stack[top] = x3
+                top += 1
+            if span > 0:
+                life, flag = _cycle_damage(
+                    span, factor0, m1, log_c1, m2, log_c2, knee, threshold
+                )
+                g0 = g0 or flag
+                d0 += count / life
+                if two:
+                    life, flag = _cycle_damage(
+                        span, factor1, m1, log_c1, m2, log_c2, knee, threshold
+                    )
+                    g1 = g1 or flag
+                    d1 += count / life
+    while top - head > 1:
+        span = abs(stack[head] - stack[head + 1])
+        if span > 0:
+            life, flag = _cycle_damage(
+                span, factor0, m1, log_c1, m2, log_c2, knee, threshold
+            )
+            g0 = g0 or flag
+            d0 += 0.5 / life
+            if two:
+                life, flag = _cycle_damage(
+                    span, factor1, m1, log_c1, m2, log_c2, knee, threshold
+                )
+                g1 = g1 or flag
+                d1 += 0.5 / life
+        head += 1
+    out[0] = d0
+    out[1] = d1
+    out[2] = 1.0 if g0 else 0.0
+    out[3] = 1.0 if g1 else 0.0
+
+
+@njit(cache=True)
+def _fibre_miner_kernel(
+    mean: FloatArray,
+    radial: FloatArray,
+    tangential: FloatArray,
+    normal_offsets: FloatArray,
+    lateral_offsets: FloatArray,
+    start: int,
+    factor0: float,
+    factor1: float,
+    two: bool,
+    m1: float,
+    log_c1: float,
+    m2: float,
+    log_c2: float,
+    knee: float,
+    threshold: float,
+) -> tuple[FloatArray, FloatArray]:
+    """Miner damage of every (factor, wire, fibre) without forming histories.
+
+    The fibre stress ``(mean + radial n) + tangential l`` (the arithmetic of
+    :meth:`WireStressField.at_fibre`) of samples ``start:`` is reduced to its
+    plateau-preserving turning points while it is formed (step 1 of
+    :func:`_count_one`, without branches), then counted by
+    :func:`_count_turning_points`. ``n_t - start >= 2``.
+    """
+    n_w, n_t = mean.shape
+    n_f = normal_offsets.size
+    damage = np.zeros((2, n_w, n_f))
+    flags = np.zeros((2, n_w, n_f))
+    red = np.empty(n_t - start + 1)
+    stack = np.empty(n_t - start + 1)
+    out = np.zeros(4)
+    for w in range(n_w):
+        mw = mean[w]
+        rw = radial[w]
+        tw = tangential[w]
+        # Largest component magnitudes (NaN gives inf): a fibre whose bound is
+        # not finite may hold a non-finite sample and is left to the reference.
+        big_m = 0.0
+        big_r = 0.0
+        big_t = 0.0
+        for i in range(start, n_t):
+            a = abs(mw[i])
+            if not a <= big_m:
+                big_m = a if a == a else math.inf
+            a = abs(rw[i])
+            if not a <= big_r:
+                big_r = a if a == a else math.inf
+            a = abs(tw[i])
+            if not a <= big_t:
+                big_t = a if a == a else math.inf
+        for f in range(n_f):
+            c = normal_offsets[f]
+            sl = lateral_offsets[f]
+            unsafe = not big_m + big_r * abs(c) + big_t * abs(sl) < 1.0e300
+            prev = mw[start] + rw[start] * c + tw[start] * sl
+            red[0] = prev
+            k = np.int64(1)
+            rising_before = np.int64(0)
+            changed = np.int64(0)
+            for i in range(start + 1, n_t):
+                x = mw[i] + rw[i] * c + tw[i] * sl
+                moved = np.int64(x != prev)
+                rising = np.int64(x > prev)
+                # A turning point at the previous sample: the record moved,
+                # it had moved before, and the direction changed.
+                red[k] = prev
+                k += moved & changed & (rising ^ rising_before)
+                rising_before = (rising_before & (1 - moved)) | (rising & moved)
+                changed |= moved
+                prev = x
+            red[k] = prev
+            k += 1
+            # A record that never moves gives one zero range, which is skipped.
+            _count_turning_points(
+                red,
+                int(k),
+                stack,
+                factor0,
+                factor1,
+                two,
+                out,
+                m1,
+                log_c1,
+                m2,
+                log_c2,
+                knee,
+                threshold,
+            )
+            damage[0, w, f] = out[0]
+            damage[1, w, f] = out[1]
+            flags[0, w, f] = 1.0 if unsafe or out[2] != 0.0 else 0.0
+            flags[1, w, f] = 1.0 if unsafe or out[3] != 0.0 else 0.0
+    return damage, flags
+
+
+def fibre_miner_damage(
+    mean_Pa: FloatArray,
+    radial_Pa: FloatArray,
+    tangential_Pa: FloatArray,
+    normal_offsets: FloatArray,
+    lateral_offsets: FloatArray,
+    sn_curve: SNcurve,
+    stress_range_factors: Sequence[float],
+    *,
+    start: int = 0,
+) -> tuple[FloatArray, NDArray[np.bool_]]:
+    """Miner damage at fixed fibres, shape (factor, wire, fibre), and rerun flags.
+
+    The history of fibre ``f`` of wire ``w`` is
+    ``(mean + radial * normal_offsets[f]) + tangential * lateral_offsets[f]``
+    over samples ``start:``, the arithmetic of
+    :meth:`cablexsec.analysis.fatigue.WireStressField.at_fibre`; it is counted
+    as :func:`miner_rows` counts that history with each of the one or two
+    stress-range factors, cycle for cycle and in the same summation order,
+    without forming it, and one count serves both factors. Flagged entries
+    (and entries with a non-finite total) must be recomputed on the
+    reference path, as for :func:`miner_rows`. Inputs are assumed validated
+    (matching two-dimensional components, curve in MPa, finite positive
+    factors).
+    """
+    arrays = [
+        np.ascontiguousarray(a, dtype=np.float64)
+        for a in (mean_Pa, radial_Pa, tangential_Pa)
+    ]
+    if arrays[0].ndim != 2 or any(a.shape != arrays[0].shape for a in arrays):
+        raise ValueError("matching two-dimensional stress components required")
+    normal = np.ascontiguousarray(normal_offsets, dtype=np.float64)
+    lateral = np.ascontiguousarray(lateral_offsets, dtype=np.float64)
+    if normal.ndim != 1 or lateral.shape != normal.shape:
+        raise ValueError("one normal and one lateral offset per fibre required")
+    factors = [float(value) for value in stress_range_factors]
+    if len(factors) not in (1, 2):
+        raise ValueError("one or two stress-range factors required")
+    if not 0 <= start <= arrays[0].shape[1] - 2:
+        raise ValueError("at least two samples from start are required")
+    params = _curve_parameters(sn_curve)
+    mean, radial, tangential = arrays
+    two = len(factors) == 2
+    rows = slice(0, 2 if two else 1)
+    try:
+        damage, flags = _fibre_miner_kernel(
+            mean,
+            radial,
+            tangential,
+            normal,
+            lateral,
+            int(start),
+            factors[0],
+            factors[-1],
+            two,
+            *params,
+        )
+    except (ZeroDivisionError, OverflowError):
+        # Interpreted kernels raise where compiled arithmetic gives 0 or inf.
+        shape = (len(factors), mean.shape[0], normal.size)
+        return np.zeros(shape), np.ones(shape, dtype=np.bool_)
+    damage = damage[rows]
+    return damage, (flags[rows] != 0.0) | ~np.isfinite(damage)
 
 
 # --------------------------------------------------------------------------- #

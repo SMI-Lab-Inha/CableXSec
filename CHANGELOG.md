@@ -10,6 +10,12 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Added
 
+- `validation/scripts/benchmark_throughput.py`: one-core throughput of sea-state fatigue on
+  the 66 kV template (direction-tied and distributed models, every wire or 12 positions, 4 or
+  32 fibres), the damage differences from an earlier build, and the sea-state batch time
+  against the worker count. `tests/test_fast_fatigue_path.py` checks the fused counting and
+  field assembly against the arithmetic they replace (no wall-clock assertion).
+
 - Reported rows SV11-SPLIT, SV11-REACH and SV11-EQ88: where the SV11 termination increment
   comes from. With the bellmouth curvature imposed uniformly from the end-fitting face the
   end-fitting anchor alone moves the SV11-PLANE median from 1.00 to 1.01 and SV11-GJ from 1.24
@@ -338,6 +344,24 @@ All notable changes to CableXSec are recorded in this file. The format follows
   paths; pass `friction_model` explicitly to keep the current behaviour.
 
 ### Changed
+
+- `compute_fatigue` is 2.3–3.0 times faster on the direction-tied model, with every damage
+  value bit for bit unchanged. One-hour sea state on the 66 kV template (20 000 samples, both
+  armour layers, numba, one thread, `validation/scripts/benchmark_throughput.py`): all 284
+  wires 0.88 s → 0.29 s (4 fibres) and 2.42 s → 0.90 s (32 fibres, 13.3 → 4.9 ns per fibre
+  sample); 12 positions per layer 0.068 s → 0.029 s. The fixed fibres of a layer are counted in
+  one compiled pass (`fast_rainflow.fibre_miner_damage`): each fibre history is reduced to its
+  turning points while it is formed, the reversal scan feeds the three-point stack directly,
+  and one count serves the unit and the termination stress-range factor; entries where the
+  reference sum would raise are recomputed on the reference path in the former order. The
+  stress field is assembled in one compiled pass (`fast_field.assemble_wire_field`, the NumPy
+  operations in the same order); without numba the NumPy path forms the local bending stress
+  once instead of twice. The distributed model is limited by its increment solver (22 s of
+  23 s), as before.
+- `SeaStateBatchOptions(workers=...)` and `cablexsec-batch --workers` have no upper limit
+  (`MAX_WORKERS` is removed); the pool starts at most one worker per run. On 48 one-hour runs
+  the batch takes 43.3, 23.5, 13.0 and 7.8 s with 1, 2, 4 and 8 workers; the remainder is the
+  start-up of each worker (about 2 s: imports and loading the compiled kernels).
 
 - The rows that compare with the measured loops of Ménard and Cartraud (2023), BM1-loop,
   BM1-loop-uniform and BM1-ID, are stated, not gated (status INFO, the verdict against the

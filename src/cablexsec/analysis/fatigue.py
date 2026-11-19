@@ -61,14 +61,15 @@ import math
 import warnings
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal, NamedTuple
 
 import numpy as np
 import rainflow
 from numpy.typing import NDArray
 
 from cablexsec._numba import HAVE_NUMBA
-from cablexsec.analysis.fast_rainflow import miner_rows
+from cablexsec.analysis.fast_field import assemble_wire_field
+from cablexsec.analysis.fast_rainflow import fibre_miner_damage, miner_rows
 from cablexsec.analysis.fretting_swt import (
     PartialSlipCycles,
     swt_driver_from_contact,
@@ -131,6 +132,7 @@ from cablexsec.provenance import (
 # attributes, so that tests can force the reference paths).
 _FAST_SLIP = HAVE_NUMBA
 _FAST_RAINFLOW = HAVE_NUMBA
+_FAST_FIELD = HAVE_NUMBA
 
 RainflowCounter = Literal["auto", "compiled", "reference"]
 FrictionModel = Literal["auto", "direction_tied", "distributed", "progressive"]
@@ -732,6 +734,58 @@ def _wire_stress_series(
     thermal_stress_Pa: FloatArray | None,
     contact_pressure_Pa: FloatArray | None,
     *,
+    wire_modulus_Pa: FloatArray | None = None,
+    wires: IntArray | None = None,
+    **options: Any,
+) -> FloatArray:
+    """``sigma_total(phi_k, t)`` at the outward radial fibre of every wire [Pa].
+
+    Shape ``(n_wires, n_steps)``; ``sigma_total = sigma_A + sigma_B + sigma_f
+    + sigma_T`` with the parts of :func:`_wire_stress_parts` (same options)
+    and the local bending stress at the outer face (``t/2`` for a
+    rectangular or profiled wire, gap G1).
+    """
+    parts = _wire_stress_parts(
+        layer,
+        kappa_x,
+        kappa_y,
+        tension_N,
+        EA_full_N,
+        thermal_stress_Pa,
+        contact_pressure_Pa,
+        wire_modulus_Pa=wire_modulus_Pa,
+        wires=wires,
+        **options,
+    )
+    spec = layer.spec
+    phi = spec.phi_wires if wires is None else spec.phi_wires[wires]
+    d_wire = (
+        2.0 * math.sqrt(spec.A_wire_m2 / math.pi)
+        if spec.section is None
+        else 2.0 * spec.section.half_thickness_m
+    )
+    sigma_B_kt = local_bending_fibre_stress(
+        kappa_x,
+        kappa_y,
+        phi[:, None],
+        spec.E_wire_Pa if wire_modulus_Pa is None else wire_modulus_Pa,
+        d_wire,
+        spec.lay_angle_rad,
+    )
+    return np.asarray(
+        parts.axial[None, :] + sigma_B_kt + parts.friction + parts.thermal[None, :]
+    )
+
+
+def _wire_stress_parts(
+    layer: FatigueLayer,
+    kappa_x: FloatArray,
+    kappa_y: FloatArray,
+    tension_N: FloatArray | None,
+    EA_full_N: float | None,
+    thermal_stress_Pa: FloatArray | None,
+    contact_pressure_Pa: FloatArray | None,
+    *,
     axial_strain: FloatArray | None = None,
     normal_stress_Pa: FloatArray | None = None,
     wire_modulus_Pa: FloatArray | None = None,
@@ -746,8 +800,8 @@ def _wire_stress_series(
     time_s: FloatArray | None = None,
     distributed_bound: DistributedBound = "signed",
     wires: IntArray | None = None,
-) -> FloatArray:
-    """Build ``sigma_total(phi_k, t)`` for every wire of one layer [Pa].
+) -> _StressParts:
+    """Friction, axial and thermal parts of ``sigma_total(phi_k, t)`` [Pa].
 
     ``wires`` (indices) builds those rows only, in that order, equal to the
     same rows of the full field: the direction-tied kernel evaluates only
@@ -759,7 +813,10 @@ def _wire_stress_series(
     the direction-tied and distributed kernels; the progressive law refuses a
     non-neutral law.
 
-    Shape ``(n_wires, n_steps)``. ``sigma_total = sigma_A + sigma_B + sigma_f``.
+    ``sigma_total = sigma_A + sigma_B + sigma_f + sigma_T``: the friction
+    stress has shape ``(n_wires, n_steps)``; ``sigma_A`` and ``sigma_T`` are
+    the same for every wire and are returned once per sample.
+    :func:`wire_stress_field` adds the local bending stress ``sigma_B``.
     Curvatures are axial-strain-gradient components, not rotation-curvature
     components. A prescribed axial_strain is the stress-driving uniaxial
     strain, an alternative to true material force/EA, not geometric total
@@ -798,28 +855,8 @@ def _wire_stress_series(
                 "axial strain must be finite and match curvature histories"
             )
     _validate_tension(tension_N, EA_full_N, kappa_x.shape)
-    phi = spec.phi_wires  # (n_wires,)
-    if wires is not None:
-        phi = phi[wires]
     n_steps = kappa_x.size
     a = spec.lay_angle_rad
-
-    # Outward radial-fibre stress is retained by this helper. The fatigue
-    # driver adds the other fixed circumference fibres after solving slip once.
-    # A rectangular or profiled wire (gap G1) has its outer face at t/2.
-    d_wire = (
-        2.0 * math.sqrt(spec.A_wire_m2 / math.pi)
-        if spec.section is None
-        else 2.0 * spec.section.half_thickness_m
-    )
-    sigma_B_kt = local_bending_fibre_stress(
-        kappa_x,
-        kappa_y,
-        phi[:, None],
-        spec.E_wire_Pa if wire_modulus_Pa is None else wire_modulus_Pa,
-        d_wire,
-        a,
-    )
 
     friction_model, _reason = _resolve_friction_model(  # type: ignore[assignment]
         friction_model,
@@ -907,25 +944,35 @@ def _wire_stress_series(
     if wires is not None and not wires_done:
         sigma_f_kt = np.ascontiguousarray(sigma_f_kt[wires])
     # sigma_A (tension) — [Nasution2014b] Eq. 5: sigma_A = E cos^2 a * N / EA_full.
-    sigma_A_kt = np.zeros((phi.size, n_steps), dtype=np.float64)
+    # The same for every wire: one value per sample, accumulated in the order
+    # of the terms.
+    sigma_A_t = np.zeros(n_steps, dtype=np.float64)
     if normal_stress_Pa is not None:
-        sigma_A_kt += np.asarray(normal_stress_Pa)[None, :]
+        sigma_A_t += np.asarray(normal_stress_Pa)
     if axial_strain is not None:
         e_ax = layer.E_eff_axial_Pa or spec.E_wire_Pa
-        sigma_A_kt += (e_ax * math.cos(a) ** 2 * axial_strain)[None, :]
+        sigma_A_t += e_ax * math.cos(a) ** 2 * axial_strain
     if tension_N is not None:
         assert EA_full_N is not None  # validated before stress recovery
         e_ax = layer.E_eff_axial_Pa or spec.E_wire_Pa
-        sigma_A_t = e_ax * math.cos(a) ** 2 * np.asarray(tension_N) / EA_full_N
-        sigma_A_kt += sigma_A_t[None, :]
+        sigma_A_t += e_ax * math.cos(a) ** 2 * np.asarray(tension_N) / EA_full_N
 
-    sigma_T_kt = np.zeros((phi.size, n_steps), dtype=np.float64)
+    sigma_T_t = np.zeros(n_steps, dtype=np.float64)
     if thermal_stress_Pa is not None:
-        sigma_T_kt += np.asarray(thermal_stress_Pa, dtype=np.float64)[None, :]
+        sigma_T_t += np.asarray(thermal_stress_Pa, dtype=np.float64)
 
+    sigma_f_kt = np.asarray(sigma_f_kt, dtype=np.float64)
     if friction_out is not None:
-        friction_out.append(np.asarray(sigma_f_kt, dtype=np.float64))
-    return np.asarray(sigma_A_kt + sigma_B_kt + sigma_f_kt + sigma_T_kt)
+        friction_out.append(sigma_f_kt)
+    return _StressParts(sigma_f_kt, sigma_A_t, sigma_T_t)
+
+
+class _StressParts(NamedTuple):
+    """Parts of the wire stress from :func:`_wire_stress_parts` [Pa]."""
+
+    friction: FloatArray  # (wire, sample)
+    axial: FloatArray  # (sample,), the same for every wire
+    thermal: FloatArray  # (sample,), the same for every wire
 
 
 @dataclass(frozen=True)
@@ -1193,7 +1240,7 @@ def wire_stress_field(
             layer, spec=dataclasses.replace(layer.spec, shape_g=relieved)
         )
     friction_parts: list[FloatArray] | None = [] if keep_friction else None
-    outward = _wire_stress_series(
+    parts = _wire_stress_parts(
         layer,
         kx,
         ky,
@@ -1218,6 +1265,7 @@ def wire_stress_field(
     )
     spec = layer.spec
     increment = None
+    extra = None
     if termination is not None:
         if not isinstance(termination, TerminationSpec):
             raise CableInputError("termination must be a TerminationSpec or None")
@@ -1234,7 +1282,7 @@ def wire_stress_field(
                 increment, stress_Pa=np.ascontiguousarray(increment.stress_Pa[wires])
             )
         if increment.applied:
-            outward = outward + increment.stress_Pa
+            extra = increment.stress_Pa
             if friction_parts:
                 friction_parts[0] = friction_parts[0] + increment.stress_Pa
     friction = friction_parts[0] if friction_parts else None
@@ -1246,24 +1294,47 @@ def wire_stress_field(
         depth = 2 * spec.section.half_thickness_m
         width = 2 * spec.section.half_width_m
     phi_eval = spec.phi_wires if wires is None else spec.phi_wires[wires]
-    radial = local_bending_fibre_stress(
-        kx,
-        ky,
-        phi_eval[:, None],
-        modulus,
-        depth,
-        spec.lay_angle_rad,
-    )
-    tangential = local_bending_fibre_stress(
-        kx,
-        ky,
-        phi_eval[:, None],
-        modulus,
-        width,
-        spec.lay_angle_rad,
-        math.pi / 2,
-    )
-    mean = outward - radial
+    if _FAST_FIELD:
+        # One compiled pass, equal bit for bit to the expressions below.
+        mean, radial, tangential = assemble_wire_field(
+            kx,
+            ky,
+            phi_eval,
+            modulus,
+            depth,
+            width,
+            spec.lay_angle_rad,
+            parts.axial,
+            parts.friction,
+            parts.thermal,
+            extra,
+        )
+    else:
+        # Outward radial fibre (y_n = t/2) and edge (y_l = b/2); a rectangular
+        # or profiled wire (gap G1) has its outer face at t/2.
+        radial = local_bending_fibre_stress(
+            kx,
+            ky,
+            phi_eval[:, None],
+            modulus,
+            depth,
+            spec.lay_angle_rad,
+        )
+        tangential = local_bending_fibre_stress(
+            kx,
+            ky,
+            phi_eval[:, None],
+            modulus,
+            width,
+            spec.lay_angle_rad,
+            math.pi / 2,
+        )
+        outward = (
+            parts.axial[None, :] + radial + parts.friction + parts.thermal[None, :]
+        )
+        if extra is not None:
+            outward = outward + extra
+        mean = outward - radial
     if transverse is None:
         return WireStressField(
             mean, radial, tangential, increment, spec.section, friction_Pa=friction
@@ -1436,6 +1507,53 @@ def _contact_force_histories(
 # --------------------------------------------------------------------------- #
 # Full pipeline                                                                #
 # --------------------------------------------------------------------------- #
+def _fused_fibre_damage(
+    field: WireStressField,
+    fibre_angles: NDArray[np.floating[Any]],
+    count_from: int,
+    layer: FatigueLayer,
+    amplify: bool,
+    fibre_damage: FloatArray,
+    amplified_damage: FloatArray,
+) -> None:
+    """Fill the fibre damage of :func:`compute_fatigue` in one compiled pass.
+
+    Equal, entry for entry, to the reference loop: :func:`_miner_damage_rows`
+    with the compiled counter on ``field.at_fibre(theta)[:, count_from:]``
+    for the unit factor and, with ``amplify``, the termination SCF
+    (:func:`~cablexsec.analysis.fast_rainflow.fibre_miner_damage`). Entries
+    where the reference would raise are recomputed on the reference path in
+    the order of that loop, so errors are identical as well.
+    """
+    offsets = np.array(
+        [field.fibre_offsets(float(theta)) for theta in fibre_angles],
+        dtype=np.float64,
+    ).reshape(-1, 2)
+    factors = [1.0, layer.SCF] if amplify else [1.0]
+    damage, rerun = fibre_miner_damage(
+        field.mean_Pa,
+        field.radial_Pa,
+        field.tangential_Pa,
+        offsets[:, 0],
+        offsets[:, 1],
+        layer.sn_bulk,
+        factors,
+        start=count_from,
+    )
+    for j in np.flatnonzero(rerun.any(axis=(0, 1))):
+        history = field.at_fibre(float(fibre_angles[j]))[:, count_from:]
+        for q, factor in enumerate(factors):
+            for k in np.flatnonzero(rerun[q, :, j]):
+                damage[q, k, j] = miner_damage(
+                    history[k],
+                    layer.sn_bulk,
+                    layer.sigma_UTS_Pa,
+                    stress_range_factor=float(factor),
+                )
+    fibre_damage[:] = damage[0]
+    amplified_damage[:] = damage[1] if amplify else damage[0]
+
+
 def compute_fatigue(
     layers: list[FatigueLayer],
     kappa_x: FloatArray,
@@ -1841,7 +1959,6 @@ def compute_fatigue(
         wires = selected[name]
         rows = np.arange(spec.n_wires, dtype=np.int64) if wires is None else wires
         n_eval = rows.size
-        sigma_kt = field.at_fibre(0.0)
         fibre_damage = np.empty((n_eval, n_fibres))
         amplified_damage = np.empty_like(fibre_damage)
         corrected = needs_correction(
@@ -1852,7 +1969,20 @@ def compute_fatigue(
             if spec.section is None
             else 2.0 * spec.section.half_thickness_m
         )
-        for j, theta in enumerate(fibre_angles):
+        amplify = layer.termination and layer.SCF != 1.0
+        # Compiled counter, uncorrected curve: every fibre in one fused pass.
+        fused = not corrected and compiled
+        if fused:
+            _fused_fibre_damage(
+                field,
+                fibre_angles,
+                count_from,
+                layer,
+                amplify,
+                fibre_damage,
+                amplified_damage,
+            )
+        for j, theta in enumerate(() if fused else fibre_angles):
             if not corrected:
                 history = field.at_fibre(theta)
                 if count_from:
@@ -1864,7 +1994,7 @@ def compute_fatigue(
                     _miner_damage_rows(
                         history, layer.sn_bulk, layer.sigma_UTS_Pa, layer.SCF, compiled
                     )
-                    if layer.termination and layer.SCF != 1.0
+                    if amplify
                     else fibre_damage[:, j]
                 )
                 continue
@@ -1894,7 +2024,7 @@ def compute_fatigue(
                     thickness_m=thickness,
                     compiled=compiled,
                 )
-                if layer.termination and layer.SCF != 1.0
+                if amplify
                 else fibre_damage[:, j]
             )
         critical_indices = np.argmax(fibre_damage, axis=1)
@@ -1947,7 +2077,7 @@ def compute_fatigue(
                 ).damage
         elif layer.swt_const is not None and layer.contact_p0_Pa > 0.0:
             # Legacy copper estimate: every bulk-stress cycle at gross sliding.
-            n_cycles = _cycle_count(sigma_kt)
+            n_cycles = _cycle_count(field.at_fibre(0.0))
             g = (
                 np.ones(spec.n_wires)
                 if layer.contact_shape_g is None
@@ -1966,7 +2096,7 @@ def compute_fatigue(
                     df[k] = float(n_cycles[k]) / n_f
         elif layer.sn_fretting is not None and layer.K_t_contact_N_per_m > 0.0:
             # Custom steel slip-amplitude curve, when explicitly supplied.
-            n_cycles = _cycle_count(sigma_kt)
+            n_cycles = _cycle_count(field.at_fibre(0.0))
             delta_star_um = _fretting_amplitudes_um(
                 layer,
                 kx,

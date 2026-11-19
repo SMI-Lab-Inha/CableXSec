@@ -38,9 +38,10 @@ and section named.
 
 Parallel execution
 ------------------
-Runs are processed in worker processes (``workers``, at most
-:data:`MAX_WORKERS`), each limited to one numerical thread. Results do not
-depend on the worker count. The output directory, if given, must not exist:
+Runs are processed in worker processes (``workers``; the pool holds at most
+one worker per run), each limited to one numerical thread. The worker count
+has no upper limit here: choose it for the machine. Results do not depend on
+the worker count. The output directory, if given, must not exist:
 results are written once, with a manifest of SHA-256 digests of every input
 file, the cable definition and the options.
 """
@@ -100,8 +101,6 @@ from cablexsec.io.cabledyn import (
 FloatArray = NDArray[np.float64]
 TensionBasis = Literal["auto", "true", "effective"]
 
-#: Hard cap on worker processes of one batch.
-MAX_WORKERS = 8
 _THREAD_VARIABLES = (
     "OMP_NUM_THREADS",
     "OPENBLAS_NUM_THREADS",
@@ -111,7 +110,6 @@ _THREAD_VARIABLES = (
 )
 
 __all__ = [
-    "MAX_WORKERS",
     "CapacityBatchCheck",
     "SeaStateBatchOptions",
     "SeaStateBatchResult",
@@ -230,9 +228,9 @@ class SeaStateBatchOptions:
         if (
             isinstance(self.workers, bool)
             or not isinstance(self.workers, int)
-            or not 1 <= self.workers <= MAX_WORKERS
+            or self.workers < 1
         ):
-            raise CableInputError(f"workers must be an integer in [1, {MAX_WORKERS}]")
+            raise CableInputError("workers must be a positive integer")
         if self.tension_basis not in ("auto", "true", "effective"):
             raise CableInputError("tension_basis must be auto, true or effective")
         if self.external_diameter_m is not None and not (

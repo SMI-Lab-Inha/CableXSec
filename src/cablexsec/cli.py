@@ -41,7 +41,6 @@ def batch_main(argv: list[str] | None = None) -> int:
         os.environ.setdefault(name, "1")
 
     from cablexsec.analysis.sea_state_batch import (
-        MAX_WORKERS,
         load_batch_spec,
         run_sea_state_batch,
     )
@@ -56,7 +55,8 @@ def batch_main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--workers",
         type=int,
-        help=f"worker processes (1 to {MAX_WORKERS}); overrides the specification",
+        help="worker processes (at least 1, one thread each; at most one per run "
+        "is started); overrides the specification",
     )
     args = parser.parse_args(argv)
     cable, runs, sections, options, cable_path = load_batch_spec(args.spec)
