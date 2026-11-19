@@ -33,6 +33,14 @@ All notable changes to CableXSec are recorded in this file. The format follows
 - `SeaStateBatchOptions` takes the reader's curvature check tolerances
   (`curvature_check_rtol`, `curvature_check_end_rtol`, `curvature_check_atol_1_m`):
   a coarse run that fails the check at the default could not be read by the batch.
+- One exported bending law per friction group, each with its own scale table
+  (`BendingLawExport.slip_group_laws()`, `SlipGroupLaw`, `to_group_csv`), for a global model
+  that sums the group laws `s_g(T) B_g(κ / s_g(T))` instead of carrying one scale. Rows
+  MX-group-B and MX-group-E (targets registered before the run): on the 66 kV template with
+  laid cores, filler profiles and 0 / 20 / 40 MPa armour winding stress, 10–200 kN, the summed
+  group laws reproduce the exported backbone within 4.6e-4 (target 0.5 %) and the cycle work
+  within 0.06 % (target ±1 %); one scale for all groups misses by up to 5.5 % and 7 % with
+  clamping (MX-group-1, reported).
 
 - Reported rows SV11-SPLIT, SV11-REACH and SV11-EQ88: where the SV11 termination increment
   comes from. With the bellmouth curvature imposed uniformly from the end-fitting face the
@@ -363,6 +371,11 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Changed
 
+- The default slip-scale table of `export_bending_law(..., slip_scale=True)` starts at zero
+  tension, with the caps of the contact model there (zero without clamping, the clamping caps
+  otherwise; row MX-group-0), so the scale runs to zero instead of ending at the lowest
+  exported tension. An explicit `slip_scale_tensions_N` is used as given.
+
 - CI runs the tests in parallel: the test matrix, the NumPy reference path and both coverage
   passes run on one pytest-xdist worker per core (`pytest-xdist` joins the `dev` extra).
   Every concurrent process writes its own numba cache: numba numbers a new cache entry from
@@ -519,6 +532,26 @@ All notable changes to CableXSec are recorded in this file. The format follows
   at 0.1 (2e-9 at 0.02). The README and quickstart outputs, which had drifted before this
   change (peak 548 N m and 219.8 J/m printed against 541 N m and 212.0 J/m computed), are
   regenerated.
+
+- `run_sea_state_batch` with `workers > 1`: each worker process writes a numba cache of its own
+  instead of sharing the caller's. numba numbers a new on-disk cache entry from the index it
+  last read and saves the index before the data, so two workers compiling one kernel for
+  different signatures at the same time could leave the index pointing at the other's machine
+  code, which a later process would load. Worker caches are slot folders `slot-<i>` under
+  `cablexsec/numba-batch` in the user cache directory (`CABLEXSEC_BATCH_CACHE_DIR` overrides
+  it), kept for later batches. Each worker locks its slot itself for as long as it runs (so
+  the slot stays taken even if the calling process ends first), a batch beside another takes
+  the next free slots, and a worker without a free slot or a writable folder gets a temporary
+  cache. Results are unchanged, and runs go to whichever worker is free, as before.
+
+- An interface of the radial section is open when its contact carries no line force, as the
+  contact solver decides it (`RadialSectionResult.interface_open`, `open_interfaces`); the
+  how-to recipe and the coiling check counted gaps above 1e-9 m. A closed contact reports
+  the round-off of the linear solve as its gap: about 1.5e-10 m on two interfaces carrying
+  1.1 MN/m of the 66 kV template at 100 kN and a sealed 2 MPa, within the solver's own
+  complementarity tolerance in metres (2e-10 to 4e-10 m there). macOS runs crossed 1e-9 m and
+  printed "open gaps 1" against the page's 0.
+
 - `SectionLaw.from_cable` reads the cable's own materials (its `materials:` block) when the law
   is built and every time it is evaluated. Outside `simulate_bending_test` it read the library
   instead, and a layer whose material the library lacks silently dropped out of the stiffness

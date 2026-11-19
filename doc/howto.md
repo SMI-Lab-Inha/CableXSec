@@ -89,7 +89,10 @@ twist free: strain 378 ue, twist 6.91 mrad/m, torque 0.0 N m
 ```
 
 `solve_cable_radial_state` takes trefoil cores and the declared manufacturing
-clamping. Here the external pressure acts on the outer sheath with the
+clamping. An interface is open when its contact carries no line force
+(`result.open_interfaces`), as the contact solver decides it: the reported gap
+of a closed contact is the round-off of the linear solve (about 1e-10 m here),
+not a measure of openness. Here the external pressure acts on the outer sheath with the
 {term}`annulus` sealed; `flooded_pressure_Pa` floods it. `solve_contact_qp` and
 `solve_concentric_section` accept concentric layers only and leave out the
 {term}`manufacturing clamping`. All three solve a state of tension, twist,

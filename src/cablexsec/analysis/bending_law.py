@@ -115,6 +115,7 @@ __all__ = [
     "FILLER_GROUP",
     "BendingLawExport",
     "IwanBendingLaw",
+    "SlipGroupLaw",
     "SlipScaleTable",
     "export_bending_law",
 ]
@@ -735,6 +736,227 @@ class SlipScaleTable:
         out.write_text(self.csv_text(), encoding="utf-8")
         return out
 
+    def group_law(self, index: int, kappa_1_m: ArrayLike) -> SlipGroupLaw:
+        """Friction group ``index`` as a law of its own (:class:`SlipGroupLaw`).
+
+        ``kappa_1_m`` is the curvature grid of the export (the grid the group
+        laws were decomposed on). The first group carries the elastic
+        full-slip part ``EI_slip kappa``.
+        """
+        if not 0 <= index < len(self.group_names):
+            raise CableInputError(
+                f"group index {index} outside 0-{len(self.group_names) - 1}"
+            )
+        kappa = np.asarray(kappa_1_m, dtype=np.float64)
+        law = self.group_laws[index]
+        if kappa.ndim != 1 or kappa.size != law.stiffness_Nm2.size + 1:
+            raise CableInputError(
+                "the curvature grid must be the export grid of the group laws"
+            )
+        elastic = self.ei_slip_Nm2 if index == 0 else 0.0
+        name = self.group_names[index]
+        return SlipGroupLaw(
+            name=name,
+            kind=name if name in (CORE_GROUP, FILLER_GROUP) else "armour_layer",
+            kappa_1_m=kappa,
+            law=IwanBendingLaw(elastic, law.stiffness_Nm2, law.yield_curvature_1_m),
+            table=self,
+            index=index,
+        )
+
+
+@dataclass(frozen=True)
+class SlipGroupLaw:
+    r"""One friction group of a slip-scaled law, as a law of its own.
+
+    The global model sums the group laws. Group ``g`` is the backbone
+    ``B_g(kappa)`` of the group at the reference state (``law``, on the
+    export's curvature grid) with its own scale ``s_g`` over the table states
+    (the ``rho_g`` of :class:`SlipScaleTable`):
+
+    .. math::
+
+        M_g(\kappa; T) = s_g(T)\, B_g(\kappa / s_g(T)), \qquad
+        M = \sum_g M_g ,
+
+    and under a changing state every element follows the return map with the
+    cap of the current sample (:meth:`moment`). The first group carries the
+    elastic full-slip part ``EI_slip kappa`` (``law.ei_slip_Nm2``), which the
+    scaling leaves unchanged; every other group has no elastic part, so its
+    backbone ends on the plateau of its full-slip friction moment. A group of
+    zero scale (no contact) carries its elastic part only.
+
+    Attributes
+    ----------
+    name, kind : str
+        Group name (the armour layer, :data:`CORE_GROUP` or
+        :data:`FILLER_GROUP`) and kind (``"armour_layer"``, ``"laid_cores"``
+        or ``"filler_profiles"``).
+    kappa_1_m : numpy.ndarray
+        Curvature grid of the backbone [1/m], from zero.
+    law : IwanBendingLaw
+        Elements of the group at the reference state.
+    table : SlipScaleTable
+        The table the group belongs to.
+    index : int
+        Position of the group in ``table.group_names``.
+    """
+
+    name: str
+    kind: str
+    kappa_1_m: FloatArray
+    law: IwanBendingLaw
+    table: SlipScaleTable
+    index: int
+
+    @property
+    def moment_Nm(self) -> FloatArray:
+        """Backbone ``B_g`` at the reference state on ``kappa_1_m`` [N m]."""
+        return self.law.backbone(self.kappa_1_m)
+
+    @property
+    def tension_N(self) -> FloatArray:
+        """Table tensions [N]."""
+        return self.table.tension_N
+
+    @property
+    def scale(self) -> FloatArray:
+        """``s_g`` at the table states, shape (tensions, pressures)."""
+        return np.asarray(self.table.group_scale[self.index])
+
+    @property
+    def scale_dT_1_per_N(self) -> FloatArray:
+        """``d s_g / dT`` [1/N] at the table states."""
+        return np.asarray(self.table.group_scale_dT_1_per_N[self.index])
+
+    def scale_at(
+        self, tension_N: ArrayLike, external_pressure_Pa: ArrayLike | None = None
+    ) -> FloatArray:
+        """``s_g`` at states (linear interpolation in the table), shape (samples,)."""
+        return np.asarray(
+            self.table.group_scales(tension_N, external_pressure_Pa)[self.index]
+        )
+
+    def law_at(
+        self, tension_N: float, external_pressure_Pa: float | None = None
+    ) -> IwanBendingLaw:
+        """The group law at one state: yield curvatures times ``s_g``.
+
+        Elements of a zero scale are dropped (the group has no friction).
+        """
+        rho = float(
+            self.scale_at(
+                [tension_N],
+                None if external_pressure_Pa is None else [external_pressure_Pa],
+            )[0]
+        )
+        keep = (self.law.yield_curvature_1_m * rho) > 0.0
+        return IwanBendingLaw(
+            self.law.ei_slip_Nm2,
+            self.law.stiffness_Nm2[keep],
+            self.law.yield_curvature_1_m[keep] * rho,
+        )
+
+    def backbone_at(
+        self,
+        kappa_1_m: ArrayLike,
+        tension_N: float,
+        external_pressure_Pa: float | None = None,
+    ) -> FloatArray:
+        """Virgin backbone at one state, ``s_g B_g(kappa / s_g)`` [N m].
+
+        The table form a global model applies: the reference backbone
+        (piecewise linear through the grid points, continued by its tail
+        slope) at the curvature divided by the scale, times the scale.
+        """
+        k = np.asarray(kappa_1_m, dtype=np.float64)
+        rho = float(
+            self.scale_at(
+                [tension_N],
+                None if external_pressure_Pa is None else [external_pressure_Pa],
+            )[0]
+        )
+        if rho <= 0.0:
+            return np.asarray(self.law.ei_slip_Nm2 * k)
+        return np.asarray(rho * self.law.backbone(k / rho))
+
+    def moment(
+        self,
+        kappa_history: ArrayLike,
+        tension_history_N: ArrayLike,
+        external_pressure_history_Pa: ArrayLike | None = None,
+    ) -> FloatArray:
+        """Moment history of the group [N m] under curvature and state histories.
+
+        From the virgin state; every element follows the return map with the
+        cap ``s_g kappa_y,i`` of the current sample, as in
+        :meth:`SlipScaleTable.moment`.
+        """
+        kappa = np.asarray(kappa_history, dtype=np.float64)
+        if kappa.ndim != 1 or not np.isfinite(kappa).all():
+            raise CableInputError("curvature history must be a finite 1-D array")
+        tension = np.asarray(tension_history_N, dtype=np.float64)
+        if tension.shape != kappa.shape:
+            raise CableInputError("tension history must match the curvature history")
+        pressure = None
+        if external_pressure_history_Pa is not None:
+            pressure = np.asarray(external_pressure_history_Pa, dtype=np.float64)
+            if pressure.shape != kappa.shape:
+                raise CableInputError(
+                    "external-pressure history must match the curvature history"
+                )
+        rho = self.scale_at(tension, pressure)
+        k, y = self.law.stiffness_Nm2, self.law.yield_curvature_1_m
+        e = np.zeros_like(k)
+        out = np.empty_like(kappa)
+        previous = 0.0
+        for n, value in enumerate(kappa):
+            bound = y * rho[n]
+            e = np.clip(e + (value - previous), -bound, bound)
+            previous = value
+            out[n] = self.law.ei_slip_Nm2 * value + float(e @ k)
+        return out
+
+    def backbone_csv_text(self) -> str:
+        """``kappa_1_m,M_Nm``: the reference backbone ``B_g`` on the grid.
+
+        Two comment lines (``# ``) name the group and the slope that continues
+        the backbone beyond its last point.
+        """
+        rows = [
+            f"# friction group {self.name} ({self.kind}); scale s_{self.name}(T) in "
+            f"the group's scale table; M_g(kappa, T) = s B(kappa / s)",
+            f"# beyond the last point the backbone continues with slope "
+            f"{self.law.ei_slip_Nm2:.9e} N m2",
+            "kappa_1_m,M_Nm",
+        ]
+        rows += [
+            f"{float(k):.9e},{float(m):.9e}"
+            for k, m in zip(self.kappa_1_m, self.moment_Nm, strict=True)
+        ]
+        return "\n".join(rows) + "\n"
+
+    def scale_csv_text(self) -> str:
+        """One row per table state: tension, pressure, ``s_g`` and derivatives."""
+        table = self.table
+        pressures = (
+            np.array([table.reference_external_pressure_Pa])
+            if table.external_pressure_Pa is None
+            else table.external_pressure_Pa
+        )
+        header = ["tension_N", "external_pressure_Pa", "s", "ds_dT_1_per_N"]
+        rho_p = table.group_scale_dpe_1_per_Pa
+        if rho_p is not None:
+            header.append("ds_dpe_1_per_Pa")
+        rows = [",".join(header)]
+        for i, tension in enumerate(table.tension_N):
+            for j, pressure in enumerate(pressures):
+                row = [tension, pressure, self.scale[i, j], self.scale_dT_1_per_N[i, j]]
+                if rho_p is not None:
+                    row.append(rho_p[self.index, i, j])
+                rows.append(",".join(f"{float(v):.9e}" for v in row))
+        return "\n".join(rows) + "\n"
+
 
 @dataclass(frozen=True)
 class BendingLawExport:
@@ -768,6 +990,48 @@ class BendingLawExport:
         moment = (1 - w) * self.moment_Nm[j] + w * self.moment_Nm[j + 1]
         ei = (1 - w) * self.ei_slip_Nm2[j] + w * self.ei_slip_Nm2[j + 1]
         return IwanBendingLaw.from_backbone(self.kappa_1_m, moment, float(ei))
+
+    def slip_group_laws(self) -> tuple[SlipGroupLaw, ...]:
+        """One law per friction group, each with its own scale table.
+
+        The global model sums them (:class:`SlipGroupLaw`); needs the export's
+        slip scale (``slip_scale=True``).
+        """
+        if self.slip_scale is None:
+            raise CableInputError(
+                "the group laws need the slip scale: export with slip_scale=True"
+            )
+        table = self.slip_scale
+        return tuple(
+            table.group_law(g, self.kappa_1_m) for g in range(len(table.group_names))
+        )
+
+    def to_group_csv(self, directory: str | Path) -> list[Path]:
+        """Write ``<group>_backbone.csv`` and ``<group>_slip_scale.csv`` per group.
+
+        The backbone files hold the reference backbone of every group
+        (:meth:`SlipGroupLaw.backbone_csv_text`), the scale files its own
+        ``s_g(T)`` (:meth:`SlipGroupLaw.scale_csv_text`). ``<group>`` is the
+        group name made a safe file name (:func:`_file_stem`: letters,
+        digits, ``.``, ``-`` and ``_`` kept, anything else ``_``, a numbered
+        suffix where two names would meet); the first comment line of the
+        backbone file keeps the name itself. Every file lies in
+        ``directory``. Returns the paths in group order, backbone before
+        scale.
+        """
+        folder = Path(directory)
+        folder.mkdir(parents=True, exist_ok=True)
+        groups = self.slip_group_laws()
+        paths: list[Path] = []
+        for group, stem in zip(
+            groups, _file_stems([g.name for g in groups]), strict=True
+        ):
+            backbone = folder / f"{stem}_backbone.csv"
+            backbone.write_text(group.backbone_csv_text(), encoding="utf-8")
+            scale = folder / f"{stem}_slip_scale.csv"
+            scale.write_text(group.scale_csv_text(), encoding="utf-8")
+            paths += [backbone, scale]
+        return paths
 
     def to_csv(self, path: str | Path) -> Path:
         """Backbones as columns ``kappa_1_m, M_<T>N_Nm, ...``."""
@@ -883,7 +1147,13 @@ def export_bending_law(
         grid carries the slip curvatures of the reference, so the group laws
         start in stick at any reference.
     slip_scale_tensions_N : sequence of float, optional
-        Ascending tensions of the table [N] (default ``tensions_N``).
+        Ascending tensions of the table [N]. The default is ``tensions_N``
+        with zero tension in front (when the lowest exported tension is
+        positive): the table runs to zero with the caps of the contact model
+        at zero tension, which are zero without clamping (every contact load
+        then comes from the tension, and ``s -> 0``) and the clamping caps
+        otherwise, so a global model need not hold the lowest scale below
+        the lowest exported tension.
     slip_scale_external_pressure_Pa : sequence of float, optional
         Ascending external pressures of the table [Pa]. ``None`` (default)
         runs the table over tension only, at the cable's initial external
@@ -1031,7 +1301,11 @@ def export_bending_law(
             kappa,
             reference_N=reference_N,
             candidates_N=t,
-            tensions_N=t if slip_scale_tensions_N is None else slip_scale_tensions_N,
+            tensions_N=(
+                _default_table_tensions(t)
+                if slip_scale_tensions_N is None
+                else slip_scale_tensions_N
+            ),
             external_pressure_Pa=slip_scale_external_pressure_Pa,
             options=mkappa_options,
         )
@@ -1116,6 +1390,48 @@ def _friction_cap(spec: HelicalLayerSpec) -> float:
         * spec.r_helix_m
         * np.sum(bound * np.abs(c))
     )
+
+
+def _file_stem(name: str) -> str:
+    """A group name as one safe file-name component.
+
+    Letters, digits, ``.``, ``-`` and ``_`` are kept and every other
+    character becomes ``_``; a stem of dots only (``.``, ``..``) or an empty
+    one becomes ``group``, so the component never leaves its directory.
+    """
+    stem = "".join(
+        c if (c.isascii() and c.isalnum()) or c in "._-" else "_" for c in name
+    )
+    if not stem.strip("."):
+        return "group"
+    return stem
+
+
+def _file_stems(names: Sequence[str]) -> list[str]:
+    """Distinct safe stems (case-insensitive) of the group names, in order."""
+    stems: list[str] = []
+    taken: set[str] = set()
+    for name in names:
+        base = stem = _file_stem(name)
+        count = 1
+        while stem.lower() in taken:
+            count += 1
+            stem = f"{base}_{count}"
+        taken.add(stem.lower())
+        stems.append(stem)
+    return stems
+
+
+def _default_table_tensions(tensions: FloatArray) -> FloatArray:
+    """The exported tensions with zero tension in front.
+
+    The scale table then runs to zero tension with the caps of the contact
+    model there (zero without clamping, where every contact load comes from
+    the tension), instead of ending at the lowest exported tension.
+    """
+    if tensions[0] > 0.0:
+        return np.concatenate([[0.0], tensions])
+    return tensions
 
 
 def _ascending(values: ArrayLike, label: str) -> FloatArray:
