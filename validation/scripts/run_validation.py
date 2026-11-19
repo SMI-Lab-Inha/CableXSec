@@ -527,6 +527,97 @@ def _saevik_rows() -> list[Row]:
             f"static stress {gj['static_Pa'] / 1e6:.0f} MPa",
             "PASS" if gj["gate"] else "FAIL",
         ),
+        *_saevik_quantity_rows(sv),
+    ]
+
+
+def _saevik_quantity_rows(sv: ModuleType) -> list[Row]:
+    """Measured quantity and normaliser of the SV11 rows (reported, not gated).
+
+    Registered before the runs (doc/benchmarks.md, "Measured quantity and
+    normaliser"): Lukassen's (2019) two-sided LC 14 records (SV11-LK,
+    SV11-SIDE), the SV11 metrics on subsets of the stations (SV11-SUB) and
+    the hypothesis of one normalising static stress (SV11-NORM).
+    """
+    lk = sv.lukassen_values()
+    st, ratios = lk["stations"], lk["ratios"]
+    names = sv.LK_STATIONS
+
+    def series(key: str) -> str:
+        return "/".join(f"{st[s][key]:.0f}" for s in names)
+
+    measured = "/".join(f"{st[s]['measured']['axial']:.0f}" for s in names)
+    implied = lk["implied_static"]
+    larger = implied["larger"]["MPa"].values()
+    axial = implied["axial"]["MPa"].values()
+    au = sv.audit_values()
+    sub, pair = au["without_one_sided"], au["pair_geometric_mean"]
+    norm = au["common_normaliser"]
+    return [
+        Row(
+            "2",
+            "SV11-LK",
+            "Lukassen (2019) Figs 2.7-2.11, LC 14 at +-8 deg, stations 3.1-3.5: "
+            "measured axial range (mean of the two narrow sides) against the "
+            "predicted axial range; measured larger side against the predicted "
+            "larger single side (mean ratios over 3.1 and 3.5; over all five)",
+            "stated, not gated",
+            f"axial measured {measured} MPa; sectional {series('sectional_axial_MPa')} "
+            f"({ratios['plane']['sectional_axial']:.2f}; "
+            f"{ratios['all']['sectional_axial']:.2f}); corrected "
+            f"{series('termination_axial_MPa')} "
+            f"({ratios['plane']['termination_axial']:.2f}; "
+            f"{ratios['all']['termination_axial']:.2f}); larger side: sectional "
+            f"{ratios['plane']['sectional_side']:.2f}; "
+            f"{ratios['all']['sectional_side']:.2f}, corrected "
+            f"{ratios['plane']['termination_side']:.2f}; "
+            f"{ratios['all']['termination_side']:.2f}",
+            "INFO",
+        ),
+        Row(
+            "2",
+            "SV11-SIDE",
+            "Sævik (2011) Fig. 21(a), LC 14: static stress implied at stations "
+            "3.1-3.5 by Lukassen's measured range divided by Sævik's normalised "
+            "value, for each reading of the two sides (coefficient of variation)",
+            "stated, not gated",
+            f"larger side {min(larger):.0f}-{max(larger):.0f} MPa "
+            f"({implied['larger']['cv']:.2f}); side a {implied['a']['cv']:.2f}; "
+            f"side b {implied['b']['cv']:.2f}; axial {min(axial):.0f}-"
+            f"{max(axial):.0f} MPa ({implied['axial']['cv']:.2f}); model static "
+            f"{lk['model_static_MPa']:.0f} MPa",
+            "INFO",
+        ),
+        Row(
+            "2",
+            "SV11-SUB",
+            "SV11 metrics on subsets: (a) SV11-PLANE without the one-sided "
+            "stations 2.1 and 2.5; (b) SV11-PLANE with each coincident pair by "
+            "the geometric mean of its measured values; (c) SV11-GJ at 3.1 and "
+            "3.5 only",
+            "stated, not gated",
+            f"(a) median R {sub['termination']['median']:.2f} "
+            f"({sub['termination']['in_band']} of 14), sectional "
+            f"{sub['sectional']['median']:.2f} ({sub['sectional']['in_band']}); "
+            f"(b) {pair['termination']['median']:.2f} "
+            f"({pair['termination']['in_band']}), sectional "
+            f"{pair['sectional']['median']:.2f} ({pair['sectional']['in_band']}); "
+            f"(c) {au['gj_3x']['termination']:.2f}, sectional "
+            f"{au['gj_3x']['sectional']:.2f}",
+            "INFO",
+        ),
+        Row(
+            "2",
+            "SV11-NORM",
+            "Hypothesis (no paper prints the normaliser): SV11-PLANE with every "
+            "load case normalised by the static stress of 500 kN and 34 MPa",
+            "stated, not gated",
+            f"median R {norm['termination']['median']:.2f} "
+            f"({norm['termination']['in_band']} of 14), sectional "
+            f"{norm['sectional']['median']:.2f} ({norm['sectional']['in_band']} "
+            f"of 14); reference static {au['reference_static_MPa']:.0f} MPa",
+            "INFO",
+        ),
     ]
 
 

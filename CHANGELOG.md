@@ -8,6 +8,22 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Reported rows SV11-LK, SV11-SIDE, SV11-SUB and SV11-NORM (registered before the runs): what
+  the SV11 measurements are. Lukassen's (2019) thesis plots both narrow sides of the tendon at
+  stations 3.1-3.5 for LC 14 (digitised from the native PDF paths,
+  `validation/scripts/digitise_lukassen2019.py`). Gjøsteen et al.'s loops are side b, and
+  Sævik's normalised values are the larger side range (one implied static stress, CV 0.08, near
+  the model's 271 MPa), not the axial range the rows compare with. Against the measured axial
+  range the SV11-GJ chain over-predicts at the bending-plane stations by 1.72 (sectional) and
+  1.97 (corrected). The SV11 metrics without the one-sided stations, with coincident pairs by
+  geometric mean and with one common normaliser (a hypothesis) are reported. The coincident
+  pairs differ by a fixed per-sensor bias (×1.40 and ×0.52 with the same sign in all 14 load
+  cases). The Zeidan section adds what the paper's EPR layer holds, that the source compares
+  monotonic curves in plotted curvature (not loops), and the record zero and centre. No
+  target, band, gated input or default changes; SV11-PLANE and SV11-GJ stay FAIL.
+
 ## [0.2.1] - 2026-11-23
 
 The Python interfaces are versioned but may change before `1.0.0`. The evidence for

@@ -76,6 +76,10 @@ afterwards: a comparison that misses its target is reported as failed.
 | **SV11-SPLIT** | Origin of the termination increment: end-fitting anchor alone (uniform curvature from the face); end fitting removed (anchor 20 m upstream) | Sævik (2011); Gjøsteen et al. (2027) | end fitting alone 1.23 / 1.36 (sectional 1.19 / 1.27); without end fitting unchanged (2.09, 2.07) | stated, not gated | Info |
 | **SV11-REACH** | Small-angle slip demand and the cases outside the band whatever the correction does | Sævik (2011) | a_max below 1 at 0.5° and 1°; sectional outside: LC 4, 6 | stated, not gated | Info |
 | **SV11-EQ88** | Bellmouth curvature law at the two published bellmouth ends (1.72 m; 1.79 m): radius and slope | Sævik (2011), Eq. 88 and text (3.9 m, 16°) | 3.90 m, 15.9°; 3.79 m, 17.0° | stated, not gated | Info |
+| **SV11-LK** | Axial against axial: Lukassen's two-sided LC 14 records at stations 3.1–3.5 | Lukassen (2019), thesis Figs 2.7–2.11 | over 3.1 and 3.5: sectional 1.72, corrected 1.97 (all five 1.51, 2.84) | stated, not gated | Info |
+| **SV11-SIDE** | Which quantity Sævik normalised: static stress implied by each reading of the two sides | Sævik (2011) Fig. 21(a); Lukassen (2019) | larger side 272–334 MPa (CV 0.08), axial CV 0.45; model 271 MPa | stated, not gated | Info |
+| **SV11-SUB** | SV11 metrics without the one-sided stations 2.1/2.5, with coincident pairs by geometric mean, SV11-GJ at 3.1/3.5 | Sævik (2011); Gjøsteen et al. (2027) | 1.89 / 1.12; 2.22 / 1.21; GJ 1.51 / 1.33 (corrected / sectional) | stated, not gated | Info |
+| **SV11-NORM** | Hypothesis: one normalising static stress for all load cases | Sævik (2011) | median 2.06 (3 of 14), sectional 1.07 (13 of 14) | stated, not gated | Info |
 | **AW-DONG25** | Armour wire anchored at both ends of one pitch at uniform curvature: stress at the anchor and peak, code-to-code | Dong et al. (2025), FE, Figs 14 and 25 | anchor 156.4 vs 156.9 MPa (source theory 147.8); peak 207.8 vs 204.5 MPa | stated, not gated | Info |
 | **AW-ZT14** | Same at a = 4.92: normalised anchor and peak stress, code-to-code | Zhu and Tan (2014), FE, Figs 4–8 | 1.19 / 1.70 vs 2.22 (the FE far field is not in slip) | stated, not gated | Info |
 | **DAI20-KAPPA** | Curvature at two stations inside a bellmouth against the rocking angle, steel-tube umbilical at 200 kN: contact angles predicted after identifying the bending stiffness on one curvature value | Dai, Sævik and Ye (2020), Fig. 9 | −0.87° (S2), −0.89° (S3); 59.1 kN m² identified | both within ±1.0° | Pass |
@@ -138,7 +142,11 @@ quantities are those of the passing rows. In particular:
   result is the one closest to them (median 1.19, 12 of 14 in band, against the 1.18 bound). At
   this rig the end fitting alone moves the ratios by 3–7 %; the excess comes from the
   curvature gradients at the bellmouth contact on a one-way curvature field (SV11-SPLIT). At
-  0.5° and 1° the pipe sticks and the correction is zero (SV11-REACH).
+  0.5° and 1° the pipe sticks and the correction is zero (SV11-REACH). The measured values
+  are one side (Gjøsteen et al.) or the larger side range (Sævik) of the tendon, which holds
+  strong-axis bending that the model does not compute in the bending plane (SV11-SIDE); where
+  the axial range is measured, the predicted axial range is 1.72 times it (sectional) at the
+  bending-plane stations (SV11-LK).
 - The rig-beam curvature that drives a bellmouth calculation is checked against the one
   published curvature history inside a bellmouth (DAI20-KAPPA: contact angles within 1° with
   one identified stiffness, under declared rig assumptions); the sectional Coulomb range of

@@ -7,7 +7,7 @@
 # Extremes are pixel centres; reading resolution +-2 MPa on max, min and range (line width
 # and grid calibration). NOT experimental uncertainty.
 # The plotted quantity is one side of the tendon (Gjosteen et al.: elastic bending is
-# visible at station 3.1); which side is not stated.
+# visible at station 3.1); it is side b of Lukassen (2019, PhD thesis, DTU) Figs 2.7-2.11, mean-centred.
 figure,station,series,min_MPa,max_MPa,range_MPa
 27,2.1,measured,-93.1,93.1,186.2
 28,2.2,measured,-63.9,64.1,128.1

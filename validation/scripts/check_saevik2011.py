@@ -54,6 +54,7 @@ import os
 import sys
 import time
 import warnings
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from functools import lru_cache
 from pathlib import Path
@@ -715,6 +716,192 @@ def gjosteen(
         "others": others,
         "static_Pa": res["static_Pa"],
         "kappa_peak": {s: res["stations"][s]["kappa_peak"] for s in res["stations"]},
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Measured quantity and normaliser (SV11-LK, SV11-SIDE, SV11-SUB, SV11-NORM)  #
+# --------------------------------------------------------------------------- #
+LK_STATIONS = ("3.1", "3.2", "3.3", "3.4", "3.5")
+#: Coincident bending-plane pairs (one axial position, opposite sides).
+PAIRS = (("1.5", "2.1"), ("2.5", "3.1"), ("3.5", "4.1"))
+ONE_SIDED = ("2.1", "2.5")  # [Saevik2011] p. 2289: one side lost at 2.1-2.5
+
+
+def measured_lukassen() -> dict[str, dict[str, tuple[np.ndarray, np.ndarray]]]:
+    """Lukassen (2019) Figs 2.7-2.11: measured (theta [deg], stress [MPa]) of
+    side ``a`` and side ``b`` at stations 3.1-3.5, LC 14 at +-8 deg."""
+    raw: dict[str, dict[str, tuple[list[float], list[float]]]] = {}
+    for r in _rows(DATA / "lukassen2019_lc14_two_sides.csv"):
+        theta, stress = raw.setdefault(r["station"], {}).setdefault(r["side"], ([], []))
+        theta.append(float(r["theta_deg"]))
+        stress.append(float(r["stress_MPa"]))
+    return {
+        st: {sd: (np.asarray(t), np.asarray(s)) for sd, (t, s) in sides.items()}
+        for st, sides in raw.items()
+    }
+
+
+def _legs(theta: np.ndarray, stress: np.ndarray) -> list[tuple[np.ndarray, np.ndarray]]:
+    """Monotonic legs of a record from its first reversal on."""
+    sign = np.sign(np.diff(theta))
+    moving = np.flatnonzero(sign != 0)
+    turns = [
+        int(moving[i + 1])
+        for i in range(moving.size - 1)
+        if sign[moving[i + 1]] != sign[moving[i]]
+    ]
+    bounds = [*turns, theta.size - 1]
+    return [
+        (theta[a : b + 1], stress[a : b + 1])
+        for a, b in zip(bounds[:-1], bounds[1:], strict=True)
+    ]
+
+
+def lukassen_measured_ranges() -> dict[str, dict[str, float]]:
+    """Measured ranges [MPa] at 3.1-3.5 (the SV11-LK registered reduction).
+
+    Each side, the larger side, and the axial (sigma_a + sigma_b) / 2 with the
+    two sides paired at equal theta on the same leg (linear interpolation),
+    all from the first reversal on.
+    """
+    out = {}
+    for st, sides in measured_lukassen().items():
+        legs_a = _legs(*sides["a"])
+        legs_b = _legs(*sides["b"])
+        if len(legs_a) != len(legs_b):
+            raise RuntimeError(f"station {st}: the two sides have different legs")
+        axial = []
+        for (ta, sa), (tb, sb) in zip(legs_a, legs_b, strict=True):
+            lo = max(min(ta[0], ta[-1]), min(tb[0], tb[-1]))
+            hi = min(max(ta[0], ta[-1]), max(tb[0], tb[-1]))
+            grid = np.linspace(lo, hi, 401)
+            oa, ob = np.argsort(ta), np.argsort(tb)
+            axial.append(
+                0.5
+                * (np.interp(grid, ta[oa], sa[oa]) + np.interp(grid, tb[ob], sb[ob]))
+            )
+        ra = float(np.ptp(np.concatenate([s for _t, s in legs_a])))
+        rb = float(np.ptp(np.concatenate([s for _t, s in legs_b])))
+        out[st] = {
+            "a": ra,
+            "b": rb,
+            "larger": max(ra, rb),
+            "axial": float(np.ptp(np.concatenate(axial))),
+        }
+    return out
+
+
+def lukassen_values(mu: float = MU_DECLARED) -> dict:
+    """SV11-LK and SV11-SIDE (reported, not gated).
+
+    Lukassen's two-sided LC 14 records against the SV11-GJ chain at +-8 deg,
+    and the static stress that Sævik's normalised LC 14 values imply for each
+    reading of the two sides.
+    """
+    case = next(c for c in load_cases() if c.lc == 14)
+    res = predict_case(case, mu, half_angle_deg=GJ_HALF_ANGLE_DEG, only=LK_STATIONS)
+    meas = lukassen_measured_ranges()
+    stations = {}
+    for st in LK_STATIONS:
+        v = res["stations"][st]
+        stations[st] = {
+            "measured": meas[st],
+            "sectional_axial_MPa": v["sectional"]["axial_p"] / 1e6,
+            "termination_axial_MPa": v["termination"]["axial_p"] / 1e6,
+            "sectional_side_MPa": v["sectional"]["side_hi_p"] / 1e6,
+            "termination_side_MPa": v["termination"]["side_hi_p"] / 1e6,
+        }
+
+    def mean_ratio(names: tuple[str, ...], pred: str, quantity: str) -> float:
+        p = np.mean([stations[s][pred] for s in names])
+        m = np.mean([stations[s]["measured"][quantity] for s in names])
+        return float(p / m)
+
+    ratios = {}
+    for label, names in (("plane", ("3.1", "3.5")), ("all", LK_STATIONS)):
+        ratios[label] = {
+            "sectional_axial": mean_ratio(names, "sectional_axial_MPa", "axial"),
+            "termination_axial": mean_ratio(names, "termination_axial_MPa", "axial"),
+            "sectional_side": mean_ratio(names, "sectional_side_MPa", "larger"),
+            "termination_side": mean_ratio(names, "termination_side_MPa", "larger"),
+        }
+    norm = {
+        r["station"]: float(r["measured"])
+        for r in measured_saevik()
+        if r["load_case"] == "14" and r["station"] in LK_STATIONS
+    }
+    implied = {}
+    for quantity in ("axial", "a", "b", "larger"):
+        vals = np.array([meas[s][quantity] / norm[s] for s in LK_STATIONS])
+        implied[quantity] = {
+            "MPa": dict(zip(LK_STATIONS, vals.tolist(), strict=True)),
+            "cv": float(np.std(vals) / np.mean(vals)),
+        }
+    return {
+        "stations": stations,
+        "ratios": ratios,
+        "implied_static": implied,
+        "model_static_MPa": res["static_Pa"] / 1e6,
+    }
+
+
+def _plane_metric(cases: dict, transform: Callable[[int, dict, str], float]) -> dict:
+    """SV11-PLANE median and band count after ``transform`` of each case."""
+    out = {}
+    for kind in ("termination", "sectional"):
+        r = np.array([transform(lc, v, kind) for lc, v in cases.items()])
+        out[kind] = {
+            "median": float(np.median(r)),
+            "in_band": int(np.sum((r >= 0.70) & (r <= 1.43))),
+            "R": dict(zip(cases, r.tolist(), strict=True)),
+        }
+    return out
+
+
+def audit_values(mu: float = MU_DECLARED) -> dict:
+    """SV11-SUB and SV11-NORM (reported, not gated; NORM is a hypothesis).
+
+    Recomputed from the registered predictions of :func:`gate_values`; only
+    the measured set, the measured values or the normaliser change.
+    """
+    g = gate_values(mu)
+    cases = g["plane"]["cases"]
+
+    def subset(lc: int, v: dict, kind: str) -> float:
+        st = {s: x for s, x in v["stations"].items() if s not in ONE_SIDED}
+        pred = np.mean([x[kind] for x in st.values()])
+        return float(pred / np.mean([x["measured"] for x in st.values()]))
+
+    def paired(lc: int, v: dict, kind: str) -> float:
+        meas = {s: x["measured"] for s, x in v["stations"].items()}
+        for a, b in PAIRS:
+            meas[a] = meas[b] = math.sqrt(meas[a] * meas[b])
+        pred = np.mean([x[kind] for x in v["stations"].values()])
+        return float(pred / np.mean(list(meas.values())))
+
+    ref = next(
+        g["static_MPa"][c.lc]
+        for c in load_cases()
+        if c.tension_N == 500e3 and c.pressure_Pa == 34e6
+    )
+
+    def common(lc: int, v: dict, kind: str) -> float:
+        own = v["R_termination" if kind == "termination" else "R_sectional"]
+        return float(own * g["static_MPa"][lc] / ref)
+
+    gj = g["gjosteen"]
+    plane = ("3.1", "3.5")
+    gj_meas = sum(gj["plane_measured_MPa"][s] for s in plane)
+    return {
+        "without_one_sided": _plane_metric(cases, subset),
+        "pair_geometric_mean": _plane_metric(cases, paired),
+        "gj_3x": {
+            "termination": sum(gj["plane_pred_MPa"][s] for s in plane) / gj_meas,
+            "sectional": sum(gj["plane_sectional_MPa"][s] for s in plane) / gj_meas,
+        },
+        "common_normaliser": _plane_metric(cases, common),
+        "reference_static_MPa": ref,
     }
 
 

@@ -99,7 +99,9 @@ def _page(page: object, stations: tuple[str, ...]) -> list[dict[str, object]]:
                 and ys[0] - 5 <= ln[:, 1].mean() <= ys[-1] + 5
             ]
             if len(inside) != 1:
-                raise RuntimeError(f"station {station} side {side}: {len(inside)} lines")
+                raise RuntimeError(
+                    f"station {station} side {side}: {len(inside)} lines"
+                )
             pts = inside[0]
             theta = tx[0] + tx[1] * pts[:, 0]
             stress = sy[0] + sy[1] * pts[:, 1]

@@ -569,7 +569,15 @@ provenance in `validation/paper_data/zeidan2025_*` and
   55 + 63 wires of 4 mm): a different specimen, laboratory and campaign. The
   two tables disagree on the core build-up (thesis: EPR to 25 mm, screens to
   27 mm and a metallic screen of unstated size; paper: one EPR layer from 14
-  to 31.5 mm); the paper's layers are used.
+  to 31.5 mm); the paper's layers are used. The paper's 8.75 mm "EPR" layer
+  therefore holds the thesis's 5.5 mm of EPR (Table 5.2: OD 25 mm, t 5.5 mm),
+  its 1 mm insulation screen (to OD 27 mm) and the 2.25 mm radial space
+  between 27 mm and the core sheath bore (31.5 mm) in which the metallic
+  screen and any tapes lie; the paper gives the whole layer E = 6 MPa
+  (Table 4), and the thesis gives no modulus for EPR, the screens or the
+  metallic screen (Table 5.3). No source gives the metallic screen's
+  material, cross-section or lay. In the packaged section the layer enters
+  only the laid-core law (the armour ξ stops at the core bundle).
 - **Arrangement.** Supports 2.000 m apart (pin and roller), loading points
   1.050 m apart through articulated saddles, shear span `a` = 0.475 m;
   specimens about 2.2 m long; displacement control, period 50 s; zero axial
@@ -586,7 +594,18 @@ provenance in `validation/paper_data/zeidan2025_*` and
   0.098, 0.120 and 0.143 1/m, 0.77–0.79 of the plotted amplitudes: the
   plotted curvature is the loading-point formula applied to the mid-span
   deflection. Reading R2 (primary): `y` is the mid-span deflection. Reading R1
-  (reported): `y` is the loading-point deflection, as Eq. 5.1 states.
+  (reported): `y` is the loading-point deflection, as Eq. 5.1 states. The
+  texts point both ways: for R1, the thesis centres the imposed displacements
+  "around the actuator mid-stroke" (Sec. 5.3, pp. 89–90; one actuator drives
+  a spreader beam that carries both loading arms, Fig. 5.3) and the paper
+  says that the displacements "are imposed at these loading points"
+  (Sec. 5.1); for R2, both speak of "imposed mid-span" displacements or
+  deflections (thesis Sec. 5.4, p. 94; paper Sec. 5.1) and Fig. 18 / thesis
+  Fig. 5.7 put 30–60 mm at mid-span. The camera covers only the central zone
+  (19 markers at 50 mm, 900 mm in all, thesis p. 91; "between the loading
+  points", paper Sec. 5.1), so the measured part of Fig. 18 is the central
+  zone, whose curvature the simulated R2 test reproduces and R1 does not
+  (results below). R2 stays primary.
 - **Records.** Thesis Fig. 5.5 (first series) and Fig. 5.6 (the same specimen
   after more than 1000 cycles at ±60 mm; paper Fig. 17 shows the same record:
   its outlines lie within 0.23–0.32 pt median, 0.57 pt at the 95th
@@ -605,6 +624,29 @@ provenance in `validation/paper_data/zeidan2025_*` and
   The first series (Fig. 5.5) dissipates 20–37 % more (400.7–414.5,
   564.4–581.7, 731.7–754.1 and 885.4–917.8 J/m) with centres +0.82 to
   +0.90 kN·m. Reading resolution of the polylines: 1.2e-5 1/m and 0.29 N·m.
+- **Zero and centre of the records.** The thesis says acquisition began with
+  the cable already bent in the rig (p. 93). In Fig. 5.6 the 30, 50 and
+  60 mm records start at κ = 0 with M = 1.28, 1.23 and 1.27 kN·m, but the
+  40 mm record starts at (0, −0.02 kN·m): that test began force-free at
+  y = 0, and its stabilised loop is still centred at +0.66 kN·m. The offset
+  is therefore not only a record-start artefact; it is a property of the
+  test that the papers do not explain (residual reel curvature, a tare or a
+  dead load are candidates). The stick secants after the two reversals also
+  differ (101/169, 134/153, 106/141 and 99/128 kN·m², plotted). The
+  comparison removes the measured centre, which is right for a constant
+  moment offset; the work does not depend on it.
+- **What the source compared.** The source's FE cell is driven to the
+  plotted curvature as if it were the true curvature ("a curvature of
+  κ = 0.185 m⁻¹, corresponding to the displacement amplitude of 60 mm",
+  thesis p. 98), and paper Figs 20–21 (thesis Figs 5.9–5.10) compare
+  monotonic FE curves that start at M = 0 with the loading branch of each
+  record, which starts at M ≈ 1.2–1.3 kN·m at κ = 0 (30, 50 and 60 mm; the
+  40 mm record from zero). No loop is compared, and the 3.5 MPa outer
+  pressure is chosen on such a branch (paper Fig. 20 and thesis Fig. 5.9 show
+  the 60 mm record; the paper's text names 40 mm, Sec. 5.3).
+  The agreement of the FE and measured bilinear parameters (K1 104 against
+  106 kN·m², K2 10.6 against 9) is therefore a monotonic comparison in
+  plotted curvature, not a validation of the loops used here.
 
 ### Registered targets (registered before any run of this cable)
 
@@ -659,8 +701,6 @@ independent.
 `python validation/scripts/check_zeidan2025.py` (one thread, about 30 min;
 the two registered rows run in the validation report).
 
-| ID | Result | Status |
-| --- | --- | --- |
 Since 2026-11-19 (support-cut shear stack, armour ξ 0.832 / 1.000):
 
 | ID | Result | Status |
@@ -1687,7 +1727,12 @@ a pitch, 20 stations from 573 mm before to about 2.9 m after the start of the
 curved bellmouth. Sævik plots, for 14 load cases (250-750 kN, 17-34 MPa,
 end-angle ranges 0.5-32°), the measured stress range at every station
 normalised by the static stress (Figs 17-23); Gjøsteen et al. (2027, Figs
-27-35) plot the absolute LC 14 loops (±8°) at nine stations. Both are
+27-35) plot the absolute LC 14 loops (±8°) at nine stations. Lukassen
+(2019, PhD thesis, DTU, Figs 2.7–2.11) plots both narrow sides of the
+tendon at 3.1–3.5 for the same load case (40 mm gauges, p. 11): Gjøsteen
+et al.'s loops are side b, mean-centred, and Sævik's normalised values are
+the larger of the two side ranges, not the axial range (SV11-SIDE and
+"Measured quantity and normaliser" below). Both are
 digitised from 300 dpi renders (`validation/paper_data/saevik2011_figs17_23.csv`,
 `gjosteen2027_lc14_ranges.csv`; reading resolution 0.009-0.073 normalised
 and ±2 MPa; source SHA-256 in the headers). The digitised model curves
@@ -1969,6 +2014,58 @@ predicted quantity are the same (axial against axial); it can test the
 axial prediction at five stations of one load case, not the friction law
 over the programme. SV11-NORM is labelled a hypothesis in every place it is
 reported: neither paper prints the normaliser.
+
+**Results** (`check_saevik2011.lukassen_values`, `audit_values`; the
+validation report; support-cut shear stack). Lukassen's records are
+digitised from the native PDF paths (`validation/paper_data/lukassen2019_lc14_two_sides.csv`,
+`validation/scripts/digitise_lukassen2019.py`; calibration residual
+5e-5 deg and 7e-13 MPa).
+
+| Station | 3.1 | 3.2 | 3.3 | 3.4 | 3.5 |
+| --- | --- | --- | --- | --- | --- |
+| Measured σa / σb range [MPa] | 105 / 183 | 86 / 195 | 99 / 68 | 108 / 41 | 54 / 76 |
+| Measured axial range [MPa] | 139 | 77 | 19 | 69 | 64 |
+| Predicted axial, sectional / corrected [MPa] | 207 / 356 | 103 / 318 | 0 / 219 | 103 / 108 | 144 / 44 |
+| Gjøsteen et al., measured [MPa] | 187 | 205 | 77 | 41 | 78 |
+
+| ID | Result | Status |
+| --- | --- | --- |
+| SV11-LK | Axial against axial, mean over 3.1 and 3.5: sectional 1.72, corrected 1.97; over all five: 1.51 and 2.84. Larger side against the predicted larger single side: sectional 1.35 (3.1, 3.5) and 0.94 (all five), corrected 1.54 and 1.61 | INFO |
+| SV11-SIDE | Static stress implied by Sævik's LC 14 values: larger side 272–334 MPa (coefficient of variation 0.08); side a 0.30; side b 0.33; axial 51–254 MPa (0.45); model 271 MPa | INFO |
+| SV11-SUB | (a) without 2.1/2.5: median R 1.89 (3 of 14), sectional 1.12 (12); (b) pairs by geometric mean: 2.22 (3), sectional 1.21 (12); (c) SV11-GJ at 3.1 and 3.5: 1.51, sectional 1.33 | INFO |
+| SV11-NORM | Hypothesis: median R 2.06 (3 of 14), sectional 1.07 (13 of 14); reference static 271 MPa | INFO |
+
+What this settles:
+
+- *Gjøsteen et al. plot side b.* Their ranges follow σb within 2–13 %
+  (186.6/205.2/76.7/41.4/77.5 against 183/195/68/41/76 MPa); at 3.4 σa is
+  2.7 times σb. SV11-GJ compares a predicted axial range with one side.
+- *Sævik's normalised values are the larger side.* Of the four readings, only that one gives
+  one static stress at the five stations (coefficient of variation 0.08,
+  272–334 MPa, near the model's 271 MPa); the axial reading would need 51 MPa
+  at 3.3, where the two sides are out of phase. This matches Table 3
+  ("maximum ... stress ranges") and the MM's differential-geometry bending
+  term. SV11-PLANE therefore compares a predicted axial range with a measured
+  larger-side range, which contains strong-axis bending of the tendon: at the
+  bending-plane station 3.1 the sides differ by 78 MPa, a bending that the
+  curvature gradient of the bellmouth produces (Gjøsteen et al., Sec. 4.6.3)
+  and that the loxodromic lateral term, zero in the bending plane, does not.
+- *Like with like, the prediction is further off, not closer.* Against the
+  measured axial range the SV11-GJ chain over-predicts at the bending-plane
+  stations by 1.72 (sectional) and 1.97 (corrected), against 1.27 and 2.07 in
+  the registered SV11-GJ; the sectional range at 3.5 is 2.2 times the
+  measured axial one. The registered rows are unchanged and stay FAIL.
+- *The coincident pairs differ systematically.* ln(1.5/2.1) averages +0.34
+  (×1.40) and ln(3.5/4.1) −0.65 (×0.52), with the same sign in all 14 load
+  cases, the stick cases at 0.5–2° included; the MM gives each pair equal
+  (RMS 0.03–0.08). The station scatter on which the band of the gate was
+  sized (above) is therefore a fixed per-sensor bias, not a random error that
+  averages out over load cases; Lukassen (p. 12) finds the comparison "very
+  sensitive to the precision of the OMS strain sensor positions" with 40 mm
+  gauges in a steep along-wire stress field. The band is not changed.
+- *The normaliser* stays unknown (SV11-NORM is a hypothesis). The
+  larger-side static of SV11-SIDE (272–334 MPa at LC 14) is consistent with
+  the model's 271 MPa, which does not distinguish one level from one per case.
 
 ## Measured wire-on-tape friction loops (DAI18-DIG, DAI18-RS, DAI18-T1, DAI18-T3)
 
