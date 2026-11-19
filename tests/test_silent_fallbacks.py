@@ -56,6 +56,16 @@ def test_range_at_cycles_of_a_steep_curve():
     assert value == pytest.approx(1e6 * 10.0 ** ((80.0 - 6.0) / 40.0), rel=1e-9)
 
 
+def test_range_at_cycles_on_the_lower_bracket_end():
+    """A root exactly at 1e-6 MPa (1 Pa) lies on the bracket, not outside."""
+    from cablexsec.materials.sn_curves import SNcurve
+
+    edge = SNcurve(name="edge", stress_unit="MPa", m1=1.0, log_C1=0.0)
+    assert fr.range_at_cycles(edge, 1e6) == pytest.approx(1.0, rel=1e-12)
+    with pytest.raises(CableInputError, match="even at 1e-6 MPa"):
+        fr.range_at_cycles(edge, 2e6)
+
+
 def test_mkappa_yield_guard_is_evaluated_or_said_to_be_skipped(monkeypatch):
     """The wire-yield guard of compute_mkappa swallowed every ValueError, so
     a bound that could not be evaluated left no trace. It now warns."""

@@ -755,11 +755,13 @@ def range_at_cycles(sn_curve: SNcurve, cycles: float) -> float:
     lo, hi = -6.0, 6.0  # log10 of the range in MPa
     target = math.log10(cycles)
 
+    def log_life(log_range: float) -> float:
+        # log10 lives, which a steep curve keeps representable where the life
+        # itself would overflow.
+        return float(sn_curve.log10_life(np.array([10.0**log_range]))[0])
+
     def longer(log_range: float) -> bool:
-        # Compared as log10 lives, which a steep curve keeps representable
-        # where the life itself would overflow.
-        life = float(sn_curve.log10_life(np.array([10.0**log_range]))[0])
-        return life > target
+        return log_life(log_range) > target
 
     # The bisection holds the range inside [1e-6, 1e6] MPa; a root outside it
     # would come back as the bound.
@@ -768,6 +770,8 @@ def range_at_cycles(sn_curve: SNcurve, cycles: float) -> float:
             f"the S-N curve gives more than {cycles:g} cycles even at 1e6 MPa: "
             "no stress range of that life"
         )
+    if math.isclose(log_life(lo), target, rel_tol=1e-12, abs_tol=1e-12):
+        return float(10.0**lo * 1.0e6)  # the root on the bracket's lower end
     if not longer(lo):
         raise CableInputError(
             f"the S-N curve gives at most {cycles:g} cycles even at 1e-6 MPa: "
