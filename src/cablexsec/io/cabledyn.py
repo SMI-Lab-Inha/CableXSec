@@ -3187,9 +3187,6 @@ def read_cabledyn_sections(
                 f"{paths['range'].name}: a range graph of line {range_graph.line_id}, "
                 f"not of line {line_id}"
             )
-        heads.append(
-            (_LineHead(paths["range"], (), None, 0), int(range_graph.node.size))
-        )
     static_profile = (
         _static_profile(paths["static"], line_id) if "static" in paths else None
     )
@@ -3199,6 +3196,17 @@ def read_cabledyn_sections(
         found = _element_arcs(paths["elements"], line_id, required=finite_ei)
         if found is not None:
             element_arcs = (paths["elements"], found)
+    range_in_mesh = range_graph is not None and bool(
+        heads or static_profile is not None or element_arcs is not None
+    )
+    if range_graph is not None and range_in_mesh:
+        # The range file numbers the mesh nodes but does not say which are
+        # deck nodes (its arc length is deformed): it joins the node count of
+        # the other mesh files, and on its own leaves the mesh unchecked (a
+        # read from the main-table channels needs only the deck nodes).
+        heads.append(
+            (_LineHead(paths["range"], (), None, 0), int(range_graph.node.size))
+        )
     mesh = _line_mesh(
         line,
         deck_arcs,
@@ -3911,6 +3919,8 @@ def read_cabledyn_sections(
                 "from different runs?"
             )
         checks["range_graph"] = {
+            "mesh_nodes": int(range_graph.node.size),
+            "mesh_checked": range_in_mesh,
             "samples": range_graph.n_samples,
             "time_window_s": [t_first, t_last],
             "quantities": list(range_graph.quantities),

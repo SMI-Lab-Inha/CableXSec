@@ -555,3 +555,57 @@ def test_sea_state_options_take_the_curvature_check_tolerances():
     for value in (math.nan, -0.1, True):
         with pytest.raises(CableInputError, match="curvature_check_rtol"):
             SeaStateBatchOptions(curvature_check_rtol=value)
+
+
+def _range_file(path, n_nodes, n_samples, t_last):
+    head = ["Node", "ArcLength"] + [
+        f"{q}{s}"
+        for q in ("Tension", "Curvature", "BendMoment", "Declination")
+        for s in ("Min", "Max", "Mean")
+    ]
+    units = ["(-)", "(m)"] + [
+        u for u in ("(N)", "(1/m)", "(N.m)", "(deg)") for _ in range(3)
+    ]
+    rows = [
+        "\t".join([str(j), f" {0.1 * (j - 1):.7E}"] + [" 1.0000000E+000"] * 12)
+        for j in range(1, n_nodes + 1)
+    ]
+    path.write_text(
+        f"CableDyn range graph (line 1; {n_samples} samples from t =  "
+        f"0.0000000000000000E+000 s to t =  {t_last:.16E} s; public node order "
+        "End A -> End B)\n"
+        + "\t".join(head)
+        + "\n"
+        + "\t".join(units)
+        + "\n"
+        + "\n".join(rows)
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def test_range_file_alone_does_not_require_a_refined_mesh_map(tmp_path):
+    """A read from main-table channels needs only the deck nodes: a range file
+    of a refined mesh, which names no deck nodes, is not held against the
+    deck there; with another mesh file it joins the node-count check."""
+    nt = 3
+    positions = _bending_case(np.full(nt, 0.02), np.zeros(nt), nt)
+    channels = {
+        f"L1N{j + 1}p{axis}": positions[:, j, k]
+        for j in range(positions.shape[1])
+        for k, axis in enumerate("xyz")
+    }
+    channels.update({"Ten1N50": np.full(nt, 1e3), "Ten1N51": np.full(nt, 1e3)})
+    root, deck = _write_case(
+        tmp_path, positions, channels=channels, outputs="-", static=False
+    )
+    _range_file(tmp_path / "case.Line1.range.out", 106, nt, 0.2)
+    read = read_cabledyn_sections(root, deck, {"s": 4.95}, pressure="none")
+    assert read.checks["range_graph"]["mesh_checked"] is False
+    assert read.checks["range_graph"]["mesh_nodes"] == 106
+    root, deck = _write_case(
+        tmp_path, positions, channels=channels, outputs="-", root="with_static"
+    )
+    _range_file(tmp_path / "with_static.Line1.range.out", 106, nt, 0.2)
+    with pytest.raises(CableSchemaError, match="different numbers of nodes"):
+        read_cabledyn_sections(root, deck, {"s": 4.95}, pressure="none")
