@@ -475,6 +475,34 @@ figures (about ±5 % of full scale):
 The IEA Wind Task 49 slipping stiffness (Table 13), whose row cites the same
 source, is likewise reported code to code.
 
+### Distributed laid-core law and tension-following core loads (CF-D, CF-T)
+
+Registered on 2026-11-19, before any run, in the first commit of the change that adds them. Code
+`core_friction_history(..., friction_model=...)` and `core_load_history`
+(`cablexsec/mechanics/core_friction.py`), `compute_neutral_axes(..., core_friction_model=...,
+core_loads=...)` and `compute_mkappa(..., core_loads=...)`; tests `tests/test_core_friction_distributed.py`.
+Case unless stated: the 66 kV IEA Task 49 template, bounded contact, laid cores with the wedged trefoil and the
+filler profiles, μ 0.46 on every core and profile contact, 50 kN, default stations and helix nodes. Scale: the
+largest core moment magnitude of the history.
+
+The distributed form solves each helical population of the core law (the cores and the filler profiles) with
+the distributed helix model of the armour (`friction_model="distributed"`), its contact pressure and stick
+coefficient taken from the core law; `"auto"` keeps the direction-tied law on planar paths and uses the
+distributed one otherwise, as for the armour.
+
+| ID | Check | Target (registered) |
+| --- | --- | --- |
+| CF-D-planar | `friction_model="auto"` on planar loop histories (two plane azimuths) against the direction-tied core law; `compute_neutral_axes(friction_model="auto")` against `"direction_tied"` on the same path | moment and work ≤ 1e-12 of scale |
+| CF-D-rot | Biaxial random walk rotated by 7 station pitches (2π·7/n, a multiple of the helix node spacing) and by 0.3 rad: rotated moment and friction work | ≤ 1e-9 of scale (lattice rotation); ≤ 1e-3 of scale (0.3 rad) |
+| CF-D-diss | Biaxial random walk and a circular orbit: friction work non-decreasing, energy balance residual | increments ≥ −1e-12 of the final work; residual ≤ 1e-9 of it |
+| CF-D-mu0 | μ = 0 on every core and profile contact: section moment of `compute_neutral_axes(friction_model="distributed")` against the armour-only section | 0 N·m (bit for bit) |
+| CF-D-stick | μ = 1e3 on every core and profile contact, amplitude 1e-6 1/m: core-law tangent against its stick stiffness `xi (1/2) EA r_c² cos³β` (cores plus profiles) | ≤ 1e-5 rel. (discrete shear-lag factor `(h²/12)(1 − ξ)`, 6e-6 at the default nodes) |
+| CF-D-slip | Planar monotonic loading to full slip: moment of the core population and of the profile population against `(2/π) n q r² cos²β/sin²β · λ C cosh(λπ/2)/(1 + λ²)`, `C = λπ/(2 sinh(λπ/2))`, `λ = μ sin β` (the closed form of the armour distributed model with the core loads) | ≤ 1e-4 rel. |
+| CF-D-numba | Compiled against reference kernel of the distributed core law (biaxial history with a contact-pressure history) | moments and energies ≤ 1e-10 of scale |
+| CF-T-const | Constant tension history equal to the reference: `core_loads="follow"` against `"reference"` (direction-tied and distributed) | ≤ 1e-12 of scale |
+| CF-T-level | Constant tension history at 120 kN on a model built at 50 kN, loads following, against the law built at 120 kN; 0 and 20 MPa armour winding stress | direction-tied ≤ 1e-12 of scale; distributed ≤ 2e-3 of scale (its substeps are set by the onset at the reference) |
+| CF-T-cycle | Tension cycle 10–70 kN inside bending cycles (amplitudes 3e-4 and 3e-3 1/m), 0 and 20 MPa winding stress: slip-scaled exported law (per group) against `compute_mkappa(contact_tension_history_N=..., core_loads="follow")` | deviation ≤ 1.25 times the fixed-tension residual of the same law at 10 and 70 kN, and < 5e-3 of the range (the MX-scale targets); `core_loads="reference"` reported |
+
 ### Default of the laid-core law
 
 The law stays off by default. The Ménard test is no longer a gate (its
