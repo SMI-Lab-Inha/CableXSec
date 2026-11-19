@@ -122,6 +122,13 @@ CurvatureDefinition = Literal["station", "elastic", "fit"]
 _CONTROLS = ("load", "displacement", "moment", "curvature")
 _DEFINITIONS = ("station", "elastic", "fit")
 _MAX_ITERATIONS = 200
+#: Substep of the distributed helix law in a section law [units of the slip
+#: onset curvature]. The test solver bisects along monotone legs, so the law's
+#: dependence on the sampling of a leg must stay near the equilibrium
+#: tolerance. The fatigue default (0.1) leaves 8.5e-8 on the Menard cable in
+#: three-point bending once the armour sits on a stiff support (xi 0.69 and
+#: 0.89); 0.02 leaves 2e-9.
+SECTION_LAW_MAX_INCREMENT = 0.02
 
 
 # --------------------------------------------------------------------------- #
@@ -227,6 +234,7 @@ class SectionLaw:
         ] = "direction_tied",
         progressive: ProgressiveFriction | None = None,
         distributed_nodes_per_pitch: int | None = None,
+        distributed_max_increment: float = SECTION_LAW_MAX_INCREMENT,
     ) -> SectionLaw:
         """The :func:`~cablexsec.api.compute_mkappa` law of a cable.
 
@@ -237,8 +245,9 @@ class SectionLaw:
         stress by the distributed helix model of
         :mod:`cablexsec.mechanics.distributed_friction` (the fatigue-path
         option) and assembles the moment from the wire stresses in the same
-        way; it substeps internally, so its leg property holds to the
-        substep accuracy.
+        way; it substeps internally (``distributed_max_increment``, in units
+        of the slip-onset curvature, :data:`SECTION_LAW_MAX_INCREMENT` by
+        default), so its leg property holds to the substep accuracy.
 
         The contact pressure is that of the one contact state given here.
         The pressure and tension histories of
@@ -329,7 +338,11 @@ class SectionLaw:
             stored = 0.5 * law.ei_min * kappa**2
             for spec in law.layers:
                 hist = distributed_friction_history(
-                    spec, kx, ky, nodes_per_pitch=distributed_nodes_per_pitch
+                    spec,
+                    kx,
+                    ky,
+                    nodes_per_pitch=distributed_nodes_per_pitch,
+                    max_increment=distributed_max_increment,
                 )
                 weight = spec.A_wire_m2 * math.cos(spec.lay_angle_rad) * spec.r_helix_m
                 proj = np.cos(spec.phi_wires) * cos_b + np.sin(spec.phi_wires) * sin_b

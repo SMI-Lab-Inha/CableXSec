@@ -82,10 +82,10 @@ EA, twist free          276.1 MN
 GJ (armour lay)          59.2 kN m^2
 tension-twist K_et      494.1 kN m
 EI full slip             3.57 kN m^2
-EI no slip (xi)         59.14 kN m^2
+EI no slip (xi)        189.82 kN m^2
 EI plane section       234.18 kN m^2
-xi inner_armour         0.208
-xi outer_armour         0.248
+xi inner_armour         0.686
+xi outer_armour         0.888
 ```
 
 `ea_fixed_N` holds the ends against twist. `ea_free_N` lets them turn, which
@@ -97,10 +97,10 @@ independent torsion of the components is not included.
 axis. It is within 0.6 % of the analytical 3.593 kN m² of the source.
 `ei_max_Nm2` is the no-slip bound: the wires stick and follow the bending of
 the section, and their contribution is reduced by the {term}`shear coefficient` ξ
-of the polymer layers that carry the wire forces (Yun et al. 2020).
+of the layers between the wires and their support (Yun et al. 2020).
 `ei_plane_section_Nm2` is the same assembly with ξ = 1.
 
-The bending stiffness of a slipping cable spans a factor of about 17 between
+The bending stiffness of a slipping cable spans a factor of about 53 between
 the two bounds. Where it sits depends on the curvature, the history and the
 contact pressure. That is why CableXSec computes the bending response as a
 hysteretic law and not as one number.
@@ -124,12 +124,12 @@ inwards.
 ```text
 inner_armour: not declared; outer_armour: not declared; initial external pressure 300 kPa (published_calibration)
 T [kN] layer         P bounded  P solved  k onset   k full
-     0 inner_armour      0.600     0.448   0.0030   0.0051
-     0 outer_armour      0.600     0.428   0.0025   0.0042
-    50 inner_armour      1.412     0.882   0.0072   0.0119
-    50 outer_armour      0.859     0.337   0.0036   0.0060
-   100 inner_armour      2.223     1.625   0.0113   0.0187
-   100 outer_armour      1.117     0.557   0.0047   0.0078
+     0 inner_armour      0.600     0.448   0.0009   0.0015
+     0 outer_armour      0.600     0.428   0.0007   0.0012
+    50 inner_armour      1.412     0.882   0.0022   0.0036
+    50 outer_armour      0.859     0.337   0.0010   0.0017
+   100 inner_armour      2.223     1.625   0.0034   0.0057
+   100 outer_armour      1.117     0.557   0.0013   0.0022
 ```
 
 The two pressure columns are the armour contact pressure `P1 + P2` on both
@@ -172,10 +172,10 @@ as zero with the basis `not_published`.
 IEA Task 49 / Janocha 2024 66 kV three-core (public template)
 EA, twist fixed         638.5 MN
 EI full slip            21.74 kN m^2
-EI no slip (xi)       1391.17 kN m^2
+EI no slip (xi)       1604.82 kN m^2
 inner_armour: winding stress 0 MPa (not_published); outer_armour: winding stress 0 MPa (not_published)
-100 kN inner_armour  P = 0.086 MPa, slip onset 0.00024 1/m
-100 kN outer_armour  P = 0.023 MPa, slip onset 0.00007 1/m
+100 kN inner_armour  P = 0.086 MPa, slip onset 0.00020 1/m
+100 kN outer_armour  P = 0.023 MPa, slip onset 0.00006 1/m
 ```
 
 With zero clamping the only contact pressure is the one tension creates, and

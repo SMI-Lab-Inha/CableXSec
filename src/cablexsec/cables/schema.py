@@ -1676,9 +1676,11 @@ def _check_radial_order(layers: Sequence[Any]) -> None:
     """Layers are listed from the axis outwards and do not overlap.
 
     Analyses read the YAML order as the radial order (the shear stack under an
-    armour layer is the layers listed before it, [Yun2020] in
-    :func:`cablexsec.mechanics.stiffness.xi_for_layer`), so a layer listed out
-    of order or overlapping another is refused here rather than mis-assembled.
+    armour layer is the concentric layers listed between it and the helical
+    layer or power cores inside it, [Yun2020] in
+    :func:`cablexsec.mechanics.stiffness.yun_shear_stack`), so a layer listed
+    out of order or overlapping another is refused here rather than
+    mis-assembled.
     """
     envelope = _core_envelope(layers)
     inside = (
