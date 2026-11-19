@@ -1196,6 +1196,10 @@ guide [global_local_guide.md](global_local_guide.md), Section 8.
 | MX-5 | MM | Hysteretic bending of a global program with the exported table | not run | open |
 | MX-scale | I | Slip scaling variable (`slip_scale=True`): bound homogeneity of `compute_mkappa` (66 kV, 20 → 70 kN, cores); group elements at 60 kN against the 10 kN elements with yield curvatures times `ρ_g` (Ménard); tension cycle 10–70 kN inside ±0.03 1/m bending, scaled law against the contact-tension history over the fixed-tension residual | 6.9e-16; 1.2e-13; 1.21 (1.02 before the support-cut shear stack; symmetric wire bounds on a breakpoint grid: 8e-15, work 7e-15) | PASS |
 | MX-scale-1 | I | One scale for all groups against the per-group law, 10–150 kN (reference 10 kN), backbone and cycles to 1.5 times full slip | 66 kV 0; 33 kV three-core 0.10 % (0.29 % with cores); Ménard 12 %; with p_e 0–2 MPa: 66 kV 21 %, 33 kV 12 %, Ménard 19 % | reported |
+| MX-group-B | I | One law per friction group, each with its own scale table (`BendingLawExport.slip_group_laws`): sum over the groups of `s_g M_g(κ/s_g)` (the backbone table of the group at the reference, scaled by its own `s_g(T)`) against the exported backbone at the same tension (case below) | registered: at every grid curvature κ > 0 and every exported tension, within 0.5 % of the exported moment | registered |
+| MX-group-E | I | Same laws, Masing replay: work of three symmetric cycles of amplitude 1e-3, 3e-3, 0.01, 0.03, 0.1 and 0.3 1/m, summed group laws against the exported law at the same tension | registered: within ±1 % | registered |
+| MX-group-0 | A | The default scale table starts at zero tension: `s_g(0)` is the group cap of the contact model at zero tension over its reference cap | registered: without clamping `s_g(0) = 0` to 1e-12; with clamping the zero row equals the direct cap ratio at 0 N to 1e-12 rel., and the table scale at 5 kN equals the direct cap ratio at 5 kN to 1e-9 rel. (bounded chain, affine in tension) | registered |
+| MX-group-1 | I | One cap-weighted scale for all groups (`per_group=False`) on the same case and measures | reported | reported |
 
 The armour laws are parallel spring–sliders at fixed contact pressure, so the Iwan law follows Masing's rules; it is
 exact when every wire's slip interval is symmetric. The signed capstan bound makes the interval asymmetric (the
@@ -1204,6 +1208,14 @@ discretisation (bending at ±0.03 1/m on the Ménard cable: 0.14 % of the range 
 symmetric bounds). The interpolation in tension is the other approximation; the slip scale replaces it with the
 exact scaling of the friction caps (MX-scale; guide Section 8.1). Biaxial bending is outside it (per-wire,
 direction-tied response in CableXSec).
+
+**Group laws (MX-group), registered on 2026-11-19 before any run.** Case: the 66 kV IEA Task 49 template,
+bounded contact, armour friction of the template, laid-core law with the wedged trefoil and the filler profiles,
+μ 0.46 on every core and profile contact ([Janocha2024] Table 2), armour winding stress 0, 20 and 40 MPa on both
+armour layers (assumed clamping states, the 0 MPa case without manufacturing clamping); export at 10, 25, 50, 100,
+150 and 200 kN, `kappa_max_1_m = 0.4`, 200 base points, `slip_scale=True` with the default reference and table.
+The elastic full-slip part `EI_slip κ` is carried by the first group (scaling leaves it unchanged). Tests:
+`tests/test_bending_law_groups.py`.
 
 ## Cable over a sheave (gap SH)
 
