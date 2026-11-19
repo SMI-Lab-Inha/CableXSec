@@ -438,7 +438,9 @@ All notable changes to CableXSec are recorded in this file. The format follows
   and layer of `compute_fatigue` are the first of the values within 1e-12 of the largest, so a
   round-off difference between the kernel paths no longer moves them (63 deg on one, 243 deg on
   the other, at equal damage). `compute_thermal` refuses a negative current, temperatures below
-  absolute zero and a core count that is not a positive integer (`n_cores = 0` divided by zero);
+  absolute zero and a core count that is not a positive integer (`n_cores = 0` divided by zero),
+  and so does `thermal_network` (a NaN ambient built a network of NaN temperatures) with its
+  steady, transient and matrix states (negative currents, ambients below absolute zero);
   `export_bending_law` refuses a non-integer `n_points` (was numpy's `TypeError`). A layer's
   schema error names the layer, its index and the file instead of the union of layer kinds.
   `read_series_csv` refuses a file that is not UTF-8 with `CableSchemaError` (was

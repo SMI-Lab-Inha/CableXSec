@@ -755,13 +755,6 @@ def compute_thermal(
             raise CableInputError(
                 f"compute_thermal: {name} = {value:g} °C is below absolute zero"
             )
-    if n_cores is not None and (
-        isinstance(n_cores, bool) or not isinstance(n_cores, Integral) or n_cores < 1
-    ):
-        raise CableInputError(
-            f"compute_thermal: n_cores must be a positive integer: {n_cores!r}"
-        )
-
     geo = _ladder_geometry(cable, n_cores)
     path, in_t1, n = geo.path, geo.in_t1, geo.n
     multi_core, geometry_notes = geo.multi_core, list(geo.geometry_notes)
@@ -1011,6 +1004,12 @@ def conductor_material_of(cable: CableData, given: str | None) -> tuple[str, str
 
 def _ladder_geometry(cable: CableData, n_cores: int | None) -> _LadderGeometry:
     """Concentric heat path, ``T1`` split and core counts of a cable definition."""
+    if n_cores is not None and (
+        isinstance(n_cores, bool) or not isinstance(n_cores, Integral) or n_cores < 1
+    ):
+        raise CableInputError(
+            f"n_cores must be a positive integer (at least 1): {n_cores!r}"
+        )
     n_geo = (
         max((getattr(layer, "n_cores", 0) for layer in cable.layers), default=0) or 1
     )

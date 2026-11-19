@@ -281,3 +281,34 @@ def test_time_history_csv_keeps_a_quoted_newline(tmp_path):
     path.write_bytes(b'Time,x curvature,Wall tension\n0,0.01,100\n0.1,"1\n0",100\n')
     with pytest.raises(CableSchemaError, match="column 2 is not numeric"):
         cx.read_time_history_csv(path, curvature_y_col=None, tension_kind="true")
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "match"),
+    [
+        ({"ambient_C": math.nan}, "ambient_C must be finite"),
+        ({"ambient_C": -400.0}, "below absolute zero"),
+        ({"n_cores": 1.5}, "n_cores must be a positive integer"),
+        ({"n_cores": 0}, "n_cores must be a positive integer"),
+    ],
+)
+def test_thermal_network_arguments_are_checked(kwargs, match):
+    """A NaN ambient built a network of NaN temperatures; an ambient below
+    absolute zero and a fractional core count were accepted."""
+    with pytest.raises(CableInputError, match=match):
+        cx.thermal_network(bundled(CABLE), 3e-4, **kwargs)
+
+
+def test_thermal_network_states_refuse_impossible_loads():
+    network = cx.thermal_network(bundled(CABLE), 3e-4)
+    time = np.linspace(0.0, 3600.0, 7)
+    for call, match in (
+        (lambda: network.steady_state(-600.0), "must not be negative"),
+        (lambda: network.steady_state(600.0, ambient_C=-300.0), "absolute zero"),
+        (lambda: network.transient(time, np.full(7, -1.0)), "must not be negative"),
+        (lambda: network.transient(time, 600.0, ambient_C=-280.0), "absolute zero"),
+        (lambda: network.system_matrices(600.0, ambient_C=math.nan), "finite"),
+    ):
+        with pytest.raises(CableInputError, match=match):
+            call()
+    assert np.isfinite(network.steady_state(600.0)).all()
