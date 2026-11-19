@@ -339,6 +339,15 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Changed
 
+- CI runs the tests in parallel: the test matrix, the NumPy reference path and both coverage
+  passes run on one pytest-xdist worker per core (`pytest-xdist` joins the `dev` extra), and
+  each worker keeps its own numba cache. `release/check_coverage.py --numprocesses N` and
+  `run_validation.py --jobs=N` take a worker count; `--jobs` evaluates the independent row
+  groups in worker processes and runs the three taxonomy groups concurrently. The coverage
+  run and the validation report check run side by side in two jobs, and the required check
+  "Coverage and validation report" passes only when both pass. The tests, the 95 % threshold,
+  the kernel coverage pass, the rows, the report and its staleness check are unchanged.
+
 - The rows that compare with the measured loops of Ménard and Cartraud (2023), BM1-loop,
   BM1-loop-uniform and BM1-ID, are stated, not gated (status INFO, the verdict against the
   registered target kept): the test is an unreliable reference. The benchmark register states the

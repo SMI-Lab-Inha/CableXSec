@@ -17,7 +17,8 @@ permissions:
   contents: read
 
 env:
-  # One thread per process: the suite is numerically heavy and runs serially.
+  # One thread per process: the suite is numerically heavy and runs on one pytest-xdist
+  # worker per core, so a worker must not start threads of its own.
   OMP_NUM_THREADS: "1"
   MKL_NUM_THREADS: "1"
   OPENBLAS_NUM_THREADS: "1"
@@ -72,7 +73,7 @@ jobs:
       - name: Install the package and test dependencies
         run: python -m pip install --upgrade pip ".[dev,fast,contact]"
       - name: Run the test suite
-        run: python -m pytest -q -p no:cacheprovider
+        run: python -m pytest -q -p no:cacheprovider -n auto --dist worksteal --durations=25
 
   reference-path:
     name: Tests without the compiled kernels
@@ -92,10 +93,39 @@ jobs:
       - name: Install the package without numba
         run: python -m pip install --upgrade pip ".[dev,contact]"
       - name: Run the test suite on the NumPy reference path
-        run: python -m pytest -q -p no:cacheprovider
+        run: python -m pytest -q -p no:cacheprovider -n auto --dist worksteal --durations=25
 
-  coverage:
-    name: Coverage and validation report
+  coverage-suite:
+    # Not a required check itself: the required check "Coverage and validation report"
+    # passes only if this job and validation-report both pass.
+    name: Coverage of the whole suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install the package and test dependencies
+        run: python -m pip install --upgrade pip ".[dev,fast,contact]"
+      - name: Run the whole suite with line and branch coverage, kernels traced
+        # Functions compiled by numba run outside the coverage tracer, so the kernel
+        # tests run a second time with NUMBA_DISABLE_JIT=1 and are appended.
+        run: python release/check_coverage.py --fail-under 95 --numprocesses auto
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: cablexsec-coverage
+          path: coverage.xml
+          if-no-files-found: ignore
+
+  validation-report:
+    # Not a required check itself; see coverage-suite.
+    name: Validation report is current
     runs-on: ubuntu-latest
     timeout-minutes: 150
     steps:
@@ -111,25 +141,36 @@ jobs:
         run: python -m pip install --upgrade pip ".[dev,fast,contact]"
       - name: The committed validation report is current
         # The script exits non-zero while registered benchmark rows fail; the step
-        # fails only if the committed report differs from the live calculation. It runs
-        # before the coverage run (about 45 min), so a stale report fails within minutes.
+        # fails only if the committed report differs from the live calculation.
+        # --jobs=auto evaluates the independent row groups and the taxonomy groups
+        # concurrently; the rows and the report are those of the serial run.
         shell: bash
         run: |
           set +e
-          python validation/scripts/run_validation.py --check 2>&1 | tee validation-check.txt
+          python validation/scripts/run_validation.py --check --jobs=auto 2>&1 | tee validation-check.txt
           status=${PIPESTATUS[0]}
           if grep -q "validation artefacts are stale" validation-check.txt; then exit 1; fi
           echo "run_validation exit status ${status} (registered FAIL rows are expected)"
-      - name: Run the whole suite with line and branch coverage, kernels traced
-        # Functions compiled by numba run outside the coverage tracer, so the kernel
-        # tests run a second time with NUMBA_DISABLE_JIT=1 and are appended.
-        run: python release/check_coverage.py --fail-under 95
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: always()
-        with:
-          name: cablexsec-coverage
-          path: coverage.xml
-          if-no-files-found: ignore
+
+  coverage:
+    # The required check. The coverage run and the validation report check run side by
+    # side in the two jobs above; this job fails unless both succeeded, and it also
+    # runs (and fails) when either of them failed, was cancelled or was skipped.
+    name: Coverage and validation report
+    needs: [coverage-suite, validation-report]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: The coverage gate and the validation report check passed
+        shell: bash
+        env:
+          COVERAGE_RESULT: ${{ needs.coverage-suite.result }}
+          VALIDATION_RESULT: ${{ needs.validation-report.result }}
+        run: |
+          echo "Coverage of the whole suite: ${COVERAGE_RESULT}"
+          echo "Validation report is current: ${VALIDATION_RESULT}"
+          test "${COVERAGE_RESULT}" = success
+          test "${VALIDATION_RESULT}" = success
 
   distribution:
     name: Build Python distributions
