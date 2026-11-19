@@ -15,6 +15,7 @@ import os
 import sys
 import tempfile
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack, contextmanager
 from pathlib import Path
 
@@ -73,6 +74,22 @@ def test_each_worker_starts_with_its_own_numba_cache(tmp_path, monkeypatch):
     monkeypatch.setenv("NUMBA_CACHE_DIR", caller)
     caches = [tmp_path / f"cache-{i}" for i in range(3)]
     pools = [batch._start_worker(cache) for cache in caches]
+    try:
+        assert _caches(pools) == caches
+    finally:
+        for pool in pools:
+            pool.shutdown()
+    assert os.environ["NUMBA_CACHE_DIR"] == caller
+
+
+def test_workers_started_from_several_threads_keep_their_own_caches(
+    tmp_path, monkeypatch
+):
+    caller = str(tmp_path / "caller")
+    monkeypatch.setenv("NUMBA_CACHE_DIR", caller)
+    caches = [tmp_path / f"cache-{i}" for i in range(2)]
+    with ThreadPoolExecutor(max_workers=2) as threads:
+        pools = list(threads.map(batch._start_worker, caches))
     try:
         assert _caches(pools) == caches
     finally:

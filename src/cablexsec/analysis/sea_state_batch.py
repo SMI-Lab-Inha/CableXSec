@@ -44,11 +44,11 @@ its compiled kernels in a numba cache of its own: a slot directory
 ``slot-<i>`` under ``cablexsec/numba-batch`` in the user cache directory, or
 under ``CABLEXSEC_BATCH_CACHE_DIR`` when that is set, which later batches
 reuse. Each worker locks its slot itself for as long as it runs, so no two
-processes write one cache; a batch beside another takes the next free slots, and a worker
-without one gets a temporary cache. Results do not depend on the worker
-count. The output directory, if given, must not exist:
-results are written once, with a manifest of SHA-256 digests of every input
-file, the cable definition and the options.
+processes write one cache; a batch beside another takes the next free slots,
+and a worker without one gets a temporary cache. Results do not depend on the
+worker count. The output directory, if given, must not exist: results are
+written once, with a manifest of SHA-256 digests of every input file, the
+cable definition and the options.
 """
 
 from __future__ import annotations
@@ -61,6 +61,7 @@ import pickle
 import platform
 import sys
 import tempfile
+import threading
 import warnings
 from collections.abc import Iterator, Mapping, Sequence
 from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
@@ -547,6 +548,8 @@ def _slot_is_free(path: Path) -> bool:
 
 #: The slot lock a worker process holds for its lifetime (see _claim_slot).
 _SLOT_HANDLE: Any = None
+#: Serialises the NUMBA_CACHE_DIR change around a worker start (one per process).
+_START_LOCK = threading.Lock()
 
 
 def _claim_slot(path: str) -> bool:
@@ -572,7 +575,9 @@ def _start_worker(cache: Path) -> ProcessPoolExecutor:
     """A one-process spawn pool whose worker writes the numba cache ``cache``.
 
     The worker is started while ``NUMBA_CACHE_DIR`` names ``cache`` and
-    inherits it before numba is imported; the caller's value is restored.
+    inherits it before numba is imported; the caller's value is restored. The
+    whole change is serialised, so that workers started from several threads
+    at once each inherit their own directory.
     """
     import multiprocessing  # noqa: PLC0415
 
@@ -581,18 +586,19 @@ def _start_worker(cache: Path) -> ProcessPoolExecutor:
         mp_context=multiprocessing.get_context("spawn"),
         initializer=_limit_threads,
     )
-    previous = os.environ.get(_NUMBA_CACHE_VARIABLE)
-    os.environ[_NUMBA_CACHE_VARIABLE] = str(cache)
-    try:
-        pool.submit(os.getpid).result()  # the worker now runs with it
-    except BaseException:
-        pool.shutdown(cancel_futures=True)
-        raise
-    finally:
-        if previous is None:
-            os.environ.pop(_NUMBA_CACHE_VARIABLE, None)
-        else:
-            os.environ[_NUMBA_CACHE_VARIABLE] = previous
+    with _START_LOCK:
+        previous = os.environ.get(_NUMBA_CACHE_VARIABLE)
+        os.environ[_NUMBA_CACHE_VARIABLE] = str(cache)
+        try:
+            pool.submit(os.getpid).result()  # the worker now runs with it
+        except BaseException:
+            pool.shutdown(cancel_futures=True)
+            raise
+        finally:
+            if previous is None:
+                os.environ.pop(_NUMBA_CACHE_VARIABLE, None)
+            else:
+                os.environ[_NUMBA_CACHE_VARIABLE] = previous
     return pool
 
 
