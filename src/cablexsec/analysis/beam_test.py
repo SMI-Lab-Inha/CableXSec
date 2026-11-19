@@ -245,9 +245,13 @@ class SectionLaw:
         stress by the distributed helix model of
         :mod:`cablexsec.mechanics.distributed_friction` (the fatigue-path
         option) and assembles the moment from the wire stresses in the same
-        way; it substeps internally (``distributed_max_increment``, in units
-        of the slip-onset curvature, :data:`SECTION_LAW_MAX_INCREMENT` by
-        default), so its leg property holds to the substep accuracy.
+        way, and solves the laid cores and filler profiles of
+        ``core_friction`` with the same model
+        (:func:`~cablexsec.mechanics.core_friction.core_friction_history`,
+        ``friction_model="distributed"``); it substeps internally
+        (``distributed_max_increment``, in units of the slip-onset curvature,
+        :data:`SECTION_LAW_MAX_INCREMENT` by default), so its leg property
+        holds to the substep accuracy.
 
         The contact pressure is that of the one contact state given here.
         The pressure and tension histories of
@@ -351,7 +355,11 @@ class SectionLaw:
                 stored = stored + hist.stored_J_per_m
             if law.core_model is not None:
                 core = core_friction_history(
-                    law.core_model, kx, ky, initial_bending_angle=phi_bend
+                    law.core_model,
+                    kx,
+                    ky,
+                    friction_model="distributed",
+                    nodes_per_pitch=distributed_nodes_per_pitch,
                 )
                 moment = moment + core.moment_Nm @ np.array([cos_b, sin_b])
                 friction = friction + core.work.friction_J_per_m
