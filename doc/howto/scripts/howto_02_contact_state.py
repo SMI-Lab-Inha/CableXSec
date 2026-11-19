@@ -10,8 +10,6 @@ Run from a source checkout:
 
 import math
 
-import numpy as np
-
 import cablexsec as cx
 
 # 1. Full cable, trefoil cores included: tension and external pressure.
@@ -23,7 +21,7 @@ for tension, pressure in ((100e3, 0.0), (100e3, 2e6)):
     print(
         f"T {tension / 1e3:.0f} kN, sealed p_ext {pressure / 1e6:.0f} MPa: "
         f"strain {state.result.axial_strain * 1e6:.0f} ue, "
-        f"open gaps {int(np.count_nonzero(state.result.interface_gap_m > 1e-9))}"
+        f"open gaps {len(state.result.open_interfaces)}"
     )
     for name in contact:
         print(

@@ -498,6 +498,14 @@ All notable changes to CableXSec are recorded in this file. The format follows
   the next free slots, and a worker without a free slot or a writable folder gets a temporary
   cache. Results are unchanged, and runs go to whichever worker is free, as before.
 
+- An interface of the radial section is open when its contact carries no line force, as the
+  contact solver decides it (`RadialSectionResult.interface_open`, `open_interfaces`); the
+  how-to recipe and the coiling check counted gaps above 1e-9 m. A closed contact reports
+  the round-off of the linear solve as its gap: about 1.5e-10 m on two interfaces carrying
+  1.1 MN/m of the 66 kV template at 100 kN and a sealed 2 MPa, within the solver's own
+  complementarity tolerance in metres (2e-10 to 4e-10 m there). macOS runs crossed 1e-9 m and
+  printed "open gaps 1" against the page's 0.
+
 - `SectionLaw.from_cable` reads the cable's own materials (its `materials:` block) when the law
   is built and every time it is evaluated. Outside `simulate_bending_test` it read the library
   instead, and a layer whose material the library lacks silently dropped out of the stiffness
