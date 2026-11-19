@@ -957,7 +957,11 @@ class CoreLoadHistory:
     ``core_N_per_m`` is the total normal line load of one core and
     ``core_mu_effective`` its load-weighted friction coefficient at every
     sample; ``core_pressure_Pa`` the friction-setting pressure of the core
-    population (module notes). ``filler_profile_N_per_m`` and
+    population (module notes) and ``core_mu_capstan`` the coefficient of its
+    capstan term over the history: the model's reference coefficient, or,
+    when that is zero while later samples carry frictional loads (an
+    unloaded reference whose filler coefficient is zero), the coefficient of
+    the most loaded sample. ``filler_profile_N_per_m`` and
     ``filler_pressure_Pa`` are those of the filler profiles (``None``
     without them). ``contact_model`` names the model the loads come from.
     """
@@ -969,6 +973,7 @@ class CoreLoadHistory:
     contact_model: str
     filler_profile_N_per_m: FloatArray | None = None
     filler_pressure_Pa: FloatArray | None = None
+    core_mu_capstan: float | None = None
 
 
 def _population_cap_per_pressure(spec: HelicalLayerSpec, mu: float) -> float:
@@ -1049,16 +1054,21 @@ def core_load_history(
     population = model.population
     pressure = model.n_cores * total / (2.0 * math.pi * model.r_offset_m)
     reference_mu = float(population.mu)
+    if reference_mu <= 0.0 and np.any(mu[positive] > 0.0):
+        # A zero reference coefficient cannot carry the friction of later
+        # samples: normalise by the coefficient of the most loaded sample.
+        reference_mu = float(mu[int(np.argmax(total))])
     if np.any(np.abs(mu - reference_mu) > 1e-12 * max(reference_mu, 1e-300)):
         # The full-slip friction moment of the population at each sample's
-        # coefficient over that at the reference coefficient.
+        # coefficient over that at the normalising coefficient (positive
+        # here unless every sample is frictionless).
         reference = _population_cap_per_pressure(population, reference_mu)
         values, inverse = np.unique(mu, return_inverse=True)
         ratio = np.array(
             [
                 _population_cap_per_pressure(population, float(value)) / reference
                 if reference > 0.0
-                else 1.0
+                else 0.0
                 for value in values
             ]
         )
@@ -1076,6 +1086,7 @@ def core_load_history(
         contact_model=contact_model,
         filler_profile_N_per_m=profile,
         filler_pressure_Pa=profile_pressure,
+        core_mu_capstan=reference_mu,
     )
 
 
@@ -1258,17 +1269,24 @@ def core_friction_history(
         core_pressure = loads.core_pressure_Pa
         filler_pressure = loads.filler_pressure_Pa
         tension = loads.tension_N
+    population = model.population
+    if (
+        loads is not None
+        and loads.core_mu_capstan is not None
+        and loads.core_mu_capstan != population.mu
+    ):
+        population = dataclasses.replace(population, mu=loads.core_mu_capstan)
     resolved = _resolve_core_model(model, friction_model, kx, ky, stacklevel=2)
     s_moment, s_stored, s_friction, s_endpoint, s_remainder = _strand_history(
         model, kx, ky, tension
     )
     if resolved == "distributed":
         core_moment, w, slip = _distributed_population(
-            model.population, kx, ky, core_pressure, nodes_per_pitch
+            population, kx, ky, core_pressure, nodes_per_pitch
         )
     else:
         history = wire_slip_history(
-            model.population,
+            population,
             kx,
             ky,
             contact_pressure_Pa=core_pressure,

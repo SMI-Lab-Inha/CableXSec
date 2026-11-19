@@ -569,6 +569,35 @@ def test_mixed_coefficients_scale_the_bound_with_the_cap(iea66):
     assert ratio == pytest.approx(caps[1] / caps[0], rel=1e-12)
 
 
+@pytest.mark.parametrize("law", ["direction_tied", "distributed"])
+def test_zero_reference_coefficient_with_frictional_loads_later(iea66, law):
+    """An unloaded reference (zero tension, no clamping) takes the filler
+    coefficient, here zero; the core--core loads of the later samples carry
+    friction all the same, normalised by the coefficient of the most loaded
+    sample."""
+    spec = CoreFrictionSpec(mu_core_filler=0.0, mu_core_core=0.2, mu_core_sheath=0.2)
+    at_zero = build_core_friction(iea66, spec, 0.0)
+    assert at_zero.population.mu == 0.0
+    level = 8.0e4
+    at_level = build_core_friction(iea66, spec, level)
+    kx, ky = _short_walk(17)
+    kx, ky = kx - kx[0], ky - ky[0]
+    tension = np.full(kx.size, level)
+    tension[0] = 0.0
+    loads = core_load_history(iea66, at_zero, tension)
+    assert loads.core_mu_capstan == pytest.approx(at_level.mu_effective, rel=1e-12)
+    follow = core_friction_history(
+        at_zero, kx, ky, friction_model=law, loads=loads, nodes_per_pitch=NODES
+    )
+    direct = core_friction_history(
+        at_level, kx, ky, friction_model=law, nodes_per_pitch=NODES
+    )
+    assert follow.work.friction_J_per_m[-1] > 0.0
+    tolerance = 1e-12 if law == "direction_tied" else 2e-3
+    scale = _scale(direct)
+    assert np.max(np.abs(follow.moment_Nm - direct.moment_Nm)) <= tolerance * scale
+
+
 def test_compute_mkappa_core_loads_option(iea66):
     kappa, tension = _tension_history(n=300, amplitude=3e-3)
     follow = cx.compute_mkappa(
