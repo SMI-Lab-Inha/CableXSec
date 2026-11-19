@@ -57,6 +57,13 @@ give the axial-direction component, cos a times the wire stress (535.4 MPa in
 Table 6 is 555.1 MPa as a wire stress at pitch 1.8 m). CH-CR still checks the
 source's own form.
 
+**Yun shear stack cut at the support (registered 2026-11-19, before the
+runs).** The series shear stack of the armour stick coefficient ξ stops at
+the first helical layer inside and at the laid power cores; the rule, the
+re-evaluated rows and the held-out predictions are in the section "Yun shear
+stack cut at the support". Z-EI, Z-ID and the SV11 rows were used to find the
+defect and are diagnosed on, not independent.
+
 **Correction to the finite-support no-slip EI (after this register's runs).**
 The Yun shear coefficient of the finite-support no-slip EI counted an
 interstitial filler as a concentric shear layer in series with the armour,
@@ -570,6 +577,10 @@ input.
 
 ### Results against the registered targets
 
+Z-EI and Z-ID were used to find the shear-stack defect (section "Yun shear
+stack cut at the support"): for that rule they are diagnosed on, not
+independent.
+
 `python validation/scripts/check_zeidan2025.py` (one thread, about 30 min;
 the two registered rows run in the validation report).
 
@@ -633,6 +644,113 @@ full accounting; (ii) in the diagnostic the full accounting and the armour
 law have the same mean absolute work error over 30, 50 and 60 mm (8.3 % both);
 (iii) S0 holds: without clamping or tension the cores carry no moment. Rule
 (i) fails, so the law stays off by default.
+
+## Yun shear stack cut at the support (registered before the runs)
+
+Registered on 2026-11-19 in a commit that changes no code, before the rule
+below was evaluated on any validation row. The rule was found on Z-EI and
+SV11 (sections above), so those rows are **diagnosed on, not independent**
+tests of it.
+
+**The defect.** `xi_for_layer` ([Yun2020]) built the series shear stack of a
+helical layer from every cylindrical and offset-core layer listed inside it
+(interstitial fillers and modulus-less materials excepted). On a cable with
+laid cores it counted the conductor screens, insulation and core sheath of
+the offset cores as if they sheared in series under the armour (Zeidan
+2025: the 8.75 mm EPR gives ξ 0.009 and 0.016). On a flexible pipe the stack
+of a tensile armour ran through the steel pressure armour into the pressure
+sheath under it (Sævik 2011: the 8.7 mm sheath is about 85 % of the stack
+compliance, ξ 0.52).
+
+**The rule.** For helical layer L, walk inward from L. Each concentric
+cylindrical layer with an isotropic modulus and a positive thickness adds
+`t / (G b)` to the series stack; an interstitial filler, which lies beside
+the cores, is still skipped, and a shell layer is still not counted. The walk
+stops at the first helical layer inside L, which is the support, and at the
+laid power cores: the core bundle is the support, so no layer of an offset
+core is ever in the stack. The concentric layers of a single core on the
+cable axis (`n_cores: 1` at zero offset) are concentric layers and stay in
+the stack.
+
+**Physical basis.** A stuck wire follows the plane-section strain of the
+surface it bears on, less the shear lag of the layers between them. A steel
+helical layer inside L is such a surface: its radial and shear stiffness are
+orders of magnitude above those of the tapes, and the compliance under it
+enters its own ξ, not L's. Laid cores bear on the bedding in line contact
+and bend about their own axes; their insulation is loaded by the core's own
+bending and lay, not by a shear in series between the armour and the cable
+axis (the cores' own stick is the laid-core law, gap R1b, with its own
+stack). On a single core the insulation is concentric under the armour and
+does shear in series.
+
+**ξ before and after, closed form** (Yun's formula with the stacks named;
+no loop or beam solver run):
+
+| Cable | Layer: ξ before → after (stack after) | EI_max [kN·m²] before → after |
+| --- | --- | --- |
+| `zeidan2025.yaml` | inner 0.0091 → 0.8321 (bedding); outer 0.0160 → 1.0000 (none) | 12.0 → 311.1 |
+| `saevik2011.yaml` | pressure 0.1280 → 0.1280 (pressure sheath); inner tensile 0.5215 → 0.8811 (inner tape); outer tensile 0.5112 → 0.8908 (middle tape) | 5196 → 8872 |
+| `saevik2011_rect.yaml` | 0.1168 → 0.1168; 0.5791 → 0.9034; 0.5690 → 0.9115 | 5769 → 9085 |
+| `witz1996.yaml` | carcass 1 → 1; Zeta 0.0307 → 0.0307; inner tensile 0.1408 → 0.4223; outer tensile 0.1375 → 0.4655 | 32.9 → 103.6 |
+| `witz1996_rect.yaml` | 1 → 1; 0.0350 → 0.0350; 0.1704 → 0.4782; 0.1665 → 0.5219 | 40.0 → 116.8 |
+| `menard2023.yaml`, `menard2023_filled.yaml` | inner 0.2083 → 0.6857 (inner sheath); outer 0.2481 → 0.8882 (bedding) | 59.1 → 189.8 |
+| `iea_task49_66kv.yaml` | inner 0.7751 → 0.9344; outer 0.8567 → 0.9924 | 1391 → 1605 |
+| `iea_task49_66kv_300.yaml` | inner 0.7286 → 0.9166; outer 0.8247 → 0.9903 | 856 → 1031 |
+| `inter_array_three_core_33kv.yaml` | inner 0.1051 → 0.7841; outer 0.1233 → 1.0000 | 112 → 628 |
+| `inter_array_three_core_33kv_legacy_r2.yaml` | inner 0.1262 → 0.7841; outer 0.1475 → 1.0000 | 151 → 778 |
+| `inter_array_single_core_33kv.yaml` | inner 0.0248 → 0.0248 (concentric core layers); outer 0.0333 → 1.0000 | 2.20 → 33.0 |
+| `inter_array_single_core_33kv_legacy_r2.yaml` | inner 0.0305 → 0.0305; outer 0.0409 → 1.0000 | 2.88 → 38.0 |
+| `export_three_core_220kv.yaml` | inner 0.2613 → 0.9363; outer 0.2809 → 1.0000 | 3422 → 9394 |
+| `cigre_tb880_220kv.yaml` | inner 0.4692 → 0.4692 (single core: all concentric); outer 0.4957 → 0.9848 | 11425 → 17640 |
+| `thies2016_30kv.yaml` | armour 0.2083 → 0.8428 (bedding) | 105 → 322 |
+| `chae2023_coiling.yaml` | armour 0.5427 → 0.9633 (inner yarn) | 860 → 1314 |
+
+**Rows re-evaluated, bands unchanged.** No target, band, tolerance, input,
+friction coefficient or clamping value changes. Every scorecard row is
+regenerated; a row that fails reads FAIL.
+
+| Row | Role | Registered prediction (closed form; before → expected) |
+| --- | --- | --- |
+| Z-EI | diagnosed on, not independent | EI_max 12.0 → 311 kN·m² against the measured stick secant 141–240 kN·m²; EI_min unchanged: FAIL → PASS |
+| Z-ID | diagnosed on, not independent | stays FAIL (the earlier diagnostic with ξ 0.832 / 0.897 missed the moment range by 33–48 %) |
+| SV11-PLANE, SV11-GJ, SV11-SPLIT, SV11-REACH | diagnosed on, not independent | as the shear-stack sensitivity above: corrected median 1.62 → about 2.17 (3 of 14), sectional 1.00 → about 1.19 (12 of 14), GJ 1.80 → about 2.07 (sectional 1.24 → 1.27): SV11-PLANE and SV11-GJ stay FAIL |
+| WITZ-ID | **held out** (measured, gated, not used in the diagnosis) | see the prediction below: stays FAIL on the width |
+| BM1-loop, BM1-loop-uniform | **held out** (measured; stated, not gated) | see below: the registered 10 % work target turns from PASS to FAIL |
+| BM1-ID | **held out** (measured; stated, not gated) | see below: stays FAIL |
+| A11, slip-onset, xsec-K, M-rec, M-rec-3core, MX-scale, CF, CFW, MK-Tcyc | identities on cables whose ξ changes (the 33 kV single-core legacy cable, Ménard, 66 kV) | stay within their targets; A11 and slip-onset are not identities in ξ and may move |
+| TQ, TQ-SV, TQ-KL, TQ-UJ, CH-GJ, WITZ-EI, BM1, HU-3PB, HU-uniform, AW-DONG25, AW-ZT14, DAI20-KAPPA, DAI20-COULOMB, DAI18-*, the remaining Tier-1 and Tier-2 rows | ξ not on their path (torsion, full slip, conductor law, stand-alone wire, rig beam, spring-slider) | unchanged |
+
+**Held-out predictions, written before the run.** The estimate uses the
+closed-form ξ and EI_max above and an elastic–perfectly-plastic (Masing)
+loop: the stick part of a loop of half-span κ_a costs a fraction
+`c κ_c/κ_a` of its full-slip work, with `κ_c ≈ M_f/(EI_max − EI_min)`,
+`M_f` the model's friction moment (half the model width at κ = 0, or the peak
+moment less `EI_min κ_a`) and `c` from 1.0 to 1.2 (the factor that the ξ
+sweep of mechanism (d) of the Witz section implies).
+
+- **WITZ-ID** (Witz 1996). EI_max 32.9 → 103.6 kN·m². At 300 bar,
+  `M_f ≈ 678 N·m` and `κ_a ≈ 1.01 1/m`: `κ_c/κ_a` falls from 2.1 % to
+  0.65 %. Predicted: the 300-bar energy rises by 1–2 % (2682 → about
+  2710–2740 J/m, still inside ±15 % of 3125 J/m); the 0-bar energy by
+  0.5–1 % (1114 → about 1120–1125 J/m); the width at κ = 0, reached in full
+  slip, by less than 0.5 %, so p0 stays within 0.5 % of 1.071 MPa and the
+  300-bar width stays about −32 / −37 % outside its band. WITZ-ID stays FAIL.
+- **BM1-loop** (Ménard and Cartraud 2023, range (b), transferred inputs).
+  EI_max 59.1 → 189.8 kN·m². `M_f ≈ 541 − 357 = 184 N·m`, `κ_a = 0.10 1/m`:
+  `κ_c/κ_a` falls from 3.3 % to 1.0 %. Predicted: the work rises by 2–3 %
+  (67.8 → about 69.2–69.7 J/m, +11 to +12 % against 62.3 J/m), so the
+  registered 10 % target turns from PASS to FAIL; the ordered RMSE changes
+  by less than 0.5 points. BM1-loop-uniform moves the same way.
+- **BM1-ID.** The identified pressure on range (b) falls by about 2–3 %; the
+  half-amplitude ranges (a), (c), (d) (`κ_a = 0.05`) lose twice the stick
+  share, so their predicted work rises by 2–3 points against (b): (a) +26.0
+  → about +29 %, (c) +23.7 → about +27 %, (d) +12.9 → about +16 %; (e) and
+  (f) within 1 point. BM1-ID stays FAIL.
+
+**Reported tables.** The tables of `check_zeidan2025.py`,
+`check_saevik2011.py --sensitivity` and `check_core_friction.py` are
+regenerated with the rule; the tables of other one-off studies keep the
+values computed with the former stack and say so.
 
 ## Out and von Morgen (1997), frictionless slip bounds (OvM, Out89)
 
@@ -1281,6 +1399,10 @@ reproduce Sævik's Table 3 C/M (MM column) within 0.05 for 12 of 14 load
 cases. Harness `validation/scripts/check_saevik2011.py`; tests
 `tests/test_saevik2011_benchmark.py`. Targets were registered before any
 model output.
+
+SV11-PLANE, SV11-GJ, SV11-SPLIT and SV11-REACH were used to find the
+shear-stack defect (section "Yun shear stack cut at the support"): for that
+rule they are diagnosed on, not independent.
 
 **Mapping.** Tendons are area-equivalent round wires at the true mean radius
 (gap G1), so the solved radial route rejects the overlapping round wires and
