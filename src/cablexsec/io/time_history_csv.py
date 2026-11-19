@@ -20,7 +20,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from cablexsec.exceptions import CableSchemaError
-from cablexsec.io.series import LoadCaseSeries
+from cablexsec.io.series import LoadCaseSeries, parse_number
 from cablexsec.mechanics.section_conventions import rotation_to_strain_curvature
 from cablexsec.provenance import Provenance
 
@@ -315,7 +315,7 @@ def _columns_to_arrays(
     for line, row in rows:
         for key, col in idx.items():
             try:
-                out[key].append(float(row[col]))
+                out[key].append(parse_number(row[col]))
             except ValueError as exc:
                 raise CableSchemaError(
                     f"{source}: line {line} column {col + 1} is not numeric: "

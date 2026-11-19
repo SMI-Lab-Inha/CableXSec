@@ -144,6 +144,12 @@ class SeaStateRun:
             raise CableInputError("run names must be nonempty and contain no slash")
         object.__setattr__(self, "out_root", Path(self.out_root))
         object.__setattr__(self, "deck", Path(self.deck))
+        if (
+            isinstance(self.line_id, bool)
+            or not isinstance(self.line_id, int)
+            or self.line_id < 1
+        ):
+            raise CableInputError(f"{self.name}: line_id must be a positive integer")
         if not math.isfinite(self.probability) or not 0.0 <= self.probability <= 1.0:
             raise CableInputError(f"{self.name}: probability must be in [0, 1]")
         if not math.isfinite(self.start_time_s) or self.start_time_s < 0:
@@ -233,6 +239,31 @@ class SeaStateBatchOptions:
             or not 1 <= self.workers <= MAX_WORKERS
         ):
             raise CableInputError(f"workers must be an integer in [1, {MAX_WORKERS}]")
+        # The fatigue and long-term options are checked here, before any run is
+        # read, as compute_fatigue and compute_long_term_fatigue check them.
+        for name, count, low in (
+            ("n_fibres", self.n_fibres, 4),
+            ("chunk_rows", self.chunk_rows, 16),
+        ):
+            if isinstance(count, bool) or not isinstance(count, int) or count < low:
+                raise CableInputError(f"{name} must be an integer of at least {low}")
+        for name, value in (
+            ("exposure_years", self.exposure_years),
+            ("design_fatigue_factor", self.design_fatigue_factor),
+        ):
+            if isinstance(value, bool) or not (
+                isinstance(value, int | float) and math.isfinite(value) and value > 0
+            ):
+                raise CableInputError(f"{name} must be finite and positive")
+        if self.design_fatigue_factor < 1:
+            raise CableInputError("design_fatigue_factor must be at least one")
+        if self.mu is not None and (
+            isinstance(self.mu, bool)
+            or not isinstance(self.mu, int | float)
+            or not math.isfinite(self.mu)
+            or self.mu < 0
+        ):
+            raise CableInputError("mu must be finite and >= 0")
         if self.tension_basis not in ("auto", "true", "effective"):
             raise CableInputError("tension_basis must be auto, true or effective")
         if self.external_diameter_m is not None and not (

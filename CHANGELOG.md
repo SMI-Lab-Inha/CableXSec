@@ -430,6 +430,23 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Fixed
 
+- Adversarial inputs of the public API (`tests/test_robustness_inputs.py`): a friction
+  coefficient so large that the capstan factor overflows (`mu = 1e6`) stopped the reference
+  return map ("wire history exceeds floating-point range") while the compiled kernels held the
+  wires stuck; both paths now give the stuck answer, that of `mu = 1`, and so does
+  `compute_mkappa`, which raised on both. The critical fibre, wire
+  and layer of `compute_fatigue` are the first of the values within 1e-12 of the largest, so a
+  round-off difference between the kernel paths no longer moves them (63 deg on one, 243 deg on
+  the other, at equal damage). `compute_thermal` refuses a negative current, temperatures below
+  absolute zero and a core count that is not a positive integer (`n_cores = 0` divided by zero);
+  `export_bending_law` refuses a non-integer `n_points` (was numpy's `TypeError`). A layer's
+  schema error names the layer, its index and the file instead of the union of layer kinds.
+  `read_series_csv` refuses a file that is not UTF-8 with `CableSchemaError` (was
+  `UnicodeDecodeError`) and skips rows of spaces or separators only; both CSV readers refuse a
+  cell that is not a decimal number (`float` alone took `1_0` as 10). `SeaStateBatchOptions`
+  checks `n_fibres`, `chunk_rows`, `mu`, `exposure_years` and `design_fatigue_factor` before any
+  run is read, and `SeaStateRun` its `line_id`.
+
 - `SectionLaw.from_cable` reads the cable's own materials (its `materials:` block) when the law
   is built and every time it is evaluated. Outside `simulate_bending_test` it read the library
   instead, and a layer whose material the library lacks silently dropped out of the stiffness

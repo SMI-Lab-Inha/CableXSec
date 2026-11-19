@@ -86,6 +86,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import math
+import numbers
 import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -923,8 +924,14 @@ def export_bending_law(
         raise CableInputError("tensions_N must rise strictly")
     if not (math.isfinite(kappa_max_1_m) and kappa_max_1_m > 0):
         raise CableInputError("kappa_max_1_m must be finite and positive")
-    if n_points < 3:
-        raise CableInputError("n_points must be at least 3")
+    if (
+        isinstance(n_points, bool)
+        or not isinstance(n_points, numbers.Integral)
+        or n_points < 3
+    ):
+        raise CableInputError(
+            f"n_points must be an integer of at least 3: {n_points!r}"
+        )
     for name in (
         "tension_N",
         "phi_bend",
