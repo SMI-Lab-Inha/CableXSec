@@ -220,10 +220,12 @@ def test_series_csv_reads_line_ends_bom_and_blank_rows(tmp_path, data):
         ((_HEAD + _ROWS + "0.6,1_0,0,1e5\n").encode(), "line 7"),
         ((_HEAD + _ROWS + "0.6,1e-2,0\n").encode(), "line 7"),
         ((_HEAD + _ROWS + "0.6,1e-2,0,1e5,7\n").encode(), "line 7: more cells"),
+        ((_HEAD + _ROWS + '0.6,"1\n0",0,1e5\n').encode(), "expected numeric"),
     ],
 )
 def test_series_csv_errors_name_the_file(tmp_path, data, match):
-    """A file that is not UTF-8 raised UnicodeDecodeError."""
+    """A file that is not UTF-8 raised UnicodeDecodeError; a quoted cell with
+    a newline must not be read with its parts joined (1 and 0 as 10)."""
     path = tmp_path / "s.csv"
     path.write_bytes(data)
     with pytest.raises(CableSchemaError, match=match):
@@ -271,3 +273,11 @@ def test_very_large_mu_gives_the_stuck_moment_curvature_loop():
     np.testing.assert_allclose(
         huge.moment_Nm, stuck.moment_Nm, rtol=0, atol=1e-12 * scale
     )
+
+
+def test_time_history_csv_keeps_a_quoted_newline(tmp_path):
+    """Split lines joined the parts of a quoted cell holding a newline."""
+    path = tmp_path / "th.csv"
+    path.write_bytes(b'Time,x curvature,Wall tension\n0,0.01,100\n0.1,"1\n0",100\n')
+    with pytest.raises(CableSchemaError, match="column 2 is not numeric"):
+        cx.read_time_history_csv(path, curvature_y_col=None, tension_kind="true")

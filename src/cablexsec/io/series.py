@@ -11,6 +11,7 @@ equilibrium are separate operations, not inferred from an unlabelled column.
 from __future__ import annotations
 
 import csv
+import io
 import re
 from dataclasses import dataclass, fields, replace
 from pathlib import Path
@@ -261,7 +262,9 @@ def read_series_csv(path: str | Path) -> LoadCaseSeries:
         raise CableSchemaError(
             f"series CSV {p.name} is not UTF-8 text (write_series_csv writes UTF-8)"
         ) from None
-    reader = csv.DictReader(text.splitlines())
+    # A newline-preserving stream: a quoted cell keeps an embedded newline
+    # (and is refused), where split lines would join its parts.
+    reader = csv.DictReader(io.StringIO(text, newline=""))
     fields = set(reader.fieldnames or [])
     if len(fields) != len(reader.fieldnames or []):
         raise CableSchemaError(

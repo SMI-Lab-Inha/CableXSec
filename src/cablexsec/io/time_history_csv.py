@@ -12,6 +12,7 @@ and ``N``.
 from __future__ import annotations
 
 import csv
+import io
 import re
 from pathlib import Path
 from typing import Literal, cast
@@ -216,7 +217,9 @@ def _read_csv_rows(path: Path) -> tuple[list[tuple[int, list[str]]], list[str]]:
         raise CableSchemaError(
             f"{path.name}: not a text CSV (neither UTF-8 nor Windows-1252)."
         )
-    reader = csv.reader(text.splitlines())
+    # A newline-preserving stream: a quoted cell keeps an embedded newline
+    # (and is refused), where split lines would join its parts.
+    reader = csv.reader(io.StringIO(text, newline=""))
     all_rows = [(reader.line_num, r) for r in reader if any(cell.strip() for cell in r)]
     if not all_rows:
         raise CableSchemaError(f"{path.name}: empty CSV.")
