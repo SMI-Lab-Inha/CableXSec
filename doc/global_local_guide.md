@@ -347,7 +347,12 @@ result.sections["sag"].long_term.annual_damage, result.sections["sag"].life_year
   mismatch stops the batch unless `allow_property_mismatch=True` is
   declared, and the comparison is written to the manifest either way.
 - Workers: `workers` processes (at most `MAX_WORKERS = 8`), one numerical
-  thread each, spawned; results do not depend on the worker count.
+  thread each, spawned; results do not depend on the worker count. Each
+  worker keeps its compiled kernels in a cache folder of its own, `slot-<i>`
+  under `cablexsec/numba-batch` in the user cache directory (set
+  `CABLEXSEC_BATCH_CACHE_DIR` to move it), so later batches start warm; a
+  slot is held by one worker at a time, and deleting the folder only costs a
+  recompilation.
 - Output folder (must not exist): `manifest.json` (SHA-256 of every CableDyn
   file and deck, the cable definition and YAML file, options, property check,
   reader checks per run, results, and `inputs_sha256` over all of them);

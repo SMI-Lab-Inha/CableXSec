@@ -39,10 +39,16 @@ and section named.
 Parallel execution
 ------------------
 Runs are processed in worker processes (``workers``, at most
-:data:`MAX_WORKERS`), each limited to one numerical thread. Results do not
-depend on the worker count. The output directory, if given, must not exist:
-results are written once, with a manifest of SHA-256 digests of every input
-file, the cable definition and the options.
+:data:`MAX_WORKERS`), each limited to one numerical thread. Each worker keeps
+its compiled kernels in a numba cache of its own: a slot directory
+``slot-<i>`` under ``cablexsec/numba-batch`` in the user cache directory, or
+under ``CABLEXSEC_BATCH_CACHE_DIR`` when that is set, which later batches
+reuse. Each worker locks its slot itself for as long as it runs, so no two
+processes write one cache; a batch beside another takes the next free slots,
+and a worker without one gets a temporary cache. Results do not depend on the
+worker count. The output directory, if given, must not exist: results are
+written once, with a manifest of SHA-256 digests of every input file, the
+cable definition and the options.
 """
 
 from __future__ import annotations
@@ -54,9 +60,12 @@ import os
 import pickle
 import platform
 import sys
+import tempfile
+import threading
 import warnings
-from collections.abc import Mapping, Sequence
-from concurrent.futures import ProcessPoolExecutor
+from collections.abc import Iterator, Mapping, Sequence
+from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from types import MappingProxyType
@@ -109,6 +118,11 @@ _THREAD_VARIABLES = (
     "NUMBA_NUM_THREADS",
     "NUMEXPR_NUM_THREADS",
 )
+_NUMBA_CACHE_VARIABLE = "NUMBA_CACHE_DIR"
+#: Overrides the folder of the persistent worker caches (_batch_cache_directory).
+_BATCH_CACHE_VARIABLE = "CABLEXSEC_BATCH_CACHE_DIR"
+#: Persistent worker cache slots; a worker beyond them gets a temporary cache.
+_CACHE_SLOTS = 2 * MAX_WORKERS
 
 __all__ = [
     "MAX_WORKERS",
@@ -466,6 +480,193 @@ def _fretting_summary(result: Any) -> dict[str, dict[str, Any]]:
             "D_plain_per_year": np.asarray(face.D_plain_per_year).tolist(),
         }
     return out
+
+
+def _batch_cache_directory() -> Path:
+    """Folder of the persistent numba caches of the batch workers.
+
+    ``CABLEXSEC_BATCH_CACHE_DIR`` when set; otherwise ``cablexsec/numba-batch``
+    in the user cache directory (``%LOCALAPPDATA%`` on Windows,
+    ``~/Library/Caches`` on macOS, ``$XDG_CACHE_HOME`` or ``~/.cache``
+    elsewhere). Deleting it only costs the workers a recompilation.
+    """
+    override = os.environ.get(_BATCH_CACHE_VARIABLE)
+    if override:
+        return Path(override)
+    if sys.platform == "win32":
+        local = os.environ.get("LOCALAPPDATA")
+        base = Path(local) if local else Path.home() / "AppData" / "Local"
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Caches"
+    else:
+        xdg = os.environ.get("XDG_CACHE_HOME")
+        base = Path(xdg) if xdg else Path.home() / ".cache"
+    return base / "cablexsec" / "numba-batch"
+
+
+def _lock(handle: Any) -> bool:
+    """Take an exclusive, non-blocking lock on an open file; False if held."""
+    try:
+        if sys.platform == "win32":
+            import msvcrt  # noqa: PLC0415
+
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl  # noqa: PLC0415
+
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return False
+    return True
+
+
+def _unlock(handle: Any) -> None:
+    if sys.platform == "win32":
+        import msvcrt  # noqa: PLC0415
+
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+    else:
+        import fcntl  # noqa: PLC0415
+
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+def _slot_is_free(path: Path) -> bool:
+    """True if no process holds the slot lock ``path`` (it is not kept)."""
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "a+b") as handle:
+            if not _lock(handle):
+                return False
+            _unlock(handle)
+    except OSError:
+        return False
+    return True
+
+
+#: The slot lock a worker process holds for its lifetime (see _claim_slot).
+_SLOT_HANDLE: Any = None
+#: Serialises the NUMBA_CACHE_DIR change around a worker start (one per process).
+_START_LOCK = threading.Lock()
+
+
+def _claim_slot(path: str) -> bool:
+    """Worker side: lock the slot ``path`` for the rest of this process.
+
+    The worker, not the caller, holds the lock, so the slot stays taken while
+    the worker can still write its cache, even if the caller has ended; the
+    operating system releases it when the worker ends.
+    """
+    global _SLOT_HANDLE
+    try:
+        handle = open(path, "a+b")  # noqa: SIM115 - held for the process
+    except OSError:
+        return False
+    if not _lock(handle):
+        handle.close()
+        return False
+    _SLOT_HANDLE = handle
+    return True
+
+
+def _start_worker(cache: Path) -> ProcessPoolExecutor:
+    """A one-process spawn pool whose worker writes the numba cache ``cache``.
+
+    The worker is started while ``NUMBA_CACHE_DIR`` names ``cache`` and
+    inherits it before numba is imported; the caller's value is restored. The
+    whole change is serialised, so that workers started from several threads
+    at once each inherit their own directory.
+    """
+    import multiprocessing  # noqa: PLC0415
+
+    pool = ProcessPoolExecutor(
+        max_workers=1,
+        mp_context=multiprocessing.get_context("spawn"),
+        initializer=_limit_threads,
+    )
+    with _START_LOCK:
+        previous = os.environ.get(_NUMBA_CACHE_VARIABLE)
+        os.environ[_NUMBA_CACHE_VARIABLE] = str(cache)
+        try:
+            pool.submit(os.getpid).result()  # the worker now runs with it
+        except BaseException:
+            pool.shutdown(cancel_futures=True)
+            raise
+        finally:
+            if previous is None:
+                os.environ.pop(_NUMBA_CACHE_VARIABLE, None)
+            else:
+                os.environ[_NUMBA_CACHE_VARIABLE] = previous
+    return pool
+
+
+@contextmanager
+def _workers(count: int) -> Iterator[list[ProcessPoolExecutor]]:
+    """``count`` worker pools, each writing a numba cache no other process writes.
+
+    numba numbers a new on-disk cache entry from the index it last read and
+    saves the index before the data, so two processes that compile one kernel
+    for different signatures at the same time can both take the same data file
+    and leave the index pointing at the other's machine code. A worker takes
+    the next free slot of :func:`_batch_cache_directory` and locks it itself
+    before it runs anything (:func:`_claim_slot`); if another process won the
+    slot meanwhile, the worker is replaced and the next slot tried. The slots
+    are kept for later batches; a worker without a free slot gets a temporary
+    cache, removed after the batch.
+    """
+    root = _batch_cache_directory()
+    pools: list[ProcessPoolExecutor] = []
+    scratch: tempfile.TemporaryDirectory[str] | None = None
+    try:
+        for slot in range(_CACHE_SLOTS):
+            if len(pools) == count:
+                break
+            lock = root / f"slot-{slot}.lock"
+            if not _slot_is_free(lock):
+                continue
+            pool = _start_worker(root / f"slot-{slot}")
+            pools.append(pool)
+            if not pool.submit(_claim_slot, str(lock)).result():
+                pools.pop().shutdown()
+        if len(pools) < count:
+            scratch = tempfile.TemporaryDirectory(
+                prefix="cablexsec-batch-numba-", ignore_cleanup_errors=True
+            )
+            for index in range(count - len(pools)):
+                pools.append(_start_worker(Path(scratch.name) / f"worker-{index}"))
+        yield pools
+    finally:
+        for pool in pools:
+            pool.shutdown(cancel_futures=True)
+        if scratch is not None:
+            scratch.cleanup()
+
+
+def _evaluate_in_pools(
+    tasks: Sequence[_Task], pools: Sequence[ProcessPoolExecutor]
+) -> list[dict[str, Any]]:
+    """Outcomes of ``tasks`` in order; each pool takes the next task when free."""
+    outcomes: dict[int, dict[str, Any]] = {}
+    queue = iter(enumerate(tasks))
+    pending: dict[Future[dict[str, Any]], tuple[int, ProcessPoolExecutor]] = {}
+
+    def feed(pool: ProcessPoolExecutor) -> None:
+        item = next(queue, None)
+        if item is not None:
+            index, task = item
+            pending[pool.submit(_evaluate_in_worker, task)] = (index, pool)
+
+    for pool in pools:
+        feed(pool)
+    while pending:
+        done, _ = wait(pending, return_when=FIRST_COMPLETED)
+        for future in done:
+            index, pool = pending.pop(future)
+            outcomes[index] = future.result()
+            feed(pool)
+    return [outcomes[index] for index in range(len(tasks))]
 
 
 def _evaluate_in_worker(task: _Task) -> dict[str, Any]:
@@ -979,20 +1180,13 @@ def run_sea_state_batch(
     if opts.workers == 1 or len(tasks) == 1:
         outcomes = [_evaluate(task) for task in tasks]
     else:
-        import multiprocessing  # noqa: PLC0415
-
-        context = multiprocessing.get_context("spawn")
         saved = {name: os.environ.get(name) for name in _THREAD_VARIABLES}
         try:
             # Spawned workers inherit one-thread settings before any import.
             for name in _THREAD_VARIABLES:
                 os.environ[name] = "1"
-            with ProcessPoolExecutor(
-                max_workers=min(opts.workers, len(tasks)),
-                mp_context=context,
-                initializer=_limit_threads,
-            ) as pool:
-                outcomes = list(pool.map(_evaluate_in_worker, tasks))
+            with _workers(min(opts.workers, len(tasks))) as pools:
+                outcomes = _evaluate_in_pools(tasks, pools)
         finally:
             for name, value in saved.items():
                 if value is None:
