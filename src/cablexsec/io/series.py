@@ -307,8 +307,16 @@ def read_series_csv(path: str | Path) -> LoadCaseSeries:
             f"found {reader.fieldnames}."
         )
     for row in reader:
-        if not any((value or "").strip() for value in row.values()):
+        # DictReader keeps the cells beyond the header as a list under None.
+        surplus = row.pop(None, None) or []
+        cells = [*row.values(), *surplus]
+        if not any((value or "").strip() for value in cells):
             continue  # a blank row (spaces or separators only)
+        if any(value.strip() for value in surplus):
+            raise CableSchemaError(
+                f"series CSV {p.name}, line {reader.line_num}: more cells than the "
+                f"{len(reader.fieldnames or [])} columns of the header"
+            )
         try:
             times.append(parse_number(row["time_s"]))
             kx.append(parse_number(row["curvature_x_1_m"]))

@@ -201,6 +201,7 @@ _ROWS = "".join(f"{0.1 * k:.6e},{0.01 * k:.6e},0,1.0e5\n" for k in range(5))
         (_HEAD + _ROWS).replace("\n", "\r\n").encode(),
         b"\xef\xbb\xbf" + (_HEAD + _ROWS).encode(),
         (_HEAD + _ROWS + "\n , ,\n\n").encode(),
+        (_HEAD + _ROWS + ",,,,,,\n").encode(),  # more blank cells than columns
         (_HEAD + _ROWS.replace("e", "E")).encode(),
     ],
 )
@@ -218,6 +219,7 @@ def test_series_csv_reads_line_ends_bom_and_blank_rows(tmp_path, data):
         ("timé,x\n1,2\n".encode("latin-1"), "not UTF-8 text"),
         ((_HEAD + _ROWS + "0.6,1_0,0,1e5\n").encode(), "line 7"),
         ((_HEAD + _ROWS + "0.6,1e-2,0\n").encode(), "line 7"),
+        ((_HEAD + _ROWS + "0.6,1e-2,0,1e5,7\n").encode(), "line 7: more cells"),
     ],
 )
 def test_series_csv_errors_name_the_file(tmp_path, data, match):
