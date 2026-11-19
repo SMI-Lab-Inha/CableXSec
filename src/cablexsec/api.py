@@ -49,6 +49,7 @@ from numpy.typing import NDArray
 from cablexsec.analysis.capacity import (
     BirdcageDetail,
     CapacityResult,
+    _armour_layers,
     birdcage_buckling_detail,
     compute_capacity,
     wire_yield_curvature,
@@ -949,32 +950,42 @@ def compute_mkappa(
 
     # Soft guard: the linear-elastic wire-stress assumption holds below the
     # armour yield curvature (where the capacity envelope's wire-yield mechanism
-    # is reached). Beyond it the elastic M-κ is unconservative.
-    try:
-        kappa_yield = wire_yield_curvature(
-            cable,
-            float(np.max(tension_history))
-            if tension_history is not None
-            else tension_N
-            if section_state is None
-            else 0.0,
-            mu=mu,
-            section_state=section_state,
-            contact_model=contact_model,
-            phi_bend=phi_bend,
-        )
-        if math.isfinite(kappa_yield) and kappa_yield > 0.0:
-            check_range(
-                float(np.max(np.abs(kappa))),
-                ValidatedRange(
-                    "peak |curvature| [1/m]",
-                    0.0,
-                    kappa_yield,
-                    "armour wire-yield curvature (capacity wire-yield mechanism)",
-                ),
+    # is reached). Beyond it the elastic M-κ is unconservative. A cable without
+    # an armour layer of published yield stress has no bound to check; a bound
+    # that cannot be evaluated for another reason is said so, not skipped.
+    if _armour_layers(cable):
+        try:
+            kappa_yield = wire_yield_curvature(
+                cable,
+                float(np.max(tension_history))
+                if tension_history is not None
+                else tension_N
+                if section_state is None
+                else 0.0,
+                mu=mu,
+                section_state=section_state,
+                contact_model=contact_model,
+                phi_bend=phi_bend,
             )
-    except (ValueError, KeyError):
-        pass  # no yield-strength armour: no curvature bound to check
+        except (CableSchemaError, ValueError, KeyError) as error:
+            warnings.warn(
+                "the armour wire-yield curvature, the bound of the elastic M-kappa "
+                f"law, could not be evaluated ({error}); the curvature history is "
+                "not checked against it",
+                ExtrapolationWarning,
+                stacklevel=3,
+            )
+        else:
+            if math.isfinite(kappa_yield) and kappa_yield > 0.0:
+                check_range(
+                    float(np.max(np.abs(kappa))),
+                    ValidatedRange(
+                        "peak |curvature| [1/m]",
+                        0.0,
+                        kappa_yield,
+                        "armour wire-yield curvature (capacity wire-yield mechanism)",
+                    ),
+                )
 
     run = mkappa_law.run(
         kappa,

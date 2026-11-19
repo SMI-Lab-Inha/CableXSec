@@ -430,6 +430,22 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Fixed
 
+- Fallbacks are an error or a warning, never silent (`tests/test_silent_fallbacks.py`).
+  `fretting_regime.range_at_cycles` bisected on [1e-6, 1e6] MPa and returned the bound when the
+  life lay outside it (1e12 Pa for a life shorter than the curve's at 1e6 MPa, 1 Pa for a NaN
+  life); it refuses a life that is not finite and positive or outside its bracket. The
+  wire-yield guard of `compute_mkappa` swallowed every `ValueError`, so a bound that could not
+  be evaluated left no trace; it now warns (`ExtrapolationWarning`), and a cable without a
+  yield-stressed armour layer, which has no bound, is skipped as before. The bending-test
+  inversion returned its closest cached point as converged when it had no new point to try; it
+  raises `CableSolverError` with the miss. A kinematic history whose laid cores have no
+  friction law held them to the cable axis silently; it warns and records it in the
+  provenance.
+- `compute_sheave` and the rig-test M-kappa loops ran their internal calls under
+  `warnings.simplefilter("ignore")`, dropping a wire-yield or clamping warning about the
+  caller's own curvature; each distinct warning is now relayed once
+  (`provenance.relayed_warnings`).
+
 - `SectionLaw.from_cable` reads the cable's own materials (its `materials:` block) when the law
   is built and every time it is evaluated. Outside `simulate_bending_test` it read the library
   instead, and a layer whose material the library lacks silently dropped out of the stiffness

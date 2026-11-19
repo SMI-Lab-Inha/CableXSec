@@ -36,7 +36,8 @@ from __future__ import annotations
 
 import math
 import warnings
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import cast
 
@@ -57,6 +58,7 @@ __all__ = [
     "UnvalidatedModelWarning",
     "ValidatedRange",
     "check_range",
+    "relayed_warnings",
     "require_finite",
 ]
 
@@ -242,6 +244,25 @@ def check_range(value: float, vr: ValidatedRange, *, stacklevel: int = 3) -> boo
         stacklevel=stacklevel,
     )
     return False
+
+
+@contextmanager
+def relayed_warnings(*, stacklevel: int = 3) -> Iterator[None]:
+    """Gather the warnings of internal calls and pass each distinct one on once.
+
+    For a function that evaluates other entry points on its own sweeps: their
+    warnings (a curvature beyond the wire-yield bound, an undeclared clamping
+    state) concern the caller's input too, so they are relayed, not silenced.
+    """
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        yield
+    seen: set[tuple[type[Warning], str]] = set()
+    for item in caught:
+        key = (item.category, str(item.message))
+        if key not in seen:
+            seen.add(key)
+            warnings.warn(str(item.message), item.category, stacklevel=stacklevel)
 
 
 def require_finite(value: float | Iterable[float], name: str) -> None:
