@@ -1920,6 +1920,56 @@ brackets:
   stresses of 238–341 MPa (above), a ±18 % inconsistency between the two
   plots of one test.
 
+### Measured quantity and normaliser (registered 2026-11-19, before the runs)
+
+Registered in a commit that changes no code, before the Lukassen records
+below were digitised and before any of the rows was computed in this
+register. Every row is reported, not gated; no target, band or gated input
+of SV11-PLANE or SV11-GJ changes.
+
+**Why.** A third source of the same test is held: T. V. Lukassen, PhD thesis,
+Technical University of Denmark (2019), Ch. 2, pp. 10–14, Figs 2.5–2.11. It
+models LC 14 (500 kN, 34 MPa, ±8°) and plots, measured (OMS, blue) and
+computed (FE, red; caption colours), the stresses σa and σb on **both narrow
+sides** of the instrumented tendon at stations 3.1–3.5; the sensors have a
+40 mm gauge length (p. 11), and the computed stress varies so strongly along
+the wire that the comparison is "very sensitive to the precision of the OMS
+strain sensor positions" (p. 12). SV11-PLANE and SV11-GJ compare the
+predicted **axial** range with measured values whose quantity neither paper
+states (Sævik: "normalized longitudinal stress range", normalised "with
+respect to the static stress level", Sec. 7.4, one side lost at 2.1–2.5,
+p. 2289; Gjøsteen et al.: "dynamic stress variation", elastic bending visible
+at 3.1, Sec. 4.6.3).
+
+**Already seen (stated so that nothing below is a prediction).** An audit on
+2026-11-19 (before this registration, with an emulation of the support-cut
+stack that reproduces its registered values) read Lukassen's figures by eye
+from a render (±10 MPa) and computed SV11-SUB and SV11-NORM:
+
+- Lukassen, measured, by eye: station 3.1 σa about 95, σb about 185 MPa
+  (range); 3.3 σa about 95, σb about 65; 3.4 σa about 107, σb about 35; 3.5
+  σa about 55, σb about 75; Gjøsteen et al.'s ranges (186.6, 76.7, 41.4,
+  77.5 MPa at 3.1, 3.3, 3.4, 3.5) follow σb.
+- SV11-SUB: without 2.1/2.5 median R 1.89 corrected (3 of 14), 1.12
+  sectional (12 of 14); pairs by geometric mean 2.22 (3) and 1.22 (12);
+  SV11-GJ at 3.1 and 3.5 only 1.51 corrected, 1.33 sectional.
+- SV11-NORM: median R 2.06 corrected (3 of 14), 1.07 sectional (13 of 14).
+
+**Rows.**
+
+| ID | Quantity | Reduction | Target | Gated |
+| --- | --- | --- | --- | --- |
+| SV11-LK | Lukassen Figs 2.7–2.11, LC 14 ±8°, stations 3.1–3.5: measured axial range against the predicted axial range (sectional and termination-corrected, the SV11-GJ chain at ±8°, station azimuths 0, 45, 90, 135, 180°); measured larger-side range against the predicted larger single-side range | measured series = the blue (OMS) polylines of the native PDF paths, read in their stored order; axial = (σa + σb)/2 with σa and σb paired at equal θ on the same direction of rotation (linear interpolation along each monotonic leg); range = max − min over the record from its first reversal on; reported per station and as the mean ratio over the bending-plane stations 3.1 and 3.5 and over all five | none | no |
+| SV11-SIDE | Which quantity Sævik normalised: at LC 14, the static stress implied at 3.1–3.5 by Lukassen's measured range (axial, σa, σb, larger side) divided by Sævik's normalised value (Fig. 21a) | five implied values per reading, their coefficient of variation, against the model static stress at 500 kN and 34 MPa; Sævik's LC 14 is a 15° range, Lukassen's ±8° | none | no |
+| SV11-SUB | SV11-PLANE metric (a) without the one-sided stations 2.1 and 2.5; (b) with each coincident pair (1.5/2.1, 2.5/3.1, 3.5/4.1) replaced by the geometric mean of its two measured values; SV11-GJ metric (c) at 3.1 and 3.5 only | registered chain unchanged; only the measured set or values of the metric change | none | no |
+| SV11-NORM | **Hypothesis**: Sævik normalised every load case by one static stress level, taken as that of 500 kN and 34 MPa (10 of the 14 load cases), instead of each case's own | SV11-PLANE metric with the predicted ranges divided by that one static stress | none | no |
+
+SV11-LK is the only comparison of this test in which the measured and the
+predicted quantity are the same (axial against axial); it can test the
+axial prediction at five stations of one load case, not the friction law
+over the programme. SV11-NORM is labelled a hypothesis in every place it is
+reported: neither paper prints the normaliser.
+
 ## Measured wire-on-tape friction loops (DAI18-DIG, DAI18-RS, DAI18-T1, DAI18-T3)
 
 Source: Dai, Sævik and Ye, "An anisotropic friction model in non-bonded
