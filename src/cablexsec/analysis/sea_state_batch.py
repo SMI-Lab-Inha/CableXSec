@@ -39,10 +39,14 @@ and section named.
 Parallel execution
 ------------------
 Runs are processed in worker processes (``workers``, at most
-:data:`MAX_WORKERS`), each limited to one numerical thread and writing its own
-numba cache directory for the batch, so concurrent workers never share one
-on-disk kernel cache; each compiles the kernels it uses. Results do not
-depend on the worker count. The output directory, if given, must not exist:
+:data:`MAX_WORKERS`), each limited to one numerical thread. Each worker keeps
+its compiled kernels in a numba cache of its own: a slot directory
+``slot-<i>`` under ``cablexsec/numba-batch`` in the user cache directory, or
+under ``CABLEXSEC_BATCH_CACHE_DIR`` when that is set, which later batches
+reuse. A slot is locked while its worker runs, so no two processes write one
+cache; a batch beside another takes the next free slots, and a worker
+without one gets a temporary cache. Results do not depend on the worker
+count. The output directory, if given, must not exist:
 results are written once, with a manifest of SHA-256 digests of every input
 file, the cable definition and the options.
 """
@@ -58,8 +62,9 @@ import platform
 import sys
 import tempfile
 import warnings
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
+from contextlib import ExitStack, contextmanager
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from types import MappingProxyType
@@ -113,6 +118,10 @@ _THREAD_VARIABLES = (
     "NUMEXPR_NUM_THREADS",
 )
 _NUMBA_CACHE_VARIABLE = "NUMBA_CACHE_DIR"
+#: Overrides the folder of the persistent worker caches (_batch_cache_directory).
+_BATCH_CACHE_VARIABLE = "CABLEXSEC_BATCH_CACHE_DIR"
+#: Persistent worker cache slots; a worker beyond them gets a temporary cache.
+_CACHE_SLOTS = 2 * MAX_WORKERS
 
 __all__ = [
     "MAX_WORKERS",
@@ -472,15 +481,114 @@ def _fretting_summary(result: Any) -> dict[str, dict[str, Any]]:
     return out
 
 
-def _worker_pools(count: int, cache_root: Path) -> list[ProcessPoolExecutor]:
-    """``count`` one-process spawn pools, each worker with its own numba cache.
+def _batch_cache_directory() -> Path:
+    """Folder of the persistent numba caches of the batch workers.
+
+    ``CABLEXSEC_BATCH_CACHE_DIR`` when set; otherwise ``cablexsec/numba-batch``
+    in the user cache directory (``%LOCALAPPDATA%`` on Windows,
+    ``~/Library/Caches`` on macOS, ``$XDG_CACHE_HOME`` or ``~/.cache``
+    elsewhere). Deleting it only costs the workers a recompilation.
+    """
+    override = os.environ.get(_BATCH_CACHE_VARIABLE)
+    if override:
+        return Path(override)
+    if sys.platform == "win32":
+        local = os.environ.get("LOCALAPPDATA")
+        base = Path(local) if local else Path.home() / "AppData" / "Local"
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Caches"
+    else:
+        xdg = os.environ.get("XDG_CACHE_HOME")
+        base = Path(xdg) if xdg else Path.home() / ".cache"
+    return base / "cablexsec" / "numba-batch"
+
+
+def _lock(handle: Any) -> bool:
+    """Take an exclusive, non-blocking lock on an open file; False if held."""
+    try:
+        if sys.platform == "win32":
+            import msvcrt  # noqa: PLC0415
+
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl  # noqa: PLC0415
+
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return False
+    return True
+
+
+def _unlock(handle: Any) -> None:
+    if sys.platform == "win32":
+        import msvcrt  # noqa: PLC0415
+
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+    else:
+        import fcntl  # noqa: PLC0415
+
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+@contextmanager
+def _slot_lock(path: Path) -> Iterator[bool]:
+    """Hold the lock file ``path`` while the block runs; yield whether it was won.
+
+    The operating system also releases the lock if the holding process ends.
+    """
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        handle = open(path, "a+b")  # noqa: SIM115 - closed below
+    except OSError:
+        yield False
+        return
+    with handle:
+        won = _lock(handle)
+        try:
+            yield won
+        finally:
+            if won:
+                _unlock(handle)
+
+
+@contextmanager
+def _worker_caches(count: int) -> Iterator[list[Path]]:
+    """``count`` numba cache directories, each written by one process only.
 
     numba numbers a new on-disk cache entry from the index it last read and
     saves the index before the data, so two processes that compile one kernel
     for different signatures at the same time can both take the same data file
-    and leave the index pointing at the other's machine code. Each worker is
-    therefore started while ``NUMBA_CACHE_DIR`` names its own directory below
-    ``cache_root``, which it inherits before numba is imported.
+    and leave the index pointing at the other's machine code. The first free
+    slots of :func:`_batch_cache_directory` are locked for the batch and kept
+    for later batches; a worker without a free slot gets a temporary
+    directory, removed afterwards.
+    """
+    root = _batch_cache_directory()
+    with ExitStack() as stack:
+        caches: list[Path] = []
+        for slot in range(_CACHE_SLOTS):
+            if len(caches) == count:
+                break
+            if stack.enter_context(_slot_lock(root / f"slot-{slot}.lock")):
+                caches.append(root / f"slot-{slot}")
+        if len(caches) < count:
+            scratch = stack.enter_context(
+                tempfile.TemporaryDirectory(
+                    prefix="cablexsec-batch-numba-", ignore_cleanup_errors=True
+                )
+            )
+            missing = count - len(caches)
+            caches += [Path(scratch) / f"worker-{i}" for i in range(missing)]
+        yield caches
+
+
+def _worker_pools(caches: Sequence[Path]) -> list[ProcessPoolExecutor]:
+    """One-process spawn pools; worker ``i`` writes the numba cache ``caches[i]``.
+
+    Each worker is started while ``NUMBA_CACHE_DIR`` names its directory, and
+    inherits it before numba is imported (see :func:`_worker_caches`).
     """
     import multiprocessing  # noqa: PLC0415
 
@@ -488,12 +596,12 @@ def _worker_pools(count: int, cache_root: Path) -> list[ProcessPoolExecutor]:
     previous = os.environ.get(_NUMBA_CACHE_VARIABLE)
     pools: list[ProcessPoolExecutor] = []
     try:
-        for index in range(count):
+        for cache in caches:
             pool = ProcessPoolExecutor(
                 max_workers=1, mp_context=context, initializer=_limit_threads
             )
             pools.append(pool)
-            os.environ[_NUMBA_CACHE_VARIABLE] = str(cache_root / f"worker-{index}")
+            os.environ[_NUMBA_CACHE_VARIABLE] = str(cache)
             pool.submit(os.getpid).result()  # the worker now runs with it
     except BaseException:
         for pool in pools:
@@ -1049,13 +1157,9 @@ def run_sea_state_batch(
             # Spawned workers inherit one-thread settings before any import.
             for name in _THREAD_VARIABLES:
                 os.environ[name] = "1"
-            with tempfile.TemporaryDirectory(
-                prefix="cablexsec-batch-numba-", ignore_cleanup_errors=True
-            ) as cache_root:
+            with _worker_caches(min(opts.workers, len(tasks))) as caches:
                 try:
-                    pools = _worker_pools(
-                        min(opts.workers, len(tasks)), Path(cache_root)
-                    )
+                    pools = _worker_pools(caches)
                     outcomes = _evaluate_in_pools(tasks, pools)
                 finally:
                     for pool in pools:

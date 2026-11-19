@@ -473,12 +473,15 @@ All notable changes to CableXSec are recorded in this file. The format follows
   change (peak 548 N m and 219.8 J/m printed against 541 N m and 212.0 J/m computed), are
   regenerated.
 
-- `run_sea_state_batch` with `workers > 1`: each worker process writes its own numba cache
-  directory for the batch (removed afterwards) instead of sharing the caller's. numba numbers a
-  new on-disk cache entry from the index it last read and saves the index before the data, so
-  two workers compiling one kernel for different signatures at the same time could leave the
-  index pointing at the other's machine code, which a later process would load. Each worker
-  now compiles the kernels it uses; results are unchanged, and runs go to whichever worker is
+- `run_sea_state_batch` with `workers > 1`: each worker process writes a numba cache of its own
+  instead of sharing the caller's. numba numbers a new on-disk cache entry from the index it
+  last read and saves the index before the data, so two workers compiling one kernel for
+  different signatures at the same time could leave the index pointing at the other's machine
+  code, which a later process would load. Worker caches are slot folders `slot-<i>` under
+  `cablexsec/numba-batch` in the user cache directory (`CABLEXSEC_BATCH_CACHE_DIR` overrides
+  it), kept for later batches; a lock file holds each slot for one worker at a time, a batch
+  beside another takes the next free slots, and a worker without a free slot or a writable
+  folder gets a temporary cache. Results are unchanged, and runs go to whichever worker is
   free, as before.
 
 - `SectionLaw.from_cable` reads the cable's own materials (its `materials:` block) when the law

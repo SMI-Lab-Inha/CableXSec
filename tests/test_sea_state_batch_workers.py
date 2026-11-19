@@ -4,13 +4,17 @@
 
 numba numbers a new on-disk cache entry from the index it last read, so two
 processes compiling one kernel for different signatures at the same time can
-leave the index pointing at the other's machine code.
+leave the index pointing at the other's machine code. Each worker therefore
+writes a slot directory that it alone holds while it runs, and the slot is kept
+for later batches.
 """
 
 from __future__ import annotations
 
 import os
+import sys
 import tempfile
+from contextlib import ExitStack
 from pathlib import Path
 
 import numpy as np
@@ -26,6 +30,8 @@ from cablexsec.analysis.sea_state_batch import (
     run_sea_state_batch,
 )
 
+_ONE_THREAD = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")
+
 
 @pytest.fixture(scope="module")
 def cable():
@@ -37,38 +43,32 @@ def stiffness(cable):
     return cx.compute_stiffness(cable)
 
 
+def _indexes(folder: Path) -> dict[str, int]:
+    """Modification times of the numba index files below ``folder``."""
+    return {
+        str(p.relative_to(folder)): p.stat().st_mtime_ns for p in folder.rglob("*.nbi")
+    }
+
+
 def test_each_worker_starts_with_its_own_numba_cache(tmp_path, monkeypatch):
     caller = str(tmp_path / "caller")
     monkeypatch.setenv("NUMBA_CACHE_DIR", caller)
-    pools = batch._worker_pools(3, tmp_path / "workers")
+    caches = [tmp_path / f"cache-{i}" for i in range(3)]
+    pools = batch._worker_pools(caches)
     try:
         seen = [pool.submit(os.getenv, "NUMBA_CACHE_DIR").result() for pool in pools]
     finally:
         for pool in pools:
             pool.shutdown()
-    assert seen == [str(tmp_path / "workers" / f"worker-{i}") for i in range(3)]
+    assert seen == [str(cache) for cache in caches]
     assert os.environ["NUMBA_CACHE_DIR"] == caller
 
 
-def test_cold_cache_workers_match_the_in_process_batch(
+def test_slots_are_kept_and_a_second_batch_reuses_them(
     tmp_path, monkeypatch, cable, stiffness
 ):
-    # Three runs on two workers, each starting from an empty cache directory of
-    # its own below a fresh temporary directory, removed after the batch.
-    scratch = tmp_path / "tmp"
-    scratch.mkdir()
-    monkeypatch.setattr(tempfile, "tempdir", str(scratch))
-    written: dict[str, list[str]] = {}
-    evaluate = batch._evaluate_in_pools
-
-    def recording(tasks, pools):
-        outcomes = evaluate(tasks, pools)
-        for root in scratch.iterdir():
-            for worker in sorted(root.iterdir()):
-                written[worker.name] = sorted(p.name for p in worker.rglob("*.nbi"))
-        return outcomes
-
-    monkeypatch.setattr(batch, "_evaluate_in_pools", recording)
+    slots = tmp_path / "slots"
+    monkeypatch.setenv("CABLEXSEC_BATCH_CACHE_DIR", str(slots))
     runs = _runs(
         tmp_path,
         stiffness,
@@ -76,28 +76,83 @@ def test_cold_cache_workers_match_the_in_process_batch(
         probabilities=(0.5, 0.3, 0.2),
     )
     sections = [SectionRequest("a", 2.0)]
-    two = run_sea_state_batch(
-        cable, runs, sections, options=SeaStateBatchOptions(workers=2)
-    )
+    options = SeaStateBatchOptions(workers=2)
+    # First batch: two workers, each starting from an empty slot of its own.
+    first = run_sea_state_batch(cable, runs, sections, options=options)
+    written = {name: _indexes(slots / name) for name in ("slot-0", "slot-1")}
     if kernels_compiled():
-        # Each worker compiled its kernels into its own directory.
-        assert sorted(written) == ["worker-0", "worker-1"]
-        assert all(written.values())
-    assert list(scratch.iterdir()) == []
+        assert all(written.values()), written
+    assert not (slots / "slot-2").exists()
+    # Second batch: the slots are reused, and no kernel is compiled again.
+    second = run_sea_state_batch(cable, runs, sections, options=options)
+    assert {name: _indexes(slots / name) for name in written} == written
     one = run_sea_state_batch(
         cable, runs, sections, options=SeaStateBatchOptions(workers=1)
     )
-    a, b = one.sections["a"].long_term, two.sections["a"].long_term
-    # Equal to round-off: spawned workers run BLAS on one thread, the calling
-    # process on its own setting (as in test_worker_count_does_not_change_results).
-    for layer in a.annual_damage_per_fibre:
-        np.testing.assert_allclose(
-            a.annual_damage_per_fibre[layer],
-            b.annual_damage_per_fibre[layer],
-            rtol=1e-10,
-            atol=0.0,
-        )
-    assert one.manifest["inputs_sha256"] == two.manifest["inputs_sha256"]
+    a = one.sections["a"].long_term.annual_damage_per_fibre
+    for result in (first, second):
+        b = result.sections["a"].long_term.annual_damage_per_fibre
+        for layer in a:
+            if all(os.environ.get(name) == "1" for name in _ONE_THREAD):
+                # The same kernels on one BLAS thread in every process.
+                np.testing.assert_array_equal(b[layer], a[layer])
+            else:
+                # The workers run BLAS on one thread, this process on its own
+                # setting; threaded BLAS reductions differ at round-off.
+                np.testing.assert_allclose(b[layer], a[layer], rtol=1e-10, atol=0.0)
+        assert result.manifest["inputs_sha256"] == one.manifest["inputs_sha256"]
+
+
+def test_a_batch_beside_another_takes_the_next_free_slots(tmp_path, monkeypatch):
+    slots = tmp_path / "slots"
+    monkeypatch.setenv("CABLEXSEC_BATCH_CACHE_DIR", str(slots))
+    with batch._slot_lock(slots / "slot-0.lock") as held:
+        assert held
+        with batch._slot_lock(slots / "slot-0.lock") as again:
+            assert not again  # one holder at a time, also within one process
+        with batch._worker_caches(2) as caches:
+            assert caches == [slots / "slot-1", slots / "slot-2"]
+    with batch._worker_caches(2) as caches:
+        assert caches == [slots / "slot-0", slots / "slot-1"]
+
+
+def test_without_a_free_slot_a_worker_gets_a_temporary_cache(tmp_path, monkeypatch):
+    slots = tmp_path / "slots"
+    scratch = tmp_path / "tmp"
+    scratch.mkdir()
+    monkeypatch.setenv("CABLEXSEC_BATCH_CACHE_DIR", str(slots))
+    monkeypatch.setattr(tempfile, "tempdir", str(scratch))
+    with ExitStack() as stack:
+        for slot in range(batch._CACHE_SLOTS - 1):
+            assert stack.enter_context(batch._slot_lock(slots / f"slot-{slot}.lock"))
+        with batch._worker_caches(3) as caches:
+            last = batch._CACHE_SLOTS - 1
+            assert caches[0] == slots / f"slot-{last}"
+            assert [c.parent.parent for c in caches[1:]] == [scratch, scratch]
+            assert len(set(caches)) == 3
+    assert list(scratch.iterdir()) == []
+
+
+def test_an_unusable_cache_folder_falls_back_to_temporary_caches(tmp_path, monkeypatch):
+    blocked = tmp_path / "file"
+    blocked.write_text("not a folder", encoding="utf-8")
+    monkeypatch.setenv("CABLEXSEC_BATCH_CACHE_DIR", str(blocked / "slots"))
+    with batch._worker_caches(2) as caches:
+        assert len(set(caches)) == 2
+        assert all(blocked not in c.parents for c in caches)
+
+
+def test_cache_folder_follows_the_override_and_the_platform(tmp_path, monkeypatch):
+    monkeypatch.setenv("CABLEXSEC_BATCH_CACHE_DIR", str(tmp_path / "mine"))
+    assert batch._batch_cache_directory() == tmp_path / "mine"
+    monkeypatch.delenv("CABLEXSEC_BATCH_CACHE_DIR")
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg"))
+    expected = {
+        "win32": tmp_path / "local",
+        "darwin": Path.home() / "Library" / "Caches",
+    }.get(sys.platform, tmp_path / "xdg")
+    assert batch._batch_cache_directory() == expected / "cablexsec" / "numba-batch"
 
 
 def test_a_worker_that_fails_to_start_leaves_no_pool(tmp_path, monkeypatch):
@@ -117,7 +172,7 @@ def test_a_worker_that_fails_to_start_leaves_no_pool(tmp_path, monkeypatch):
     monkeypatch.setattr(batch, "ProcessPoolExecutor", pool)
     monkeypatch.delenv("NUMBA_CACHE_DIR", raising=False)
     with pytest.raises(RuntimeError, match="failed to start"):
-        batch._worker_pools(3, Path(tmp_path))
+        batch._worker_pools([tmp_path / f"cache-{i}" for i in range(3)])
     assert len(started) == 2
     # Both pools are shut down, and the caller's environment is restored.
     with pytest.raises(RuntimeError, match="after shutdown"):
