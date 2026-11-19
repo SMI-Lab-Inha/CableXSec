@@ -114,7 +114,8 @@ for screening.
   wire screen along the {term}`core lay`, and the strain-life of tapes.
 - **{term}`Neutral axis <neutral axis>` under a load history** (`cx.compute_neutral_axes`): where the
   armour sticks and slips as the {term}`bending direction` turns, and the biaxial section moment
-  of the history (armour, optionally with the laid-core law: `core_friction`).
+  of the history (armour, optionally with the laid-core law: `core_friction`, its friction model
+  `core_friction_model`, its contact loads following the tension history by default: `core_loads`).
 
 ### 2.6 Thermal and electrical
 
