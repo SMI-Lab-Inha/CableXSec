@@ -117,16 +117,19 @@ def test_cable_geometry_follows_the_paper_table():
 
 @full_scale
 def test_z_ei_reports_the_registered_outcome():
-    """The measured stick secant exceeds the packaged no-slip EI_max (the
-    registered bound fails: the armour stick coefficient of the series stack
-    is about 0.01); it lies below the plane-section bound, and the measured
-    slip slope is above EI_min."""
+    """The measured stick secant lies below the packaged no-slip EI_max and
+    the measured slip slope above EI_min: Z-EI passes. Diagnosed on, not
+    independent: this row found the defect of the former shear stack, which
+    counted the EPR of the offset cores (xi 0.009 / 0.016, EI_max 12.0 kN m2,
+    FAIL). The stack now stops at the support: the bedding under the inner
+    armour (xi 0.832) and nothing between the armours (xi 1)."""
     out = zd.z_ei()
-    assert out["pass"] is False
+    assert out["pass"] is True
     assert out["pass_plane_section"] is True
-    assert max(out["xi"].values()) < 0.02
+    assert list(out["xi"].values()) == pytest.approx([0.832, 1.0], abs=1e-3)
+    assert out["ei_max_Nm2"] == pytest.approx(311.1e3, rel=1e-3)
     for amp in zd.AMPLITUDES_MM:
-        assert min(out["stick_true_Nm2"][amp]) > 10 * out["ei_max_Nm2"]
+        assert max(out["stick_true_Nm2"][amp]) < out["ei_max_Nm2"]
         assert out["slip_Nm2"][amp] > 3 * out["ei_min_Nm2"]
 
 

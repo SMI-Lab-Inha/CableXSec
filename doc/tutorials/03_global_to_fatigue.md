@@ -188,8 +188,8 @@ gives `T_e − p_o A_o`, and use `fatigue_from_series`.
 <!-- tutorial-output -->
 ```text
 warnings: DirectionTiedFrictionWarning, MissingClampingStateWarning
-inner_armour: 139 wires, damage 7.715e-09 to 1.379e-08, largest on wire 70 at 181.3 deg, fibre 180.00 deg
-outer_armour: 145 wires, damage 7.428e-09 to 8.878e-09, largest on wire 72 at 178.8 deg, fibre 180.00 deg
+inner_armour: 139 wires, damage 7.715e-09 to 1.383e-08, largest on wire 70 at 181.3 deg, fibre 180.00 deg
+outer_armour: 145 wires, damage 7.428e-09 to 8.886e-09, largest on wire 73 at 181.2 deg, fibre 180.00 deg
 governing: inner_armour, wire at 181.3 deg, fibre 180.00 deg (bulk damage)
 ```
 
@@ -249,8 +249,8 @@ wire about its own axes. `at_fibre(angle)` combines them at any fibre.
 
 <!-- tutorial-output -->
 ```text
-inner_armour: same damage as compute_fatigue True, 1 Hz equivalent range 2.17 to 12.38 MPa
-outer_armour: same damage as compute_fatigue True, 1 Hz equivalent range 2.11 to 11.09 MPa
+inner_armour: same damage as compute_fatigue True, 1 Hz equivalent range 2.18 to 12.39 MPa
+outer_armour: same damage as compute_fatigue True, 1 Hz equivalent range 2.11 to 11.10 MPa
 ```
 
 With the contact pressure history of `armour_contact_histories` and the
@@ -272,10 +272,10 @@ local analysis guide, and the `count_from_sample` argument of
 ```text
 S-N curve saevik_2011_flat_steel: slope m = 4, [Saevik2011] Eq. (89)
 stress at the governing fibre: 16.1 to 48.8 MPa
-rainflow: 152.0 cycles, largest range 32.74 MPa
-equivalent range over the counted cycles 17.45 MPa
-equivalent range at 1 Hz, 600 cycles 12.38 MPa
-damage from the equivalent range 1.3788e-08, from compute_fatigue 1.3788e-08
+rainflow: 153.0 cycles, largest range 32.74 MPa
+equivalent range over the counted cycles 17.44 MPa
+equivalent range at 1 Hz, 600 cycles 12.39 MPa
+damage from the equivalent range 1.3829e-08, from compute_fatigue 1.3829e-08
 ```
 
 For an S–N curve of a single slope `m`, the damage-equivalent stress range

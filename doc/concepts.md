@@ -148,11 +148,13 @@ check against a test.
 **No slip**, `ei_max_Nm2`. The wires stick and follow the bending of the
 section. Their contribution is reduced by the {term}`shear coefficient` ξ of each
 armour layer (Yun et al. 2020), which accounts for the shear compliance of the
-polymer layers that carry the wire forces. `ei_plane_section_Nm2` is the same
-assembly with ξ = 1. The loop starts with the no-slip slope.
+layers between the wires and the surface that supports them: the concentric
+layers down to the next helical layer inside or to the laid cores.
+`ei_plane_section_Nm2` is the same assembly with ξ = 1. The loop starts with
+the no-slip slope.
 
-On the Ménard and Cartraud (2023) cable the bounds are 3.57 and 59.1 kN m², a
-factor of about 17. Neither is the stiffness of a cable in service, which
+On the Ménard and Cartraud (2023) cable the bounds are 3.57 and 190 kN m², a
+factor of about 53. Neither is the stiffness of a cable in service, which
 depends on the curvature amplitude, the history and the contact pressure. For
 a global analysis, export the hysteretic law or choose a secant stiffness for
 the curvature range of interest.

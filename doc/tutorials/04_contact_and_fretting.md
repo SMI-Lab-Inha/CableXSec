@@ -143,10 +143,10 @@ loading; they are not the stresses of the deformed contact.
 contact loads at 150 kN; extreme fibre of the dynamic bending at -4.0 deg
 inner_armour/outer_face on outer_armour: mu 0.12, load 209.7 N, p0 3112 MPa, transition amplitude 1.11 um
   largest slip amplitude 364 um; cycles in stick 0%, partial slip 16%, gross slip 84%
-  damage per year at the contact fibre 0.090 at 1 deg from the extreme fibre; largest wear at 88 deg
+  damage per year at the contact fibre 9.597 at 1 deg from the extreme fibre; largest wear at 88 deg
 outer_armour/inner_face on inner_armour: mu 0.12, load 209.7 N, p0 3112 MPa, transition amplitude 1.11 um
   largest slip amplitude 402 um; cycles in stick 0%, partial slip 15%, gross slip 85%
-  damage per year at the contact fibre 0.076 at 2 deg from the extreme fibre; largest wear at 88 deg
+  damage per year at the contact fibre 2.169 at 4 deg from the extreme fibre; largest wear at 88 deg
 outer_armour/outer_face: no normal load on this face
 ```
 
@@ -196,8 +196,8 @@ pressure history of step 3:
 
 <!-- tutorial-output -->
 ```text
-inner_armour: full-slip amplitude up to 364 um, friction law up to 5.8 um, stations slipping 0.2% of the time
-outer_armour: full-slip amplitude up to 402 um, friction law up to 136.1 um, stations slipping 6.9% of the time
+inner_armour: full-slip amplitude up to 364 um, friction law up to 127.1 um, stations slipping 7.7% of the time
+outer_armour: full-slip amplitude up to 402 um, friction law up to 278.6 um, stations slipping 39.2% of the time
 ```
 
 ```{figure} figures/tutorial_04_slip_amplitude.png
@@ -209,9 +209,9 @@ kinematic slip of free wires, as used by `compute_fretting`. Solid: the
 friction law with the contact pressure history.
 ```
 
-The inner armour, with `P1+P2` of about 9 MPa, barely slips at these
-curvatures. The outer armour, with about 3 MPa, slips over most of its
-circumference, most near the neutral axis. The kinematic slip is therefore an
+The inner armour, with `P1+P2` of about 9 MPa, slips to about a third of the
+kinematic amplitude at these curvatures. The outer armour, with about 3 MPa,
+slips to about 70 % of it, most near the neutral axis. The kinematic slip is therefore an
 upper estimate of the {term}`slip amplitude`, and the regime shares and wear of
 step 5 are upper estimates wherever friction holds the wires.
 
@@ -254,18 +254,18 @@ strain histories.
 
 <!-- tutorial-output -->
 ```text
-wire 109 (gross slip): largest bulk cycle 119.2 MPa about 147.9 MPa
-SWT of the bulk cycle alone 0.0587 MPa
+wire 109 (gross slip): largest bulk cycle 373.0 MPa about 106.9 MPa
+SWT of the bulk cycle alone 0.2598 MPa
 x = +0.0 a, z = 0.5 b: SWT 0.0000 MPa
-x = -1.0 a, z = 0.5 b: SWT 0.1045 MPa
-x = -1.1 a, z = 0.5 b: SWT 0.1361 MPa
-x = -1.1 a, z = 0.05 b: SWT 0.4116 MPa, plane normal 8 deg from the wire axis
-x = -1.1 a, z = 0.10 b: SWT 0.3710 MPa, plane normal 8 deg from the wire axis
-x = -1.1 a, z = 0.20 b: SWT 0.2922 MPa, plane normal 8 deg from the wire axis
-x = -1.1 a, z = 0.30 b: SWT 0.2255 MPa, plane normal 8 deg from the wire axis
-x = -1.1 a, z = 0.50 b: SWT 0.1361 MPa, plane normal 8 deg from the wire axis
-x = -1.1 a, z = 0.75 b: SWT 0.0868 MPa, plane normal 13 deg from the wire axis
-x = -1.1 a, z = 1.00 b: SWT 0.0668 MPa, plane normal 10 deg from the wire axis
+x = -1.0 a, z = 0.5 b: SWT 0.2911 MPa
+x = -1.1 a, z = 0.5 b: SWT 0.3546 MPa
+x = -1.1 a, z = 0.05 b: SWT 0.8058 MPa, plane normal 8 deg from the wire axis
+x = -1.1 a, z = 0.10 b: SWT 0.7393 MPa, plane normal 8 deg from the wire axis
+x = -1.1 a, z = 0.20 b: SWT 0.6116 MPa, plane normal 8 deg from the wire axis
+x = -1.1 a, z = 0.30 b: SWT 0.5033 MPa, plane normal 8 deg from the wire axis
+x = -1.1 a, z = 0.50 b: SWT 0.3546 MPa, plane normal 8 deg from the wire axis
+x = -1.1 a, z = 0.75 b: SWT 0.2665 MPa, plane normal 10 deg from the wire axis
+x = -1.1 a, z = 1.00 b: SWT 0.2345 MPa, plane normal 10 deg from the wire axis
 ```
 
 The script builds one cycle at the crossing of the inner-armour wire with the
@@ -289,7 +289,7 @@ load, the shear traction is the sliding field and not a
 Under the middle of the contact the compressive Hertz field leaves no plane in
 tension, and the indicator is zero. At the edge and just outside it, behind
 the traction, the shear traction adds tension to the wire stress. At
-`x = −1.1 a` the indicator near the surface is about seven times that of the
+`x = −1.1 a` the indicator near the surface is about three times that of the
 bulk cycle alone, and it falls towards the bulk value at a depth of one
 semi-axis `b`. The critical plane lies nearly across the wire.
 

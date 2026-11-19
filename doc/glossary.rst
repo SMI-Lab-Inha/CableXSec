@@ -1076,8 +1076,9 @@ Terms and abbreviations
    shear coefficient
    Yun coefficient
       The factor ``ξ`` (0 < ξ ≤ 1) by which the stick contribution of an armour layer is reduced
-      for the shear compliance of the polymer layers that carry the wire forces (Yun et al.
-      2020); ``xi_per_layer`` of :func:`~cablexsec.compute_stiffness`. The stick stiffness of a
+      for the shear compliance of the layers between the wires and their support (Yun et al.
+      2020): the concentric layers down to the next helical layer inside or to the laid
+      cores; ``xi_per_layer`` of :func:`~cablexsec.compute_stiffness`. The stick stiffness of a
       wire is ``k = ξ E cos²α``; ξ = 1 is the plane-section limit.
 
    shear–slip product

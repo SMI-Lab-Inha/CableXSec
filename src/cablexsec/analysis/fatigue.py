@@ -282,8 +282,10 @@ def _distributed_spec(
     A constant stick modulus is the Yun coefficient ``xi = k / (E cos^2 a)``
     of that state (a thermal block recomputes ``xi`` from its moduli), so the
     layer is returned with that coefficient. A stick modulus that changes
-    over the record, a rigid interface (``xi >= 1``) and a rate-dependent
-    friction law are not covered by the distributed model.
+    over the record and a rate-dependent friction law are not covered by the
+    distributed model; a rigid interface (``xi >= 1``) it represents only by
+    the along-wire penalty ``RIGID_K_HAT``, so the exact direction-tied cap
+    is kept for it.
     """
     law = active_friction_law(friction_law)
     if law is not None and law.rate_dependent:
@@ -1527,8 +1529,9 @@ def compute_fatigue(
         when the curvature path is planar (out-of-plane ratio
         :func:`curvature_path_out_of_plane_ratio` at most
         ``PLANAR_PATH_TOLERANCE``) and the distributed model otherwise; a
-        layer that the distributed model does not cover (rigid interface
-        ``xi >= 1``, a stick modulus that changes over the record, a
+        layer that the distributed model does not cover exactly (rigid
+        interface ``xi >= 1``, which it represents only by the along-wire
+        penalty, a stick modulus that changes over the record, a
         rate-dependent friction law) keeps the direction-tied model, and the
         provenance records the model of every layer and the reason for such a
         fallback. The direction-tied cap turns with the bending direction:

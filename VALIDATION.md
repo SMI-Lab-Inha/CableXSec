@@ -41,7 +41,7 @@ afterwards: a comparison that misses its target is reported as failed.
 | **σ_B** | Radial-fibre bending stress | Ménard and Cartraud (2023), Eq. 14 | 0 | <1e-6 % | Pass |
 | **M-rec, M-rec-3core** | Assembled per-wire moment against the section engine | cross-engine | 0.000 % | <2 % | Pass |
 | **MK-Tcyc** | Moment–curvature law with tension cycling inside the bending cycles; work balance under the changing friction bound | fatigue-path friction stress, same kernels | 3.4e-16; 1.1e-15 | <1e-12 | Pass |
-| **MX-scale** | Exported bending law with a slip scaling variable: bound homogeneity, scaled group yield curvatures, tension cycle inside the bending cycles | `compute_mkappa` at another tension; contact-tension history | 4.1e-16; 8.3e-14; ratio 1.02 | <1e-12; <1e-9; ≤1.25 | Pass |
+| **MX-scale** | Exported bending law with a slip scaling variable: bound homogeneity, scaled group yield curvatures, tension cycle inside the bending cycles | `compute_mkappa` at another tension; contact-tension history | 6.9e-16; 1.2e-13; ratio 1.21 | <1e-12; <1e-9; ≤1.25 | Pass |
 | **FL-P** | Pressure-dependent friction coefficient: spring-slider under pressure steps; compiled against NumPy kernel under a pressure history; work balance | closed form; NumPy reference | 3.0e-16; 8.7e-16; 2.5e-15 | <1e-9 | Pass |
 | **slip-onset** | First wire to slip lies at the neutral axis (compression side, ψ ≈ 3λ/2) | Raoof; Papailiou | \|cos\| = 0.156 | \|cos\| < 0.2 | Pass |
 | **xsec-K** | Coupling tangent bounds | EI_max, EI_min limits | ≤6.3e-13 % | <0.01 % | Pass |
@@ -60,19 +60,19 @@ afterwards: a comparison that misses its target is reported as failed.
 | **TQ-KL** | Torque-balance helix angle, seven strand pairs | Kim and Lee (2017), beam FE | −0.26 to −0.06 deg | ≤0.3 deg | Pass |
 | **TQ-UJ** | Fixed-end torque per tension, six strands | Utting and Jones (1987), Table 1 | theory 1.051–1.059; test 1.067–1.136 | 1.04–1.07; 1.00–1.15 | Pass |
 | **BM1** | Full-slip bending stiffness EI_min, no calibration | Ménard and Cartraud (2023), Table 3 | 0.6 % (3571 N·m²) | <15 % | Pass |
-| **BM1-loop** | ±0.10 m⁻¹ moment–curvature loop after the published ±0.05 calibration, four-point arrangement | Ménard and Cartraud (2023), Fig. 16b | ordered RMSE 2.71 %; cycle work 67.8 vs 62.3 J/m (8.8 %) | RMSE <5 %; work within 10 % | Info (unreliable reference; target met) |
-| **BM1-loop-uniform** | Same comparison at uniform curvature | Ménard and Cartraud (2023), Fig. 16b | as BM1-loop | as BM1-loop | Info (unreliable reference; target met) |
-| **BM1-ID** | Laid cores, wedged trefoil and filler profiles: initial pressure identified on range (b), five ranges predicted | Ménard and Cartraud (2023), Fig. 16 | (a) +26.0 %, (c) +23.7 %, (d)–(f) within 13 % | work ±20 %, RMSE <10 % | Info (unreliable reference; target not met) |
-| **Z-EI** | Measured stick secant against the no-slip EI_max; slip slope against EI_min, 112 mm three-core cable, zero tension | Zeidan (2025), thesis Figs 5.5–5.6 | stick 141–240 kN·m² vs EI_max 12.0 kN·m² (plane-section 335) | stick ≤ EI_max; slip ≥ EI_min | **Fail** |
-| **Z-ID** | Four-point loops at 30–60 mm in the test arrangement: pressure identified on 40 mm, three amplitudes predicted | Zeidan (2025), Fig. 5.6 | no pressure reaches the 40 mm work (41.9 vs 445.1 J/m) | work ±20 %, RMSE <10 %, range ±10 % | **Fail** |
+| **BM1-loop** | ±0.10 m⁻¹ moment–curvature loop after the published ±0.05 calibration, four-point arrangement | Ménard and Cartraud (2023), Fig. 16b | ordered RMSE 2.86 %; cycle work 69.7 vs 62.3 J/m (11.8 %) | RMSE <5 %; work within 10 % | Info (unreliable reference; target not met) |
+| **BM1-loop-uniform** | Same comparison at uniform curvature | Ménard and Cartraud (2023), Fig. 16b | as BM1-loop | as BM1-loop | Info (unreliable reference; target not met) |
+| **BM1-ID** | Laid cores, wedged trefoil and filler profiles: initial pressure identified on range (b), five ranges predicted | Ménard and Cartraud (2023), Fig. 16 | (a) +28.5 %, (c) +26.2 %, (d)–(f) within 16 % | work ±20 %, RMSE <10 % | Info (unreliable reference; target not met) |
+| **Z-EI** | Measured stick secant against the no-slip EI_max; slip slope against EI_min, 112 mm three-core cable, zero tension | Zeidan (2025), thesis Figs 5.5–5.6 | stick 141–240 kN·m² vs EI_max 311.1 kN·m² (plane-section 335); diagnosed on for the shear-stack rule | stick ≤ EI_max; slip ≥ EI_min | Pass |
+| **Z-ID** | Four-point loops at 30–60 mm in the test arrangement: pressure identified on 40 mm, three amplitudes predicted | Zeidan (2025), Fig. 5.6 | P0 760 kPa; work +10.4 to −9.6 %, RMSE 14.2–15.4 %, moment range −33 to −46 % | work ±20 %, RMSE <10 %, range ±10 % | **Fail** |
 | **HU-3PB** | Conductor loop, third cycle, three-point arrangement | Hu et al. (2022) | loop area +36.7 % (Papailiou), +64.4 % (KH); transition share 32.8 % / 39.4 % | area ±15 %; share 34 ± 10 points | **Fail** |
 | **HU-uniform** | Same loop at uniform curvature | Hu et al. (2022) | area +4.9 % (Papailiou) | — | Not comparable |
 | **WITZ-EI** | Full-slip EI_min of a 2.5-inch flexible pipe, 0 bar, parameter-free | Witz (1996), measured gradients 1190 / 1014 N·m² | 1007 N·m² | 913–1309 N·m² | Pass |
-| **WITZ-ID** | 300-bar loop predicted after identifying the initial pressure at 0 bar | Witz (1996), Figs 5–6 | width 1356 N·m vs 1990–2164; energy −14.2 % | width 1692–2489 N·m; energy ±15 % | **Fail** |
-| **SV11-PLANE** | Inner-armour stress ranges at the bending-plane FBG stations, 14 load cases | Sævik (2011), Figs 17–23 | median ratio 1.62 (3 of 14 in band); sectional 1.00 (11 of 14) | median 0.85–1.18 and ≥12 of 14 in 0.70–1.43 | **Fail** |
-| **SV11-GJ** | Absolute stress ranges near the termination, load case 14 | Gjøsteen et al. (2027), Figs 27–35 | mean ratio 1.80 (sectional 1.24) | 0.72–1.38 | **Fail** |
-| **SV11-SPLIT** | Origin of the termination increment: end-fitting anchor alone (uniform curvature from the face); end fitting removed (anchor 20 m upstream) | Sævik (2011); Gjøsteen et al. (2027) | end fitting alone 1.01 / 1.27 (sectional 1.00 / 1.24); without end fitting unchanged (1.70, 1.80) | stated, not gated | Info |
-| **SV11-REACH** | Small-angle slip demand and the cases outside the band whatever the correction does | Sævik (2011) | a_max below 1 at 0.5° and 1°; sectional outside: LC 4, 7, 8 | stated, not gated | Info |
+| **WITZ-ID** | 300-bar loop predicted after identifying the initial pressure at 0 bar | Witz (1996), Figs 5–6 | width 1356 N·m vs 1990–2164; energy −12.8 % | width 1692–2489 N·m; energy ±15 % | **Fail** |
+| **SV11-PLANE** | Inner-armour stress ranges at the bending-plane FBG stations, 14 load cases | Sævik (2011), Figs 17–23 | median ratio 2.17 (3 of 14 in band); sectional 1.19 (12 of 14) | median 0.85–1.18 and ≥12 of 14 in 0.70–1.43 | **Fail** |
+| **SV11-GJ** | Absolute stress ranges near the termination, load case 14 | Gjøsteen et al. (2027), Figs 27–35 | mean ratio 2.07 (sectional 1.27) | 0.72–1.38 | **Fail** |
+| **SV11-SPLIT** | Origin of the termination increment: end-fitting anchor alone (uniform curvature from the face); end fitting removed (anchor 20 m upstream) | Sævik (2011); Gjøsteen et al. (2027) | end fitting alone 1.23 / 1.36 (sectional 1.19 / 1.27); without end fitting unchanged (2.09, 2.07) | stated, not gated | Info |
+| **SV11-REACH** | Small-angle slip demand and the cases outside the band whatever the correction does | Sævik (2011) | a_max below 1 at 0.5° and 1°; sectional outside: LC 4, 6 | stated, not gated | Info |
 | **AW-DONG25** | Armour wire anchored at both ends of one pitch at uniform curvature: stress at the anchor and peak, code-to-code | Dong et al. (2025), FE, Figs 14 and 25 | anchor 156.4 vs 156.9 MPa (source theory 147.8); peak 207.8 vs 204.5 MPa | stated, not gated | Info |
 | **AW-ZT14** | Same at a = 4.92: normalised anchor and peak stress, code-to-code | Zhu and Tan (2014), FE, Figs 4–8 | 1.19 / 1.70 vs 2.22 (the FE far field is not in slip) | stated, not gated | Info |
 | **DAI20-KAPPA** | Curvature at two stations inside a bellmouth against the rocking angle, steel-tube umbilical at 200 kN: contact angles predicted after identifying the bending stiffness on one curvature value | Dai, Sævik and Ye (2020), Fig. 9 | −0.87° (S2), −0.89° (S3); 59.1 kN m² identified | both within ±1.0° | Pass |
@@ -101,16 +101,16 @@ quantities are those of the passing rows. In particular:
   against published data without calibration (BM1, WITZ-EI).
 - The Ménard and Cartraud (2023) loops are an unreliable reference (stated, not gated; the
   benchmark register gives the evidence). The 300-bar Witz loop is too narrow after
-  identification at 0 bar, and on the Zeidan (2025) cable, whose cores have a soft EPR
-  insulation, the armour stick coefficient of the section is far too low to reproduce the
-  measured loops (Z-EI, Z-ID); absolute dissipation predictions therefore carry the uncertainty
-  shown by WITZ-ID and Z-ID.
+  identification at 0 bar. On the Zeidan (2025) cable the measured stick slope lies below the
+  no-slip bound since the armour shear stack stops at its support (Z-EI, diagnosed on), but the
+  identified loops miss the moment range by a third or more (Z-ID); absolute dissipation
+  predictions therefore carry the uncertainty shown by WITZ-ID and Z-ID.
 - The termination-corrected (anchored-wire) armour stress is an upper estimate that the
   published near-termination measurements do not support (SV11-PLANE, SV11-GJ); the sectional
-  result is the one that matches them. At this rig the end fitting contributes about 1 % of
-  the correction; the excess comes from the curvature gradients at the bellmouth contact on a
-  one-way curvature field (SV11-SPLIT), and SV11-PLANE cannot pass through any termination
-  correction because its small-angle cases stick (SV11-REACH).
+  result is the one closest to them (median 1.19, 12 of 14 in band, against the 1.18 bound). At
+  this rig the end fitting alone moves the ratios by 3–7 %; the excess comes from the
+  curvature gradients at the bellmouth contact on a one-way curvature field (SV11-SPLIT). At
+  0.5° and 1° the pipe sticks and the correction is zero (SV11-REACH).
 - The rig-beam curvature that drives a bellmouth calculation is checked against the one
   published curvature history inside a bellmouth (DAI20-KAPPA: contact angles within 1° with
   one identified stiffness, under declared rig assumptions); the sectional Coulomb range of
