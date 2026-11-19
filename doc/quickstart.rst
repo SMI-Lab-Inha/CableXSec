@@ -31,10 +31,10 @@ and the armour fatigue damage of a curvature record:
 
 The output is::
 
-   EA = 280 MN, EI full slip = 3571 N m^2, EI no slip = 59.1 kN m^2
-   peak moment 548 N m, friction work 219.8 J/m over the history
-   inner_armour: largest Miner damage 2.105e-06 over the record
-   outer_armour: largest Miner damage 3.490e-07 over the record
+   EA = 280 MN, EI full slip = 3571 N m^2, EI no slip = 189.8 kN m^2
+   peak moment 541 N m, friction work 218.0 J/m over the history
+   inner_armour: largest Miner damage 1.774e-06 over the record
+   outer_armour: largest Miner damage 3.005e-07 over the record
 
 Every result carries a ``provenance`` record that names the method, the cited sources, the
 verification gates and the limitations of the calculation; print ``fatigue.provenance`` to see

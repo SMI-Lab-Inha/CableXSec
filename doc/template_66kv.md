@@ -149,7 +149,7 @@ th = cx.compute_thermal(cable, current_A=1093.0, conductor_area_m2=630e-6,
 | EA (fixed ends) | 638.5 MN (free ends 631.3) | 658 MN, Janocha 2.4 / IEA Table 13 | −3.0 %; armour 416, copper 203, polymers 20 MN |
 | GJ | 131.4 kN·m² | 152 kN·m² at 50 kN, Janocha 2.4 | −14 %; CableXSec GJ is the extension-only lay term, without polymer and core torsion |
 | Full-slip EI | 21.7 kN·m², with or without core friction | 42.47 kN·m² slipping stiffness at 50 kN, IEA Table 13; branch slope about 29 kN·m² in Fig. 6 and about 41 kN·m² in Fig. 12b | −49 % (−25 % against Fig. 6); outer and inner sheath give 11.6 and 6.1 kN·m², the cores 3.7 kN·m². Friction cannot raise the full-slip value, and no component bending of the published section reaches 42 kN·m² (Section 4.1) |
-| No-slip EI (plane section) | 1655 kN·m²; bending-law slope 1215 kN·m² armour only, 1330 kN·m² with core friction (core ξ = 0.65) | Fig. 12b inset (10 kN): secant about 2,500–3,000 kN·m² at 1–2×10⁻³ 1/m | Above the plane-section bound of the published section; retired as a target (Section 4.1) |
+| No-slip EI (plane section) | 1655 kN·m²; bending-law slope 1429 kN·m² armour only, 1544 kN·m² with core friction (core ξ = 0.65; armour ξ 0.934 / 0.992 since the armour shear stack stops at its support, before 1215 and 1330 kN·m²) | Fig. 12b inset (10 kN): secant about 2,500–3,000 kN·m² at 1–2×10⁻³ 1/m | Above the plane-section bound of the published section; retired as a target (Section 4.1) |
 | M at 0.2 1/m, 50 kN loop | 4.46 / 4.46 kN·m (bounded / solved); 4.59 / 4.56 kN·m with core friction | about 6.8 kN·m, Fig. 6 | Code to code (Section 4.1) |
 | Loop half-height at κ = 0 | 0.11 / 0.11 kN·m (bounded / solved); 0.25 / 0.21 kN·m with core friction | about 1 kN·m, Fig. 6 | Code to code; 0.38 / 0.41 kN·m with the filler profiles (Section 4.1) |
 | Moment at slip onset, 10/100/200 kN | 0.24 / 0.44 / 0.66 kN·m at 0.01 1/m; 0.27 / 0.71 / 1.20 kN·m with core friction (bounded) | about 5.5 / 9.5 / 12 kN·m, Fig. 12b | Retired as a target: Fig. 12b disagrees with Fig. 6 of the same model (Section 4.1) |
@@ -171,6 +171,14 @@ which are regenerated with the signed bound
 For this template (`λ = μ |sin α|` 0.035–0.045) the signed bound lowers the
 full-slip friction stress range by 2.8–3.6 % and the bulk damage by up to
 about 12 % (CHANGELOG).
+
+Since 2026-11-19 the series shear stack of the armour stick coefficient
+stops at the layer's support (the laid cores, or the armour inside), so the
+armour ξ is 0.934 / 0.992 instead of 0.775 / 0.857 (doc/benchmarks.md, "Yun
+shear stack cut at the support"). The no-slip row of the table above and the
+Section 4.1 table (`check_core_friction.py`) carry the new values; the other
+stick-dependent values from here on (slip onsets, fatigue, the energised
+tables of Section 4.2) keep the former ξ and are not regenerated.
 
 Fatigue on a synthetic 2000 s history (κ_x = 0.004 sin(2πt/10) + noise,
 κ_y = 0.002 sin(2πt/13 + 0.4), T = 50 ± 5 kN), maximum wire damage (inner

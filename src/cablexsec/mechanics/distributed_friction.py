@@ -23,7 +23,10 @@ with ``e = a_x cos(phi) + a_y sin(phi)``, ``a = kappa / kappa_c``,
 ``kappa_on = sigma_0 mu |sin a| / (k_f r)`` the slip-onset curvature of the
 package (``k_f = xi E cos^2 a``), ``k_hat = xi / (1 - xi)`` (Yun ``xi``;
 below slip the periodic solution is ``n = a xi cos(phi)``, i.e. the
-``xi``-reduced stick stiffness of the package), ``lam = mu |sin a|`` (capstan
+``xi``-reduced stick stiffness of the package; a rigid interface, ``xi = 1``,
+takes ``k_hat`` = :data:`~cablexsec.mechanics.along_wire.RIGID_K_HAT`, the
+rigid convention of the along-wire chain, far-field stick factor 0.9999),
+``lam = mu |sin a|`` (capstan
 bound on the signed force: a rising force raises its normal load, a falling
 one lowers it, as in [Papailiou1997] Eqs. 9-14 with the signed helix angle;
 ``b`` is floored at zero; ``lam -> 0`` is the constant bound, available as
@@ -109,6 +112,7 @@ from numpy.typing import NDArray
 
 from cablexsec._numba import HAVE_NUMBA, njit
 from cablexsec.exceptions import CableInputError
+from cablexsec.mechanics.along_wire import RIGID_K_HAT
 from cablexsec.mechanics.friction_law import (
     FrictionLaw,
     _pressure_factor,
@@ -2091,7 +2095,8 @@ def distributed_friction_history(
     Parameters
     ----------
     spec : HelicalLayerSpec
-        Layer; ``xi`` (Yun) sets ``k_hat = xi / (1 - xi)``, ``mu`` and the lay
+        Layer; ``xi`` (Yun) sets ``k_hat = xi / (1 - xi)`` (``RIGID_K_HAT``
+        for a rigid interface, ``xi = 1``), ``mu`` and the lay
         angle set ``lam = mu |sin a|``, ``contact_pressure_Pa`` is the
         reference clamping ``P_ref``.
     kappa_x, kappa_y : numpy.ndarray
@@ -2191,11 +2196,11 @@ def distributed_friction_history(
                 "or wire stiffness is not implemented for this model"
             )
     xi = float(spec.xi)
-    if not math.isfinite(xi) or xi < 0.0 or xi >= 1.0:
-        raise CableInputError(
-            "the distributed friction model requires 0 <= xi < 1 (finite interface "
-            "shear stiffness); the rigid-stick limit is not implemented"
-        )
+    if not math.isfinite(xi) or xi < 0.0 or xi > 1.0:
+        raise CableInputError("the distributed friction model requires 0 <= xi <= 1")
+    # A rigid interface (an armour on the armour inside it, no shear layer
+    # between) takes the rigid convention of the along-wire chain.
+    khat = RIGID_K_HAT if xi >= 1.0 else xi / (1.0 - xi)
     alpha = float(spec.lay_angle_rad)
     sin_a = abs(math.sin(alpha))
     mu = float(spec.mu)
@@ -2224,7 +2229,7 @@ def distributed_friction_history(
         "nodes_per_pitch": n_nodes,
         "max_increment": increment,
         "xi": xi,
-        "k_hat": math.inf if xi >= 1.0 else xi / (1.0 - xi),
+        "k_hat": khat,
         "lam": lam,
         "bound": bound,
         "reference_pressure_Pa": p_ref,
@@ -2249,7 +2254,6 @@ def distributed_friction_history(
     k_f = float(spec.k_f)
     kappa_on = stress_unit / (k_f * spec.r_helix_m)
     kappa_c = xi * kappa_on
-    khat = xi / (1.0 - xi)
     shape = np.ones(n_w) if spec.shape_g is None else np.asarray(spec.shape_g, float)
     if shape.shape != (n_w,) or not np.isfinite(shape).all() or np.any(shape < 0):
         raise CableInputError("shape_g must be finite, nonnegative and one per wire")

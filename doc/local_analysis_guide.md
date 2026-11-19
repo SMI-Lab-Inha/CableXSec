@@ -23,7 +23,9 @@ defined layer by layer it computes:
 - **Section stiffness** (`compute_stiffness`): axial with fixed and free twist,
   axial–torsion coupling, and bending bounds: full slip (`ei_min_Nm2`),
   shear-compliant no slip with the Yun coefficient ξ (`ei_max_Nm2`) and the
-  plane-section reference (`ei_plane_section_Nm2`).
+  plane-section reference (`ei_plane_section_Nm2`). The shear stack of ξ is
+  the concentric layers between an armour layer and its support, the next
+  helical layer inside or the laid cores (`yun_shear_stack`).
 - **Helical armour stick–slip bending** (`compute_mkappa`): Papailiou
   slip-front law, slip spreading from the neutral axis; friction cap from
   Féret–Bournazel winding clamping plus the tension increment; Yun shear support.

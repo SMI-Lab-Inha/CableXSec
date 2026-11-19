@@ -395,15 +395,17 @@ def test_planar_stick_agrees_with_direction_tied(abar):
 @compiled
 @pytest.mark.parametrize(
     ("abar", "range_ratio"),
-    [(1.2, 0.9425), (1.5, 0.8266), (3.0, 0.9042), (10.0, 0.9719), (30.0, 0.9896)],
+    [(1.2, 0.9686), (1.5, 0.8721), (3.0, 0.9477), (10.0, 0.9872), (30.0, 0.9981)],
 )
 def test_planar_partial_slip_stick_representation_effect(abar, range_ratio):
     """Documented difference (not forced to agree): with the shear-lag interface
     the slip front and the elastic zone at the extreme fibre differ from the
     pointwise xi-reduced spring slider. Ratio = largest per-wire stress range,
     distributed / direction-tied, Menard inner armour, default N. Recorded with
-    the signed capstan bound (the former bound: 0.9513, 0.8430, 0.8917,
-    0.9696, 0.9900); the full-slip limit is the closed form of the next test."""
+    the signed capstan bound and the support-cut shear stack (xi 0.686; with
+    the former stack, xi 0.208: 0.9425, 0.8266, 0.9042, 0.9719, 0.9896; with
+    the former bound: 0.9513, 0.8430, 0.8917, 0.9696, 0.9900); the full-slip
+    limit is the closed form of the next test."""
     dist, tied = _planar(_layers()[0].spec, abar)
     ratio = np.ptp(dist, axis=1).max() / np.ptp(tied, axis=1).max()
     assert ratio == pytest.approx(range_ratio, abs=2e-3)
@@ -540,6 +542,22 @@ def test_public_api_option_and_provenance():
         )
 
 
+def test_rigid_interface_takes_the_along_wire_rigid_convention():
+    """An armour on the armour inside it has no shear layer (xi = 1): the
+    interface takes k_hat = RIGID_K_HAT, as the along-wire chain does, and
+    the stress lies between the stiffest finite interface and the rigid
+    stick limit."""
+    from cablexsec.mechanics.along_wire import RIGID_K_HAT
+
+    spec = _layers()[0].spec
+    kx, ky = _short(20)
+    rigid = dfm.distributed_friction_history(replace(spec, xi=1.0), kx, ky)
+    assert rigid.parameters["k_hat"] == RIGID_K_HAT
+    assert np.isfinite(rigid.stress_Pa).all()
+    near = dfm.distributed_friction_history(replace(spec, xi=0.999), kx, ky)
+    assert np.abs(rigid.stress_Pa).max() >= np.abs(near.stress_Pa).max() * (1 - 1e-9)
+
+
 @compiled
 def test_section_state_path_accepts_constant_stick_modulus():
     cable = cx.load_cable(
@@ -562,7 +580,7 @@ def test_validation():
     spec = _layers()[0].spec
     kx, ky = _short(20)
     with pytest.raises(CableInputError):
-        dfm.distributed_friction_history(replace(spec, xi=1.0), kx, ky)
+        dfm.distributed_friction_history(replace(spec, xi=1.5), kx, ky)
     with pytest.raises(CableInputError):
         dfm.distributed_friction_history(spec, kx, ky, nodes_per_pitch=4)
     with pytest.raises(CableInputError):

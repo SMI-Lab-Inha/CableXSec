@@ -64,5 +64,8 @@ def test_identify_on_0_bar_predict_300_bar_stays_a_registered_failure(rows):
     # symmetric cap, which gave width 1383 N·m and energy -12.6 %).
     assert "p0 1.071 MPa (YAML 1.071)" in row.value
     assert "300-bar width 1356 vs [1990, 2164] N·m (-31.8% / -37.3%)" in row.value
-    assert "energy 2682 J/m (-14.2%)" in row.value
+    # Support-cut shear stack (tensile-armour xi 0.42 / 0.47): the stiffer
+    # stick raises the energy from 2682 J/m (-14.2 %), as registered before
+    # the run; the width and p0, set in full slip, do not move.
+    assert "energy 2725 J/m (-12.8%)" in row.value
     assert row.status == "FAIL"
