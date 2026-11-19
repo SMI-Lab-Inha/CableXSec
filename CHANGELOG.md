@@ -10,6 +10,15 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Added
 
+- One exported bending law per friction group, each with its own scale table
+  (`BendingLawExport.slip_group_laws()`, `SlipGroupLaw`, `to_group_csv`), for a global model
+  that sums the group laws `s_g(T) B_g(κ / s_g(T))` instead of carrying one scale. Rows
+  MX-group-B and MX-group-E (targets registered before the run): on the 66 kV template with
+  laid cores, filler profiles and 0 / 20 / 40 MPa armour winding stress, 10–200 kN, the summed
+  group laws reproduce the exported backbone within 4.4e-4 (target 0.5 %) and the cycle work
+  within 0.13 % (target ±1 %); one scale for all groups misses by up to 5.3 % and 7 % with
+  clamping (MX-group-1, reported).
+
 - Reported rows SV11-SPLIT, SV11-REACH and SV11-EQ88: where the SV11 termination increment
   comes from. With the bellmouth curvature imposed uniformly from the end-fitting face the
   end-fitting anchor alone moves the SV11-PLANE median from 1.00 to 1.01 and SV11-GJ from 1.24
@@ -338,6 +347,11 @@ All notable changes to CableXSec are recorded in this file. The format follows
   paths; pass `friction_model` explicitly to keep the current behaviour.
 
 ### Changed
+
+- The default slip-scale table of `export_bending_law(..., slip_scale=True)` starts at zero
+  tension, with the caps of the contact model there (zero without clamping, the clamping caps
+  otherwise; row MX-group-0), so the scale runs to zero instead of ending at the lowest
+  exported tension. An explicit `slip_scale_tensions_N` is used as given.
 
 - CI runs the tests in parallel: the test matrix, the NumPy reference path and both coverage
   passes run on one pytest-xdist worker per core (`pytest-xdist` joins the `dev` extra).

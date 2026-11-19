@@ -683,7 +683,31 @@ tension_N,external_pressure_Pa,s,ds_dT_1_per_N,s_inner_armour,ds_dT_inner_armour
 ```
 
 With a pressure axis the columns `ds_dpe_1_per_Pa` and
-`ds_dpe_<group>_1_per_Pa` follow each `ds_dT` column. `Project` files store the
+`ds_dpe_<group>_1_per_Pa` follow each `ds_dT` column. By default the table
+starts at zero tension (guide Section 8.1).
+
+`BendingLawExport.to_group_csv(directory)` writes one law per friction group
+for a global model that sums them: `<group>_backbone.csv` (the backbone of the
+group at the reference state on the export grid, after two comment lines that
+name the group and give the slope beyond the last point) and
+`<group>_slip_scale.csv` (the group's own scale `s_g`):
+
+```text
+# friction group laid_cores (laid_cores); scale s_laid_cores(T) in the group's scale table; M_g(kappa, T) = s B(kappa / s)
+# beyond the last point the backbone continues with slope 0.000000000e+00 N m2
+kappa_1_m,M_Nm
+0.000000000e+00,0.000000000e+00
+...
+```
+
+```text
+tension_N,external_pressure_Pa,s,ds_dT_1_per_N
+0.000000000e+00,0.000000000e+00,0.000000000e+00,1.000000000e-04
+...
+```
+
+The law of group `g` at tension `T` is `s_g(T) B_g(κ / s_g(T))`; the first
+group carries the elastic full-slip part, the others none. `Project` files store the
 table with the law; project files written before it existed still load.
 
 `cablexsec.io.global_export` also writes the section properties of a set of
