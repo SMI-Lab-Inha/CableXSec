@@ -48,7 +48,6 @@ rig finite-element model).
 from __future__ import annotations
 
 import math
-import warnings
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 
@@ -89,7 +88,12 @@ from cablexsec.mechanics.radial_cable import (
 )
 from cablexsec.mechanics.stiffness import xi_for_layer
 from cablexsec.mechanics.wire_stress import local_bending_fibre_stress
-from cablexsec.provenance import Provenance, real_array, require_finite
+from cablexsec.provenance import (
+    Provenance,
+    real_array,
+    relayed_warnings,
+    require_finite,
+)
 
 __all__ = [
     "DEFAULT_GAUGE_RESOLUTION_MICROSTRAIN",
@@ -905,8 +909,7 @@ def _secant_stiffness(
     core_friction: bool | CoreFrictionSpec | None = None,
 ) -> float:
     history = kappa_amp * np.sin(np.linspace(0, 4 * math.pi, 161))
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
+    with relayed_warnings():
         if normal.contact_model == "solved":
             loop = compute_mkappa(
                 cable,
@@ -1526,8 +1529,7 @@ def simulate_rig_test(
         if np.ptp(kap) == 0:
             m_sec = np.zeros(time.size)
         else:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
+            with relayed_warnings():
                 if normal.contact_model == "solved":
                     loop = compute_mkappa(
                         cable,

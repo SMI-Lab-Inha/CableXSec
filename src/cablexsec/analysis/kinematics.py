@@ -96,6 +96,7 @@ from __future__ import annotations
 
 import dataclasses
 import math
+import warnings
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
@@ -123,7 +124,7 @@ from cablexsec.mechanics.progressive_friction import (
 from cablexsec.mechanics.tendon_bending import TransverseSlipModel
 from cablexsec.mechanics.tendon_section import WireSection, round_section
 from cablexsec.mechanics.wire_stress import local_bending_fibre_stress
-from cablexsec.provenance import Provenance, real_array
+from cablexsec.provenance import ExtrapolationWarning, Provenance, real_array
 
 if TYPE_CHECKING:
     from cablexsec.analysis.stress import FrictionField
@@ -979,6 +980,7 @@ def kinematic_history(
         if core_spec is None
         else _core_field(cable, core_spec, reference, contact_model, drive, strain)
     )
+    core_note = ""
     if cores is None and core_utilisation and _has_cores(cable):
         # Without the core lay stage the cores do not move, but they carry
         # the utilisation of their components, as in the component response:
@@ -994,8 +996,17 @@ def kinematic_history(
                 strain,
                 moving=False,
             )
-        except (CableInputError, CableSchemaError):
+        except (CableInputError, CableSchemaError) as error:
             cores = _held_core_field(cable, drive, strain)
+            if cable.core_lay is not None:
+                # Laid cores whose friction law cannot be built: said, not
+                # silent, since their utilisation then comes from the section
+                # strain at their axes, not from the law.
+                core_note = (
+                    f"core friction law unavailable ({error}): the laid cores are "
+                    "held to the cable axis for their utilisation"
+                )
+                warnings.warn(core_note, ExtrapolationWarning, stacklevel=2)
     limitations = [
         "uniform curvature along the cable: the state of a wire depends on its "
         "azimuth only, and the stations round the section are read along the helix",
@@ -1005,6 +1016,8 @@ def kinematic_history(
         "force over the axial stiffness with the twist held",
         "mean clamping prescribed per sample, as in the stress route",
     ]
+    if core_note:
+        limitations.append(core_note)
     return KinematicHistory(
         samples=kept,
         time_s=times[kept],

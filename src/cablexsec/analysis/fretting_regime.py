@@ -750,10 +750,36 @@ def range_at_cycles(sn_curve: SNcurve, cycles: float) -> float:
     """
     if sn_curve.stress_unit != "MPa":
         raise CableInputError("a stress-range S-N curve in MPa is required")
+    if isinstance(cycles, bool) or not (math.isfinite(cycles) and cycles > 0.0):
+        raise CableInputError(f"cycles must be finite and positive: {cycles!r}")
     lo, hi = -6.0, 6.0  # log10 of the range in MPa
+    target = math.log10(cycles)
+
+    def log_life(log_range: float) -> float:
+        # log10 lives, which a steep curve keeps representable where the life
+        # itself would overflow.
+        return float(sn_curve.log10_life(np.array([10.0**log_range]))[0])
+
+    def longer(log_range: float) -> bool:
+        return log_life(log_range) > target
+
+    # The bisection holds the range inside [1e-6, 1e6] MPa; a root outside it
+    # would come back as the bound.
+    if longer(hi):
+        raise CableInputError(
+            f"the S-N curve gives more than {cycles:g} cycles even at 1e6 MPa: "
+            "no stress range of that life"
+        )
+    if math.isclose(log_life(lo), target, rel_tol=1e-12, abs_tol=1e-12):
+        return float(10.0**lo * 1.0e6)  # the root on the bracket's lower end
+    if not longer(lo):
+        raise CableInputError(
+            f"the S-N curve gives at most {cycles:g} cycles even at 1e-6 MPa: "
+            "no stress range of that life"
+        )
     for _ in range(200):
         mid = 0.5 * (lo + hi)
-        if sn_curve.cycles_to_failure(10.0**mid) > cycles:
+        if longer(mid):
             lo = mid
         else:
             hi = mid

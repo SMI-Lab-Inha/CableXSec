@@ -954,9 +954,22 @@ class _MonotoneInverse:
                     cands.append(0.5 * (vl + vh))
             before = self.v.size
             self._add(np.concatenate(cands))
+            if self.v.size == before and inside.any():
+                # The interpolants rounded onto cached points (a target inside
+                # a step of u a few ulps of v wide, as the distributed friction
+                # model gives): bisect. A bracket with no float inside it is
+                # closed above (tiny).
+                self._add(0.5 * (V[lo[inside]] + V[hi[inside]]))
             if self.v.size == before:
-                # no new point: accept the closest cached point
-                return sol_v, sol_u
+                # No new point to try: the open targets are not reached within
+                # the tolerance, so the closest cached point would be a wrong
+                # answer returned as a converged one.
+                worst = float(np.max(np.minimum(r_hi, r_lo)[open_]))
+                raise CableSolverError(
+                    "bending-test inversion stalled: no new curvature point to try, "
+                    f"{int(np.count_nonzero(open_))} target(s) missed by up to "
+                    f"{worst:.3g} (tolerance {self.tol:.3g})"
+                )
         raise CableSolverError("bending-test inversion did not converge")
 
 
