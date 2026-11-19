@@ -75,16 +75,32 @@ def menard_run(menard):
 
 
 @needs_numba
-def test_parts_add_up_and_far_field_is_sectional(menard_run):
+def test_parts_add_up_and_far_field_is_sectional(menard, menard_run):
     res = menard_run
     for g in res.gauges:
         assert np.allclose(g.total, g.axial + g.local_bending + g.friction)
-    caps = {s.layer: s.sectional_cap_microstrain for s in res.layers}
-    for g in res.gauges:
-        if g.location.x_m > 1.0:  # many boundary layers from both clamps
-            diff = np.abs(g.friction - g.friction_sectional).max()
-            assert diff < 0.05 * caps[g.location.layer]
-            assert abs(g.clamp_contrast) < 0.05 * 2 * caps[g.location.layer]
+    # The far field needs many clamp boundary layers on both sides. With the
+    # armour on a stiff support (xi 0.69 / 0.89) the outer armour's layer is
+    # 1.34 m (inner 0.63 m), so the 8-pitch specimen of ``menard_run``
+    # (6.2 m) leaves mid-span only 2.3 layers from each clamp; 16 pitches
+    # leave 4.6.
+    length = 16 * _pitch(menard, "outer_armour")
+    far = simulate_rig_test(
+        menard,
+        _protocol(amplitude=0.03),
+        RigSetup(free_length_m=length),
+        gauges=[
+            GaugeLocation(layer, angle, length / 2)
+            for layer in ("inner_armour", "outer_armour")
+            for angle in (0.0, 45.0, 90.0, 180.0)
+        ],
+    )
+    caps = {s.layer: s.sectional_cap_microstrain for s in far.layers}
+    assert max(s.boundary_layer_m for s in far.layers) < length / 2 / 4
+    for g in far.gauges:
+        diff = np.abs(g.friction - g.friction_sectional).max()
+        assert diff < 0.05 * caps[g.location.layer]
+        assert abs(g.clamp_contrast) < 0.05 * 2 * caps[g.location.layer]
 
 
 @needs_numba

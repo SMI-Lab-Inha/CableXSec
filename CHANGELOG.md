@@ -339,6 +339,17 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Changed
 
+- CI runs the tests in parallel: the test matrix, the NumPy reference path and both coverage
+  passes run on one pytest-xdist worker per core (`pytest-xdist` joins the `dev` extra).
+  Every concurrent process writes its own numba cache: numba numbers a new cache entry from
+  the index it last read, so two processes compiling one kernel for different signatures at
+  once can overwrite each other's entries. `release/check_coverage.py --numprocesses N` and
+  `run_validation.py --jobs=N` take a worker count; `--jobs` evaluates the independent row
+  groups in worker processes and runs the three taxonomy groups concurrently. The coverage
+  run and the validation report check run side by side in two jobs, and the required check
+  "Coverage and validation report" passes only when both pass. The tests, the 95 % threshold,
+  the kernel coverage pass, the rows, the report and its staleness check are unchanged.
+
 - The rows that compare with the measured loops of Ménard and Cartraud (2023), BM1-loop,
   BM1-loop-uniform and BM1-ID, are stated, not gated (status INFO, the verdict against the
   registered target kept): the test is an unreliable reference. The benchmark register states the
@@ -448,7 +459,37 @@ All notable changes to CableXSec are recorded in this file. The format follows
   cell that is not a decimal number (`float` alone took `1_0` as 10). `SeaStateBatchOptions`
   checks `n_fibres`, `chunk_rows`, `mu`, `exposure_years` and `design_fatigue_factor` before any
   run is read, and `SeaStateRun` its `line_id`.
-
+- The series shear stack of the armour stick coefficient ξ (`xi_for_layer`, Yun et al. 2020)
+  stops at the layer's support. Walking inward, it adds each concentric cylindrical layer with
+  a modulus (interstitial fillers still skipped) and stops at the first helical layer inside and
+  at the laid power cores; no layer of an offset core is in it, and a single core on the axis
+  keeps its concentric insulation (`yun_shear_stack` returns the layers). Before, it counted
+  every layer inside the armour: the insulation of the offset cores of three-core cables and,
+  in flexible pipes, the pressure sheath under the steel pressure armour. ξ before → after:
+  Zeidan 2025 0.009 / 0.016 → 0.832 / 1.000 (EI_max 12.0 → 311.1 kN m²); Sævik 2011 tensile
+  armours 0.52 / 0.51 → 0.88 / 0.89; Witz 1996 0.141 / 0.138 → 0.422 / 0.466; Ménard 2023
+  0.208 / 0.248 → 0.686 / 0.888 (EI_max 59.1 → 189.8 kN m²); IEA 66 kV 0.775 / 0.857 →
+  0.934 / 0.992; the 33 kV and 220 kV three-core cables, Thies 2016 and Chae 2023 likewise; the
+  inner armour of the single-core 33 kV cable and of CIGRE TB 880 is unchanged, their outer
+  armour becomes 1 or 0.985. GJ, EA and the full-slip EI_min do not change. The rule, the
+  re-evaluated rows and held-out predictions were registered before the run
+  (doc/benchmarks.md, "Yun shear stack cut at the support"); no band or target changed. Z-EI
+  FAIL → PASS and SV11 (both diagnosed on, not independent): SV11-PLANE 1.62 → 2.17 (sectional
+  1.00 → 1.19, 12 of 14), SV11-GJ 1.80 → 2.07 (1.24 → 1.27), both still FAIL; Z-ID still FAIL
+  (P0 now identifiable, moment range −33 to −46 %). Held out: WITZ-ID 300-bar energy −14.2 →
+  −12.8 % (still FAIL on the width), BM1-loop work +8.8 → +11.8 % (stated, not gated; its
+  registered 10 % target now fails), BM1-ID (a) +26.0 → +28.5 %; each as predicted. The ring
+  stack of a core's wire screen (`compute_core_screen_fatigue`) stops at another resolved wire
+  screen inside, the same rule (no packaged cable changes). An armour on the armour inside it
+  now has ξ = 1: the distributed helix model (`friction_model="distributed"`) takes that rigid
+  interface with the along-wire chain's `RIGID_K_HAT` instead of refusing it, while
+  `friction_model="auto"` and the frictional heat keep the direction-tied cap for it as before.
+  `SectionLaw.from_cable(..., distributed_max_increment=0.02)` substeps the distributed law
+  more finely than the fatigue default (0.1), because the test solver bisects along legs: on
+  the Ménard cable in three-point bending the stiffer stick left a sampling residual of 8.5e-8
+  at 0.1 (2e-9 at 0.02). The README and quickstart outputs, which had drifted before this
+  change (peak 548 N m and 219.8 J/m printed against 541 N m and 212.0 J/m computed), are
+  regenerated.
 - `SectionLaw.from_cable` reads the cable's own materials (its `materials:` block) when the law
   is built and every time it is evaluated. Outside `simulate_bending_test` it read the library
   instead, and a layer whose material the library lacks silently dropped out of the stiffness

@@ -27,7 +27,7 @@ pytestmark = pytest.mark.filterwarnings("ignore::UserWarning")
 
 @pytest.fixture(scope="module")
 def cable() -> cx.CableData:
-    """The public 33 kV three core: onset 0.044 and 0.012 1/m (clamped)."""
+    """The public 33 kV three core: onset 0.0058 and 0.0015 1/m (clamped)."""
     path = Path(cx.__file__).parent / "cables" / "inter_array_three_core_33kv.yaml"
     return cx.load_cable(path, geometry_override=None)
 
@@ -129,9 +129,11 @@ def test_planar_loading_keeps_every_axis_in_the_plane(cable: cx.CableData) -> No
         # Slip starts at the neutral axis: at 1.2 times the onset curvature
         # the wires near +-90 deg slip and those at the extreme fibres stick.
         onset = slip_onset_curvature(spec)  # type: ignore[arg-type]
-        assert arc[int(np.searchsorted(kappa, 0.99 * onset))] == pytest.approx(
-            2 * math.pi
-        )
+        # The last sample at or below 0.99 onset (the grid step is 2.5e-4 1/m,
+        # a sixth of the outer armour's onset).
+        below = int(np.searchsorted(kappa, 0.99 * onset, side="right")) - 1
+        assert kappa[below] <= 0.99 * onset
+        assert arc[below] == pytest.approx(2 * math.pi)
         partial = stuck[:, int(np.searchsorted(kappa, 1.2 * onset))]
         near_axis = np.abs(np.cos(phi)) < 0.2
         near_fibre = np.abs(np.cos(phi)) > 0.98

@@ -575,10 +575,14 @@ def test_inputs_vary_between_blocks_and_stick_history(t66):
     assert inputs.stick_modulus_Pa is not None
     assert inputs.thermal_stress_Pa is not None
     assert inputs.contact_pressure_Pa is not None
-    for name in ("inner_armour", "outer_armour"):
-        k = inputs.stick_modulus_Pa[name]
-        assert np.unique(k).size == 3  # one value per block
-        assert k[0] > k[-1]  # the hot block is softer
+    # The inner armour shears through the MDPE inner sheath (transferred HDPE
+    # law): one stick modulus per block, the hot block softer. The outer armour
+    # shears only through the PPY bedding between the armours, which has no
+    # E(T) law or transfer here: its stick modulus is constant.
+    k = inputs.stick_modulus_Pa["inner_armour"]
+    assert np.unique(k).size == 3  # one value per block
+    assert k[0] > k[-1]  # the hot block is softer
+    assert np.unique(inputs.stick_modulus_Pa["outer_armour"]).size == 1
     res = cx.compute_fatigue(t66, kx, kx * 0, tension_N=tension, thermal=hist, time_s=t)
     assert any("thermal coupling" in x for x in res.provenance.limitations)
     with pytest.raises(CableSchemaError, match="constant stick modulus"):
