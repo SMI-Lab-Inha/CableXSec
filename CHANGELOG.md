@@ -10,6 +10,27 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Added
 
+- CableDyn range graphs and VIV lift files are read: `read_cabledyn_range_graph`
+  (`<root>.Line<L>.range.out`, OpenFAST `<root>.CD.Line<L>.range.out`) and
+  `read_cabledyn_lift` (`<root>.Line<L>.V.out`), each checked column by column
+  against CableDyn's layout. On the new `lw24v` run the range extremes equal the
+  extremes of the node channels exactly, as CableDyn documents.
+  `read_cabledyn_sections` checks either file it finds against the run (mesh,
+  range window) and records its digest.
+- The hang-off's turn about its own tangent reaches the material frame of a line
+  CableDyn solves in torsion with End A restrained: a `Body<N>` holder turns it
+  with its `Body<N>Rx/Ry/Rz` channels, a `Fixed` one holds it, and a vessel or
+  platform holder takes the new `hang_off_rotation` (attitude matrices, a roll
+  history, or `"none"`; also a `SeaStateRun` field). A line restrained at End B
+  only turns its free End A by `-Twist<L>` against End B's frame. Before, the End
+  A frame was transported in time without twist: a line turned rigidly with its
+  body by 40 deg at a 60 deg hang-off read its components turned by 35 deg.
+- `CableDynLine.end_connections` and `end_kinds`: the END CONNECTIONS rows and
+  the holders of the ends, as CableDyn reads them.
+- `SeaStateBatchOptions` takes the reader's curvature check tolerances
+  (`curvature_check_rtol`, `curvature_check_end_rtol`, `curvature_check_atol_1_m`):
+  a coarse run that fails the check at the default could not be read by the batch.
+
 - Reported rows SV11-SPLIT, SV11-REACH and SV11-EQ88: where the SV11 termination increment
   comes from. With the bellmouth curvature imposed uniformly from the end-fitting face the
   end-fitting anchor alone moves the SV11-PLANE median from 1.00 to 1.01 and SV11-GJ from 1.24
@@ -429,6 +450,23 @@ All notable changes to CableXSec are recorded in this file. The format follows
   was refused; a stick modulus that changes over the record still is.
 
 ### Fixed
+
+- CableDyn deck reader mirrors CableDyn's record checks: a section header CableDyn
+  does not know is refused with the deck line (was skipped silently), as are a
+  record over 512 bytes without a comment, a NUL or non-ASCII whitespace
+  character outside a comment, a subnormal number, and END CONNECTIONS rows
+  CableDyn refuses (`none` or `-` torsion stiffness, zero `Ez`, a zero or
+  parallel `Nx` at a restrained end, two rows for one end, an unknown line, an
+  `EI = 0` line). Bytes that are not UTF-8 no longer stop the reader.
+- `read_cabledyn_sections` refuses a standalone deck without `TMax` or with
+  `TMax 0` (a static run, one row) and a standalone record that ends before
+  `TMax` (a run that stopped early), naming the cause; an OpenFAST `.CD.out` is
+  no longer held against the deck's `dtM` (OpenFAST rounds it to whole glue
+  steps) or `TMax`. Malformed output rows, non-numeric profile cells and
+  non-text files raise `CableSchemaError` naming the file and line instead of
+  `ValueError`, `IndexError` or `UnicodeDecodeError`; NaN or negative curvature
+  check tolerances, a non-integer `line_id` and non-numeric section arcs are
+  refused.
 
 - `SectionLaw.from_cable` reads the cable's own materials (its `materials:` block) when the law
   is built and every time it is evaluated. Outside `simulate_bending_test` it read the library

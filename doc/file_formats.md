@@ -15,6 +15,8 @@ and the rules it is checked against.
 | CableXSec exchange CSV | `read_series_csv` | `write_series_csv` | CSV, fixed columns |
 | RIFLEX ASCII time history | `read_riflex_ascii` | RIFLEX | whitespace-separated columns |
 | CableDyn run (driver or OpenFAST module) | `read_cabledyn_sections` | CableDyn | CableDyn output files and deck |
+| CableDyn range graph (`.Line<L>.range.out`) | `read_cabledyn_range_graph` | CableDyn | TAB-separated, units row |
+| CableDyn VIV lift (`.Line<L>.V.out`) | `read_cabledyn_lift` | CableDyn | TAB-separated |
 | CableDyn 0.4.0 station table | `cablexsec.io.read_cabledyn_station_table` | CableDyn | CSV, tab or whitespace |
 | Sea-state batch specification | `cablexsec-batch`, `load_batch_spec` | (by hand) | JSON |
 | Project | `Project.load` | `Project.save` | JSON |
@@ -539,7 +541,19 @@ effective tension, rotation curvature components, hydrostatic pressure,
 elevation, torque and twist. `history.to_load_case_series(A_o)` gives the
 true-force series with strain-gradient curvature. Sections 1 and 2 of the
 [global–local guide](global_local_guide.md) list the channels the deck must
-request, the frame and the consistency checks.
+request, the frame and the consistency checks. A standalone run must be a
+dynamic one that ends at the deck's `TMax`; a hang-off restrained in torsion
+on a vessel or platform needs `hang_off_rotation` (guide, Section 2).
+
+`cx.read_cabledyn_range_graph(path)` reads a range file (LINES flag `r`): the
+minimum, maximum and mean over the range window of the tension, curvature,
+bend moment and declination at every node, with a seabed the clearance and
+on a line solved in torsion the torque and twist, against the deformed arc
+length at `t = 0`. `cx.read_cabledyn_lift(path, nodes=None)` reads a VIV lift
+file (flag `V`): the global force at every node and output time, with the
+`DeckNode` numbering of a refined mesh. Both check the title, every column
+name and unit and every value; `read_cabledyn_sections` checks either file it
+finds next to the run against that run.
 
 CableDyn 0.4.0 writes station tables.
 `cablexsec.io.read_cabledyn_station_table(path)` reads one station history:

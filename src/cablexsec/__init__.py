@@ -258,6 +258,8 @@ from cablexsec.io import (
     LoadCaseSeries,
     fatigue_from_series,
     jonswap_series,
+    read_cabledyn_lift,
+    read_cabledyn_range_graph,
     read_cabledyn_sections,
     read_riflex_ascii,
     read_series_csv,
@@ -549,6 +551,8 @@ __all__ = [
     "write_series_csv",
     "fatigue_from_series",
     # global-local coupling, stage 1 (CableDyn runs to annual damage)
+    "read_cabledyn_lift",
+    "read_cabledyn_range_graph",
     "read_cabledyn_sections",
     "run_sea_state_batch",
     "SeaStateRun",

@@ -93,6 +93,7 @@ from cablexsec.io.cabledyn import (
     CurvatureSource,
     Frame,
     TangentPlacement,
+    _hang_off_input,
     read_cabledyn_deck,
     read_cabledyn_sections,
 )
@@ -129,6 +130,10 @@ class SeaStateRun:
 
     ``start_time_s``/``end_time_s`` bound the retained record (transient
     removal); the frame is still transported from ``t = 0``.
+    ``hang_off_rotation`` is the run's ``hang_off_rotation`` of
+    :func:`~cablexsec.io.cabledyn.read_cabledyn_sections` (the turn of the
+    holder of a line restrained in torsion at End A): ``None``, ``"none"``,
+    or an array with one entry per output row.
     """
 
     name: str
@@ -138,6 +143,7 @@ class SeaStateRun:
     line_id: int = 1
     start_time_s: float = 0.0
     end_time_s: float | None = None
+    hang_off_rotation: Any = field(default=None, compare=False)
 
     def __post_init__(self) -> None:
         if not self.name.strip() or "/" in self.name or "\\" in self.name:
@@ -150,6 +156,20 @@ class SeaStateRun:
             raise CableInputError(f"{self.name}: start_time_s must be >= 0")
         if self.end_time_s is not None and not self.end_time_s > self.start_time_s:
             raise CableInputError(f"{self.name}: end_time_s must exceed start_time_s")
+        rotation = _hang_off_input(self.hang_off_rotation)
+        object.__setattr__(
+            self,
+            "hang_off_rotation",
+            rotation.values if rotation.values is not None else self.hang_off_rotation,
+        )
+
+
+def _hang_off_record(value: Any) -> Any:
+    """The manifest entry of a run's ``hang_off_rotation``."""
+    if value is None or isinstance(value, str):
+        return value
+    array = np.ascontiguousarray(value, dtype=np.float64)
+    return {"shape": list(array.shape), "sha256": _sha256_bytes(array.tobytes())}
 
 
 @dataclass(frozen=True)
@@ -216,6 +236,11 @@ class SeaStateBatchOptions:
     #: (:func:`~cablexsec.io.cabledyn.read_cabledyn_sections`).
     tangent_placement: TangentPlacement = "auto"
     reference_vector: tuple[float, float, float] = (0.0, 0.0, 1.0)
+    #: Tolerances of the reader's check against CableDyn's ``Curv`` channels
+    #: (:func:`~cablexsec.io.cabledyn.read_cabledyn_sections`).
+    curvature_check_rtol: float = 0.05
+    curvature_check_end_rtol: float = 0.25
+    curvature_check_atol_1_m: float | None = None
     tension_basis: TensionBasis = "auto"
     external_diameter_m: float | None = None
     exposure_years: float = 1.0
@@ -233,6 +258,19 @@ class SeaStateBatchOptions:
             or not 1 <= self.workers <= MAX_WORKERS
         ):
             raise CableInputError(f"workers must be an integer in [1, {MAX_WORKERS}]")
+        for name in (
+            "curvature_check_rtol",
+            "curvature_check_end_rtol",
+            "curvature_check_atol_1_m",
+        ):
+            value = getattr(self, name)
+            if value is not None and (
+                isinstance(value, bool)
+                or not isinstance(value, int | float)
+                or not math.isfinite(value)
+                or value < 0
+            ):
+                raise CableInputError(f"{name} must be a finite number >= 0")
         if self.tension_basis not in ("auto", "true", "effective"):
             raise CableInputError("tension_basis must be auto, true or effective")
         if self.external_diameter_m is not None and not (
@@ -516,6 +554,10 @@ def _evaluate(task: _Task) -> dict[str, Any]:
         reference_vector=opts.reference_vector,
         pressure="hydrostatic" if task.basis == "true" else "none",
         chunk_rows=opts.chunk_rows,
+        hang_off_rotation=run.hang_off_rotation,
+        curvature_check_rtol=opts.curvature_check_rtol,
+        curvature_check_end_rtol=opts.curvature_check_end_rtol,
+        curvature_check_atol_1_m=opts.curvature_check_atol_1_m,
     )
     results: dict[str, Any] = {}
     histories: dict[str, CableDynSectionHistory] = {}
@@ -740,6 +782,7 @@ _RUN_KEYS = {
     "line_id",
     "start_time_s",
     "end_time_s",
+    "hang_off_rotation",
 }
 _SECTION_KEYS = {
     "name",
@@ -792,7 +835,9 @@ def load_batch_spec(
 
     ``{"cable": <yaml path or "bundled:<name>">, "runs": [...], "sections":
     [...], "options": {...}}``. Run keys: ``name``, ``out_root``, ``deck``,
-    ``probability``, optional ``line_id``, ``start_time_s``, ``end_time_s``.
+    ``probability``, optional ``line_id``, ``start_time_s``, ``end_time_s``,
+    ``hang_off_rotation`` (``"none"`` or nested lists, one entry per output
+    row).
     Section keys: ``name``, ``arc_length_m``, optional ``termination`` (the
     :class:`TerminationSpec` fields), ``thermal`` (the :class:`ThermalState`
     fields), ``fretting``, ``sn_curves`` (layer to registered curve name),
@@ -837,6 +882,7 @@ def load_batch_spec(
                 end_time_s=None
                 if record.get("end_time_s") is None
                 else float(record["end_time_s"]),
+                hang_off_rotation=record.get("hang_off_rotation"),
             )
         )
     sections = []
@@ -1007,6 +1053,14 @@ def run_sea_state_batch(
     digest_cable = cable_digest(cable)
     option_record = asdict(opts)
     option_record.pop("workers")  # does not change results
+    for name in (
+        "curvature_check_rtol",
+        "curvature_check_end_rtol",
+        "curvature_check_atol_1_m",
+    ):
+        # A check of the read, not an input of the result: the digests of
+        # existing assessments stay.
+        option_record.pop(name)
     if option_record["friction_model"] is None:
         # The model the default resolves to: the digests of existing
         # assessments are unchanged, and follow a change of the default.
@@ -1120,6 +1174,11 @@ def run_sea_state_batch(
             "file": cable_file,
         },
         "options": option_record,
+        "curvature_check": {
+            "rtol": opts.curvature_check_rtol,
+            "end_rtol": opts.curvature_check_end_rtol,
+            "atol_1_m": opts.curvature_check_atol_1_m,
+        },
         "workers": opts.workers,
         "tension_basis": basis,
         "external_diameter_m": diameter,
@@ -1130,6 +1189,7 @@ def run_sea_state_batch(
                 "probability": run.probability,
                 "line_id": run.line_id,
                 "retained_s": [run.start_time_s, run.end_time_s],
+                "hang_off_rotation": _hang_off_record(run.hang_off_rotation),
                 "files": outcome["files"],
                 "checks": outcome["checks"],
             }
