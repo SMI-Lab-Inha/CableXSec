@@ -360,6 +360,7 @@ class SectionLaw:
                     ky,
                     friction_model="distributed",
                     nodes_per_pitch=distributed_nodes_per_pitch,
+                    max_increment=distributed_max_increment,
                 )
                 moment = moment + core.moment_Nm @ np.array([cos_b, sin_b])
                 friction = friction + core.work.friction_J_per_m

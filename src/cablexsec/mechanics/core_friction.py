@@ -209,6 +209,7 @@ from cablexsec.exceptions import CableInputError, CableSchemaError
 from cablexsec.materials import library
 from cablexsec.mechanics.axisymmetric import AxisymmetricResult, compute_contact_forces
 from cablexsec.mechanics.core_lay import bending_factor, core_angle
+from cablexsec.mechanics.distributed_friction import DEFAULT_MAX_INCREMENT
 from cablexsec.mechanics.mkappa import HelicalLayerSpec
 from cablexsec.mechanics.papailiou import (
     DIRECTION_HOLD_FRACTION,
@@ -1202,6 +1203,7 @@ def _distributed_population(
     ky: FloatArray,
     pressure: FloatArray | None,
     nodes_per_pitch: int | None,
+    max_increment: float,
 ) -> tuple[FloatArray, BendingWork, FloatArray]:
     """Moment ``(samples, 2)``, work and node slip fraction of one population
     from the distributed helix model."""
@@ -1210,7 +1212,12 @@ def _distributed_population(
     )
 
     history = distributed_friction_history(
-        spec, kx, ky, contact_pressure_Pa=pressure, nodes_per_pitch=nodes_per_pitch
+        spec,
+        kx,
+        ky,
+        contact_pressure_Pa=pressure,
+        nodes_per_pitch=nodes_per_pitch,
+        max_increment=max_increment,
     )
     phi = np.asarray(spec.phi_wires, dtype=np.float64)
     weight = spec.A_wire_m2 * math.cos(spec.lay_angle_rad) * spec.r_helix_m
@@ -1235,6 +1242,7 @@ def core_friction_history(
     friction_model: CoreFrictionModelName = "direction_tied",
     loads: CoreLoadHistory | None = None,
     nodes_per_pitch: int | None = None,
+    max_increment: float = DEFAULT_MAX_INCREMENT,
 ) -> CoreFrictionHistory:
     """Biaxial history of the core population, the internal rings and the
     filler profiles.
@@ -1244,8 +1252,10 @@ def core_friction_history(
     unchanged (direction-tied Papailiou cap; ``initial_bending_angle`` is its
     held direction at the start), ``"distributed"`` the distributed helix
     model with ``nodes_per_pitch`` helix nodes per pitch (default four per
-    station), ``"auto"`` the direction-tied law on a planar path and the
-    distributed law otherwise. The rings use :func:`strand_slip_strain`.
+    station) and substeps of at most ``max_increment`` slip-onset curvatures
+    (the default of the distributed model), ``"auto"`` the direction-tied
+    law on a planar path and the distributed law otherwise. The rings use
+    :func:`strand_slip_strain`.
     ``loads`` (:func:`core_load_history`, one sample per curvature sample)
     makes the contact loads follow a tension history; ``None`` holds the
     model's reference loads. All return moments in the material frame of the
@@ -1282,7 +1292,7 @@ def core_friction_history(
     )
     if resolved == "distributed":
         core_moment, w, slip = _distributed_population(
-            population, kx, ky, core_pressure, nodes_per_pitch
+            population, kx, ky, core_pressure, nodes_per_pitch, max_increment
         )
     else:
         history = wire_slip_history(
@@ -1303,7 +1313,12 @@ def core_friction_history(
     if model.fillers is not None:
         if resolved == "distributed":
             filler_moment, fw, _ = _distributed_population(
-                model.fillers.population, kx, ky, filler_pressure, nodes_per_pitch
+                model.fillers.population,
+                kx,
+                ky,
+                filler_pressure,
+                nodes_per_pitch,
+                max_increment,
             )
         else:
             filler = wire_slip_history(
