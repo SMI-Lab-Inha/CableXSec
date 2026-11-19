@@ -1228,17 +1228,20 @@ def run_sea_state_batch(
             "groups": groups,
             "blocks": capacity.blocks,
         }
-    manifest["inputs_sha256"] = _sha256_bytes(
-        _canonical(
-            {
-                "cable": digest_cable,
-                "files": [f["sha256"] for r in manifest["runs"] for f in r["files"]],
-                "options": option_record,
-                "sections": manifest["sections"],
-                "probabilities": [run.probability for run in runs],
-            }
-        ).encode()
-    )
+    digest_inputs: dict[str, Any] = {
+        "cable": digest_cable,
+        "files": [f["sha256"] for r in manifest["runs"] for f in r["files"]],
+        "options": option_record,
+        "sections": manifest["sections"],
+        "probabilities": [run.probability for run in runs],
+    }
+    if any(run.hang_off_rotation is not None for run in runs):
+        # It turns the material frame, so it is an input of the result; absent
+        # when no run gives one, so that the digests of existing inputs stay.
+        digest_inputs["hang_off_rotation"] = [
+            _hang_off_record(run.hang_off_rotation) for run in runs
+        ]
+    manifest["inputs_sha256"] = _sha256_bytes(_canonical(digest_inputs).encode())
     if output is not None:
         _write(output, manifest, results, histories, area)
     return SeaStateBatchResult(
