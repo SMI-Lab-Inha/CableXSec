@@ -418,7 +418,8 @@ def test_cf_t_tension_cycle_agrees_with_the_slip_scaled_law(iea66, sigma, amplit
 # Routes, options and checks                                                   #
 # --------------------------------------------------------------------------- #
 def test_neutral_axes_core_options(iea66):
-    kx, ky = _walk(13, 60, 2e-3) if COMPILED else _walk(13, 10, 2e-4)
+    # The direction-tied routes take a walk into slip with either kernel.
+    kx, ky = _walk(13, 60, 2e-3)
     tension = T * (1.0 + 0.2 * np.sin(np.linspace(0.0, 3.0, kx.size)))
     base = {"tension_N": tension, "core_friction": SPEC}
     follow = cx.compute_neutral_axes(iea66, kx, ky, **base)
@@ -442,13 +443,14 @@ def test_neutral_axes_core_options(iea66):
     )
     np.testing.assert_array_equal(contact.core_moment_Nm, follow.core_moment_Nm)
     # The core model can differ from the armour model.
+    count = kx.size if COMPILED else 8
     split = cx.compute_neutral_axes(
         iea66,
-        kx,
-        ky,
+        kx[:count] * (1.0 if COMPILED else 0.1),
+        ky[:count] * (1.0 if COMPILED else 0.1),
         core_friction_model="distributed",
         core_friction=SPEC,
-        **{"tension_N": tension},
+        tension_N=tension[:count],
     )
     assert "distributed core law" in " ".join(split.provenance.limitations)
     progressive = cx.compute_neutral_axes(
