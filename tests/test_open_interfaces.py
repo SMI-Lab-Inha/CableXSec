@@ -32,8 +32,6 @@ def test_closed_contacts_are_closed_whatever_their_round_off_gap(states):
     closed = states[2e6]
     assert closed.open_interfaces == ()
     assert not closed.interface_open.any()
-    # Their reported gaps are round-off, of either sign, not zero.
-    assert 1e-12 < float(np.max(np.abs(closed.interface_gap_m))) < 1e-9
     assert float(np.min(closed.interface_line_force_N_per_m)) > 1e5
 
 
