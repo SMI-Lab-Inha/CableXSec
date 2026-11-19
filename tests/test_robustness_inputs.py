@@ -264,15 +264,18 @@ def test_batch_run_line_id_is_checked(tmp_path, line_id):
 
 def test_very_large_mu_gives_the_stuck_moment_curvature_loop():
     """compute_mkappa with mu = 1e6 raised "wire history exceeds
-    floating-point range" on both kernel paths; the wires simply stick."""
+    floating-point range" on both kernel paths; the friction-limited wires
+    simply stick. They already stick at mu = 100 on this loop (the slip left
+    there does not depend on mu), so the two agree."""
     cable = bundled(CABLE)
     kappa = np.concatenate([np.linspace(0, 0.05, 30), np.linspace(0.05, -0.05, 60)])
-    stuck = cx.compute_mkappa(cable, kappa, tension_N=1e5, mu=1.0)
+    stuck = cx.compute_mkappa(cable, kappa, tension_N=1e5, mu=100.0)
     huge = cx.compute_mkappa(cable, kappa, tension_N=1e5, mu=1e6)
     scale = float(np.max(np.abs(stuck.moment_Nm)))
     np.testing.assert_allclose(
         huge.moment_Nm, stuck.moment_Nm, rtol=0, atol=1e-12 * scale
     )
+    np.testing.assert_array_equal(huge.slip_fraction, stuck.slip_fraction)
 
 
 def test_time_history_csv_keeps_a_quoted_newline(tmp_path):
