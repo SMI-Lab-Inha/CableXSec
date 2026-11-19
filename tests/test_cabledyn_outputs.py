@@ -370,7 +370,7 @@ def test_hang_off_on_a_turning_body_carries_the_material_frame(tmp_path):
     for item in ("rotation_curvature_x_1_m", "rotation_curvature_y_1_m"):
         values = getattr(history, item)
         np.testing.assert_allclose(values, values[0], rtol=0.0, atol=1e-9)
-    assert abs(history.rotation_curvature_y_1_m[0]) == pytest.approx(0.05, rel=1e-6)
+    assert abs(history.rotation_curvature_x_1_m[0]) == pytest.approx(0.05, rel=1e-6)
     # The same turn given as attitude matrices.
     turns = np.array(
         [
@@ -412,10 +412,10 @@ def test_given_roll_of_the_hang_off_turns_the_section_axes(tmp_path):
     ).histories["s"]
     psi = np.radians(roll - roll[0])
     np.testing.assert_allclose(
-        history.rotation_curvature_x_1_m, kappa * np.sin(psi), atol=2e-6
+        history.rotation_curvature_x_1_m, kappa * np.cos(psi), atol=2e-6
     )
     np.testing.assert_allclose(
-        history.rotation_curvature_y_1_m, kappa * np.cos(psi), atol=2e-6
+        history.rotation_curvature_y_1_m, -kappa * np.sin(psi), atol=2e-6
     )
 
 
@@ -455,12 +455,14 @@ def test_free_end_a_turns_against_the_restrained_end_b(tmp_path):
     theta = np.radians(local - total)
     history = read.histories["s"]
     np.testing.assert_allclose(
-        history.rotation_curvature_x_1_m, 0.02 * np.sin(theta), atol=2e-6
+        history.rotation_curvature_x_1_m, 0.02 * np.cos(theta), atol=2e-6
     )
     np.testing.assert_allclose(
-        history.rotation_curvature_y_1_m, 0.02 * np.cos(theta), atol=2e-6
+        history.rotation_curvature_y_1_m, -0.02 * np.sin(theta), atol=2e-6
     )
-    with pytest.raises(CableSchemaError, match="frame='section' does not carry"):
+    with pytest.raises(
+        CableSchemaError, match="is solved in torsion: its section axes"
+    ):
         read_cabledyn_sections(
             root, deck, {"s": 3.95}, pressure="none", frame="section"
         )
@@ -474,7 +476,9 @@ def test_hang_off_errors_name_the_remedy(tmp_path):
     yaw = np.linspace(0.0, 10.0, 4)
     root, deck = _turning_body(tmp_path, yaw)
     sections = {"s": 6.05}
-    with pytest.raises(CableSchemaError, match="frame='section' does not use"):
+    with pytest.raises(
+        CableSchemaError, match="is solved in torsion: its section axes"
+    ):
         read_cabledyn_sections(root, deck, sections, pressure="none", frame="section")
     with pytest.raises(CableSchemaError, match="has 3 rows"):
         read_cabledyn_sections(
@@ -609,3 +613,136 @@ def test_range_file_alone_does_not_require_a_refined_mesh_map(tmp_path):
     _range_file(tmp_path / "with_static.Line1.range.out", 106, nt, 0.2)
     with pytest.raises(CableSchemaError, match="different numbers of nodes"):
         read_cabledyn_sections(root, deck, {"s": 4.95}, pressure="none")
+
+
+# --------------------------------------------------------------------------- #
+# A coupled OpenFAST run of a line restrained in torsion                      #
+# --------------------------------------------------------------------------- #
+# ``vu_torsion``: the lazy-wave power cable of CableDyn's mixed VolturnUS-S
+# example deck alone, linear EI, restrained in torsion at both ends (End A on
+# the platform, End B on the anchor), 1 s of OpenFAST v5.0.0 with a development
+# build of CableDyn after 0.4.2 (CompMooring = 5; the deck's dtM 0.025 s runs
+# as 0.02 s, two glue steps). Its CurvX/CurvY channels are CableDyn's own
+# components on its section axes.
+_VU = {"upper": 21.0, "mid": 59.0, "buoy": 131.0}
+
+
+def _vu_copy(tmp_path):
+    for suffix in ("dat", "CD.out", "CD.static.out"):
+        shutil.copy(DATA / f"vu_torsion.{suffix}", tmp_path / f"vu.{suffix}")
+    return tmp_path / "vu", tmp_path / "vu.dat"
+
+
+def _vu_components():
+    channels = _main_channels_units(DATA / "vu_torsion.CD.out")
+    arcs = read_cabledyn_deck(DATA / "vu_torsion.dat").line(1).node_arc_lengths()
+    out = {}
+    for name, arc in _VU.items():
+        e = int(np.searchsorted(arcs, arc, side="right")) - 1
+        w = (arc - arcs[e]) / (arcs[e + 1] - arcs[e])
+        out[name] = tuple(
+            (1 - w) * channels[f"{kind}1N{e + 1}"] + w * channels[f"{kind}1N{e + 2}"]
+            for kind in ("CurvX", "CurvY")
+        )
+    return out
+
+
+def _main_channels_units(path):
+    rows = path.read_text(encoding="utf-8").splitlines()
+    header = rows[0].split("\t")
+    data = np.array([[float(cell) for cell in row.split("\t")] for row in rows[2:]])
+    return {name: data[:, i] for i, name in enumerate(header)}
+
+
+def test_openfast_root_is_read_next_to_the_glue_table(tmp_path):
+    """OpenFAST always writes its glue-code ``<root>.out`` beside CableDyn's
+    ``<root>.CD.out``; only a CableDyn driver table there is ambiguous."""
+    root, deck = _vu_copy(tmp_path)
+    (tmp_path / "vu.out").write_text(
+        "\nPredictions were generated on 19-Nov-2026 using OpenFAST\n\nTime\tWind1VelX\n",
+        encoding="utf-8",
+    )
+    read = read_cabledyn_sections(
+        root, deck, {"s": 21.0}, curvature_source="components", pressure="none"
+    )
+    assert read.checks["route"] == "OpenFAST (.CD.out)"
+    assert {f.role for f in read.files} == {"main", "static", "deck"}
+    (tmp_path / "vu.out").write_text(
+        "# CableDyn driver output\nTime(s)\tFairTen1\n", encoding="utf-8"
+    )
+    with pytest.raises(CableSchemaError, match="a CableDyn driver table"):
+        read_cabledyn_sections(root, deck, {"s": 21.0}, pressure="none")
+
+
+@pytest.mark.full_scale
+def test_torsion_line_reconstruction_uses_cabledyns_section_axes():
+    """On a line solved in torsion the reconstructed components agree with
+    CableDyn's CurvX/CurvY within the reader's own curvature tolerance (5 %
+    of the largest value plus 2e-5 1/m): the axes start at End A's torsion
+    normal, not at the reference vector, whose axes stood 90 deg away here."""
+    expected = _vu_components()
+    read = read_cabledyn_sections(
+        DATA / "vu_torsion",
+        DATA / "vu_torsion.dat",
+        _VU,
+        curvature_source="tangent",
+        pressure="none",
+        hang_off_rotation="none",  # the platform turns by under 0.01 deg in 1 s
+    )
+    assert read.checks["time_step_s"] == pytest.approx(0.02)
+    for name, (curv_x, curv_y) in expected.items():
+        gx, gy = read.histories[name].strain_gradient()
+        scale = float(np.max(np.hypot(curv_x, curv_y)))
+        error = float(np.max(np.hypot(gx + curv_x, gy + curv_y)))
+        assert error <= 2e-5 + 0.05 * scale, (name, error, scale)
+        assert error <= 0.02 * scale  # 0.3 to 1.2 % in this run
+
+
+def test_components_route_takes_cabledyns_curvature_components():
+    expected = _vu_components()
+    read = read_cabledyn_sections(
+        DATA / "vu_torsion",
+        DATA / "vu_torsion.dat",
+        _VU,
+        curvature_source="components",
+        pressure="none",
+    )
+    for name, (curv_x, curv_y) in expected.items():
+        history = read.histories[name]
+        assert history.frame == "cabledyn section axes"
+        np.testing.assert_array_equal(history.rotation_curvature_x_1_m, -curv_y)
+        np.testing.assert_array_equal(history.rotation_curvature_y_1_m, curv_x)
+        gx, gy = history.strain_gradient()
+        np.testing.assert_array_equal(gx, -curv_x)
+        assert history.twist_rad is not None
+    with pytest.raises(CableSchemaError, match="already carry the hang-off"):
+        read_cabledyn_sections(
+            DATA / "vu_torsion",
+            DATA / "vu_torsion.dat",
+            _VU,
+            curvature_source="components",
+            hang_off_rotation="none",
+        )
+
+
+def test_torsion_line_refuses_the_section_frame():
+    with pytest.raises(CableSchemaError, match="curvature_source='components'"):
+        read_cabledyn_sections(
+            DATA / "vu_torsion",
+            DATA / "vu_torsion.dat",
+            {"s": 21.0},
+            frame="section",
+            curvature_source="tangent",
+            pressure="none",
+            hang_off_rotation="none",
+        )
+
+
+def test_components_route_needs_the_component_channels(tmp_path):
+    nt = 3
+    positions = _bending_case(np.full(nt, 0.02), np.zeros(nt), nt)
+    root, deck = _write_case(tmp_path, positions)
+    with pytest.raises(CableSchemaError, match="CurvX1N<J> and CurvY1N<J> channels"):
+        read_cabledyn_sections(
+            root, deck, {"s": 4.95}, curvature_source="components", pressure="none"
+        )

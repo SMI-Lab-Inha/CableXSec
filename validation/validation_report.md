@@ -82,7 +82,7 @@ Every row is computed from published data or closed-form references in this repo
 
 - analytical_sanity: `1194 passed`
 - independent_method: `77 passed`
-- full_scale: `58 passed`
+- full_scale: `59 passed`
 
 Run `pytest -m <marker>` to reproduce each group.
 

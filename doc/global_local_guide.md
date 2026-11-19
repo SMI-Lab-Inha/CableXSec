@@ -206,6 +206,21 @@ reader builds from the positions of every node and the `Twist<L>` channel.
 `frame="section"` represents neither and is refused where either applies;
 `checks["hang_off"]` records the rule and the extent of the turn.
 
+**Section axes of a torsion line.** On a line CableDyn solves in torsion the
+reader's axes are CableDyn's section axes, those of `CurvX`/`CurvY`: the first
+axis starts at End A's torsion normal `Nx` (End B's, rolled by its `Pretwist`,
+carried back on a line restrained at End B only), is carried along the line and
+turned by the twist; the reference vector is not used there and
+`frame="section"` is refused. The reconstructed components are then
+`(-CurvY, CurvX)` to the reconstruction's accuracy: 0.3 to 1.2 % on the coupled
+VolturnUS-S run `tests/data/cabledyn/vu_torsion` (1.15 % at 21 m, 0.33 % at 59 m
+and 131 m), where axes seeded by the reference vector stood 90° away.
+`curvature_source="components"` reads `CurvX`/`CurvY` at the deck nodes around
+each section directly: exact on CableDyn's axes, with no node positions or
+angles (on an OpenFAST run only the channels written). OpenFAST writes its own
+`<root>.out` beside `<root>.CD.out`; the reader takes the CableDyn file and
+refuses only a CableDyn driver table there.
+
 `rotation_curvature_x/y` are the components of `κ` on (`e1`, `e2`): a lazy
 wave in the `x–z` plane bends about `e2` (sag bend `κ·e2 < 0`, hog bend
 `> 0`); out-of-plane bending appears in `κ·e1`. `strain_gradient()` applies

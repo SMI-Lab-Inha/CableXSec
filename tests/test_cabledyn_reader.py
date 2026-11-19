@@ -471,10 +471,10 @@ def test_material_twist_turns_the_section_axes(tmp_path):
     assert np.allclose(history.twist_rad, twist)
     assert np.allclose(history.torque_Nm, 12.5)
     assert np.allclose(
-        history.rotation_curvature_x_1_m, kappa * np.sin(twist), atol=2e-6
+        history.rotation_curvature_x_1_m, kappa * np.cos(twist), atol=2e-6
     )
     assert np.allclose(
-        history.rotation_curvature_y_1_m, kappa * np.cos(twist), atol=2e-6
+        history.rotation_curvature_y_1_m, -kappa * np.sin(twist), atol=2e-6
     )
 
 

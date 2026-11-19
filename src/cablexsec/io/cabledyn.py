@@ -125,7 +125,18 @@ torsion CableDyn does not solve, keeps the twist-free End A frame.
 
 When the line is restrained in torsion and ``Twist<L>N<J>`` channels bracket
 the section, the material axes are :math:`(\mathbf{e}_1,\mathbf{e}_2)` turned
-right-handed about :math:`\mathbf{t}` by the material twist from End A. A line
+right-handed about :math:`\mathbf{t}` by the material twist from End A. On a
+line CableDyn solves in torsion the axes are CableDyn's section axes, those of
+its ``CurvX``/``CurvY`` channels: :math:`\mathbf{e}_1` starts at End A's
+torsion normal ``Nx`` (carried to the tangent by the smallest rotation; on a
+line restrained at End B only, End B's ``Nx`` rolled by its ``Pretwist`` and
+carried back to End A), not at the reference vector, and the arc frame carries
+it along the line and turns it by the twist, so the components equal
+``(-CurvY, CurvX)`` to the reconstruction's accuracy. ``frame="section"``
+cannot carry them and is refused on such a line.
+``curvature_source="components"`` reads CableDyn's ``CurvX``/``CurvY`` at the
+deck nodes bracketing a section instead (linear between them, as the
+tension), exact on CableDyn's axes and needing no node positions or angles. A line
 restrained in torsion at both ends without these channels is rejected, and so
 is a dynamic run of a line restrained at one end whose torsion CableDyn solves
 (:attr:`CableDynLine.torsion_solved`): the polar inertia carries torsional
@@ -186,7 +197,7 @@ from cablexsec.provenance import Provenance
 
 FloatArray = NDArray[np.float64]
 Frame = Literal["arc", "section"]
-CurvatureSource = Literal["auto", "tangent", "positions"]
+CurvatureSource = Literal["auto", "tangent", "positions", "components"]
 PressureModel = Literal["hydrostatic", "none"]
 TangentPlacement = Literal["auto", "chord"]
 
@@ -215,6 +226,8 @@ _DEFAULT_RHO_W = 1025.0
 # Expected units of the OpenFAST ``.CD.out`` units row (doc/outputs.rst).
 _UNITS = {
     "curv": "(1/m)",
+    "curvx": "(1/m)",
+    "curvy": "(1/m)",
     "ten": "(N)",
     "torq": "(N.m)",
     "twist": "(deg)",
@@ -224,7 +237,9 @@ _UNITS = {
     "py": "(m)",
     "pz": "(m)",
 }
-_NODE_CHANNEL = re.compile(r"^(curv|ten|torq|twist|bendmom)(\d+)n(\d+)$", re.IGNORECASE)
+_NODE_CHANNEL = re.compile(
+    r"^(curvx|curvy|curv|ten|torq|twist|bendmom)(\d+)n(\d+)$", re.IGNORECASE
+)
 _NODE_GEOMETRY = re.compile(r"^l(\d+)n(\d+)(dec|azi|px|py|pz)$", re.IGNORECASE)
 #: Every deck section CableDyn knows (``set_section``), by the upper-case name
 #: of its header, to the name the reader files its rows under. A header that
@@ -2148,15 +2163,25 @@ def _seed(tangent: FloatArray, reference: FloatArray, where: str) -> FloatArray:
 
 
 def _time_transport(
-    tangents: FloatArray, start: FloatArray | None, reference: FloatArray, where: str
+    tangents: FloatArray,
+    start: FloatArray | None,
+    reference: FloatArray,
+    where: str,
+    seed: FloatArray | None = None,
 ) -> tuple[FloatArray, FloatArray]:
     """Frame axis e1 at every sample by minimal rotation in time.
 
-    ``start`` is ``(e1, t)`` of the sample before the chunk, or ``None`` at t=0.
+    ``start`` is ``(e1, t)`` of the sample before the chunk, or ``None`` at t=0,
+    where ``seed`` (normal to the first tangent) or the reference vector
+    seeds the axis.
     """
     out = np.empty_like(tangents)
     if start is None:
-        e1 = _seed(tangents[0], reference, where)
+        e1 = (
+            _seed(tangents[0], reference, where)
+            if seed is None
+            else np.asarray(seed, dtype=np.float64)
+        )
         previous = tangents[0]
     else:
         e1, previous = start[0], start[1]
@@ -2399,15 +2424,29 @@ def _window(element: int, n_nodes: int, half: int) -> list[int]:
     return list(range(lo, hi + 1))
 
 
+def _is_cabledyn_main_table(path: Path) -> bool:
+    """Whether ``path`` is a CableDyn driver table (its title opens with
+    ``# CableDyn``), not the OpenFAST glue-code table of the same root."""
+    with path.open("rb") as handle:
+        return handle.read(64).lstrip().startswith(b"# CableDyn")
+
+
 def _discover(out_root: Path, line_id: int) -> dict[str, Path]:
     standalone = Path(f"{out_root}.out")
     coupled = Path(f"{out_root}.CD.out")
-    if standalone.is_file() and coupled.is_file():
-        raise CableSchemaError(
-            f"both {standalone.name} and {coupled.name} exist; name one output root"
-        )
+    driver_run = standalone.is_file()
+    if driver_run and coupled.is_file():
+        # OpenFAST always writes its glue-code table <root>.out next to
+        # CableDyn's <root>.CD.out: only a CableDyn driver table there is a
+        # second CableDyn run under the same root.
+        if _is_cabledyn_main_table(standalone):
+            raise CableSchemaError(
+                f"both {standalone.name} (a CableDyn driver table) and "
+                f"{coupled.name} exist; name one output root"
+            )
+        driver_run = False
     files: dict[str, Path] = {}
-    if standalone.is_file():
+    if driver_run:
         files["main"] = standalone
         for role, suffix in (
             ("positions", f".Line{line_id}.p.out"),
@@ -2756,6 +2795,8 @@ def _held_normal(
     attitude: FloatArray | None,
     connection: CableDynEndConnection,
     tangent: FloatArray,
+    *,
+    roll_deg: float = 0.0,
 ) -> FloatArray:
     """The torsion normal a held end carries to the line tangent.
 
@@ -2767,6 +2808,9 @@ def _held_normal(
     assert connection.normal is not None
     ez = np.asarray(connection.direction, dtype=np.float64)
     nx = np.asarray(connection.normal, dtype=np.float64)
+    if roll_deg:
+        angle = math.radians(roll_deg)
+        nx = math.cos(angle) * nx + math.sin(angle) * np.cross(ez, nx)
     if attitude is None:
         ez_t = np.broadcast_to(ez, tangent.shape)
         nx_t = np.broadcast_to(nx, tangent.shape)
@@ -2825,6 +2869,15 @@ def _hang_off_mode(
     line_id = line.line_id
     restrained_a = line.torsion_solved and "a" in line.torsion_restrained_ends
     b_only = line.torsion_solved and line.torsion_restrained_ends == frozenset({"b"})
+    if line.torsion_solved and frame == "section":
+        # CableDyn's section axes start at End A's torsion normal (or End B's)
+        # and are carried along the whole line, turned by its twist.
+        raise CableSchemaError(
+            f"line {line_id} is solved in torsion: its section axes start at the "
+            "restrained end's torsion normal and are carried along the line, which "
+            "frame='section' cannot do; read with frame='arc' (node positions from "
+            "End A) or curvature_source='components' (CurvX/CurvY channels)"
+        )
     if given.kind != "auto" and not restrained_a:
         why = (
             "it is restrained in torsion at End B only, so End A turns with the "
@@ -2920,50 +2973,49 @@ def _hang_off_mode(
     return _HangOff("transport", "twist-free (minimal rotation in time)")
 
 
-def _end_a_angle(
+def _end_a_carried(
     hang_off: _HangOff,
     rotation: _HangOffInput,
-    e1_a: FloatArray,
     chords: FloatArray,
     values: FloatArray,
     extra_slot: Mapping[str, int],
     rows: slice,
     main_name: str,
-) -> FloatArray:
-    """Angle [rad] about the End A chord from the twist-free End A axis
-    ``e1_a`` to the axis End A's material frame carries, for one chunk."""
+) -> FloatArray | None:
+    """The End A axis the material frame carries, for one chunk; ``None`` for
+    a given roll, which is applied as an angle."""
     if rotation.values is not None and rotation.values.shape[0] < rows.stop:
         raise CableSchemaError(
             f"hang_off_rotation has {rotation.values.shape[0]} rows; {main_name} "
             "has more"
         )
-    tangent = chords[:, 0]
     if hang_off.mode == "roll":
-        assert rotation.values is not None
-        return np.asarray(np.radians(rotation.values[rows]))
+        return None
     assert hang_off.connection is not None
+    tangent = chords[:, 0]
     if hang_off.mode == "end_b":
-        # End B's frame carried along the line to End A, where the free end
-        # turns by -Twist<L> against it.
-        carried = _held_normal(None, hang_off.connection, chords[:, -1])
+        # End B's axis (its Nx rolled by its Pretwist) carried along the line
+        # to End A, where the free end turns by -Twist<L> against it.
+        connection = hang_off.connection
+        carried = _held_normal(
+            None, connection, chords[:, -1], roll_deg=connection.pretwist_deg
+        )
         for k in range(chords.shape[1] - 2, -1, -1):
             carried = _transport(carried, chords[:, k + 1], chords[:, k])
-        carried = _roll(
+        return _roll(
             carried, tangent, -np.radians(values[:, extra_slot["twist_total"]])
         )
-    else:
-        attitude: FloatArray | None = None
-        if hang_off.body_columns is not None:
-            attitude = _body_attitude(
-                values[:, extra_slot["rx"]],
-                values[:, extra_slot["ry"]],
-                values[:, extra_slot["rz"]],
-            )
-        elif rotation.kind == "attitude":
-            assert rotation.values is not None
-            attitude = rotation.values[rows]
-        carried = _held_normal(attitude, hang_off.connection, tangent)
-    return _signed_angle(e1_a, carried, tangent)
+    attitude: FloatArray | None = None
+    if hang_off.body_columns is not None:
+        attitude = _body_attitude(
+            values[:, extra_slot["rx"]],
+            values[:, extra_slot["ry"]],
+            values[:, extra_slot["rz"]],
+        )
+    elif rotation.kind == "attitude":
+        assert rotation.values is not None
+        attitude = rotation.values[rows]
+    return _held_normal(attitude, hang_off.connection, tangent)
 
 
 def read_cabledyn_sections(
@@ -3000,9 +3052,11 @@ def read_cabledyn_sections(
         Deck ``LINES`` id.
     frame : {"arc", "section"}
         Twist-free transport of the section axes (module notes).
-    curvature_source : {"auto", "tangent", "positions"}
+    curvature_source : {"auto", "tangent", "positions", "components"}
         ``"auto"`` uses the tangent channels when every section has them and
-        positions otherwise; the choice is recorded.
+        positions otherwise; the choice is recorded. ``"components"`` takes
+        CableDyn's ``CurvX<L>N<J>``/``CurvY<L>N<J>`` (finite-EI lines) on
+        CableDyn's section axes (module notes).
     tangent_placement : {"auto", "chord"}
         Where the ``Dec``/``Azi`` values sit along the line. ``"auto"``
         (CableDyn 0.4.2 and later): at the node on a finite-EI line, at the
@@ -3062,8 +3116,10 @@ def read_cabledyn_sections(
     rotation = _hang_off_input(hang_off_rotation)
     if frame not in ("arc", "section"):
         raise CableSchemaError("frame must be 'arc' or 'section'")
-    if curvature_source not in ("auto", "tangent", "positions"):
-        raise CableSchemaError("curvature_source must be auto, tangent or positions")
+    if curvature_source not in ("auto", "tangent", "positions", "components"):
+        raise CableSchemaError(
+            "curvature_source must be auto, tangent, positions or components"
+        )
     if tangent_placement not in ("auto", "chord"):
         raise CableSchemaError("tangent_placement must be 'auto' or 'chord'")
     if tension_source not in ("auto", "segments", "nodes"):
@@ -3322,12 +3378,27 @@ def read_cabledyn_sections(
         source = "tangent" if tangent_ok else "positions"
     else:
         source = curvature_source
-    needed_curvature = has_tangent if source == "tangent" else has_position
+
+    def has_components(node: int) -> bool:
+        return all((kind, line_id, node + 1) in channels for kind in ("curvx", "curvy"))
+
+    if source == "components":
+        # CableDyn's own components: no reconstruction to check against Curv.
+        specs = section_specs
+    needed_curvature = (
+        has_tangent
+        if source == "tangent"
+        else has_components
+        if source == "components"
+        else has_position
+    )
     plans: list[_Plan] = []
     for name, arc_deck, arc_pos, elem_deck, elem_pos, node in specs:
         window = (
             _window(elem_deck, n_deck, window_nodes)
             if source == "tangent"
+            else [elem_deck, elem_deck + 1]
+            if source == "components"
             else _window(elem_pos, n_pos, window_nodes)
         )
         missing = [j + 1 for j in window if not needed_curvature(j)]
@@ -3335,6 +3406,9 @@ def read_cabledyn_sections(
             what = (
                 f"L{line_id}N<J>Dec and L{line_id}N<J>Azi channels"
                 if source == "tangent"
+                else f"CurvX{line_id}N<J> and CurvY{line_id}N<J> channels (a "
+                "finite-EI line)"
+                if source == "components"
                 else f".Line{line_id}.p.out or L{line_id}N<J>p{{x,y,z}} channels"
             )
             raise CableSchemaError(
@@ -3346,7 +3420,7 @@ def read_cabledyn_sections(
         plans.append(
             _Plan(
                 name,
-                arc_deck if source == "tangent" else arc_pos,
+                arc_deck if source in ("tangent", "components") else arc_pos,
                 elem_deck,
                 elem_pos,
                 window,
@@ -3375,7 +3449,7 @@ def read_cabledyn_sections(
     torque_available = all(
         ("torq", line_id, n + 1) in channels for pair in torsion_nodes for n in pair
     )
-    if line.torsion_restrained and not twist_available:
+    if line.torsion_restrained and not twist_available and source != "components":
         raise CableSchemaError(
             f"line {line_id} is restrained in torsion; the material frame needs "
             f"Twist{line_id}N<J> channels at the nodes bracketing every section"
@@ -3388,7 +3462,12 @@ def read_cabledyn_sections(
         }
     )
     restrained = " and ".join(sorted(line.torsion_restrained_ends)).upper()
-    if coupled and line.torsion_solved and not twist_available:
+    if (
+        coupled
+        and line.torsion_solved
+        and not twist_available
+        and (source != "components")
+    ):
         # Solved in torsion, a coupled line twists as it stretches
         # (Twist = -sum (K/GJ)(l - L) with one end free): the twist-free
         # frame would miss it.
@@ -3399,7 +3478,7 @@ def read_cabledyn_sections(
             f"Twist{line_id}N<J> channels at the nodes bracketing every section"
         )
     # Every route read here marches (a standalone static run is refused above).
-    if line.torsion_solved and not twist_available:
+    if line.torsion_solved and not twist_available and source != "components":
         # Restrained at one end, CableDyn solves the nodal twist in the
         # dynamics: the polar inertia Irn carries torsional waves, and a roll
         # or turn of the restrained end's vessel or body twists the line
@@ -3419,12 +3498,21 @@ def read_cabledyn_sections(
     }
 
     # How End A's material frame turns in time (module notes, hang-off).
-    hang_off = _hang_off_mode(line, rotation, main, channels, frame, n_deck)
+    if source == "components":
+        if rotation.kind != "auto":
+            raise CableSchemaError(
+                "hang_off_rotation turns the reconstructed frame; CableDyn's "
+                "CurvX/CurvY (curvature_source='components') already carry the "
+                "hang-off"
+            )
+        hang_off = _HangOff("transport", "CableDyn's section axes (CurvX, CurvY)")
+    else:
+        hang_off = _hang_off_mode(line, rotation, main, channels, frame, n_deck)
     checks["hang_off"] = {"mode": hang_off.mode, "source": hang_off.source}
 
     # Position-grid nodes needed: frame transport (arc), curvature, elevation.
     pos_nodes: set[int] = set()
-    if frame == "arc":
+    if frame == "arc" and source != "components":
         last = max(plan.elem_pos for plan in sections_plans) + 1
         pos_nodes.update(range(0, last + 1))
     if hang_off.mode == "end_b":
@@ -3442,7 +3530,7 @@ def read_cabledyn_sections(
             f"the frame carried from the restrained End B of line {line_id}"
             if hang_off.mode == "end_b"
             else "the arc-length frame transport"
-            if frame == "arc"
+            if frame == "arc" and source != "components"
             else "the section elevation"
         )
         raise CableSchemaError(
@@ -3493,6 +3581,11 @@ def read_cabledyn_sections(
     for node in tan_order:
         want("dec", node)
         want("azi", node)
+    if source == "components":
+        for plan in sections_plans:
+            for node in plan.window:
+                want("curvx", node)
+                want("curvy", node)
     if positions_table is None:
         for node in pos_order:
             for kind in ("px", "py", "pz"):
@@ -3712,7 +3805,7 @@ def read_cabledyn_sections(
                             tension_mirror += float(np.sum(error))
             # Frame transport along the arc (all sections share it).
             arc_e1: dict[int, FloatArray] = {}
-            if frame == "arc":
+            if frame == "arc" and source != "components":
                 last = max(plan.elem_pos for plan in sections_plans)
                 if hang_off.mode == "end_b":
                     last = n_pos - 2
@@ -3721,20 +3814,43 @@ def read_cabledyn_sections(
                     - positions[:, [pos_slot[j] for j in range(last + 1)]],
                     "element chord",
                 )
-                e1_a, state_a = _time_transport(
-                    chords[:, 0], state_a, reference, f"line {line_id} End A"
-                )
+                carried: FloatArray | None = None
+                seed: FloatArray | None = None
                 if hang_off.mode != "transport":
-                    angle = _end_a_angle(
+                    carried = _end_a_carried(
                         hang_off,
                         rotation,
-                        e1_a,
                         chords,
                         values,
                         extra_slot,
                         slice(n_rows, n_rows + nt),
                         paths["main"].name,
                     )
+                    if state_a is None and line.torsion_solved:
+                        # CableDyn's section axes on a line solved in torsion:
+                        # x from End A's torsion normal (or the axis carried
+                        # from End B), not from the reference vector.
+                        assert hang_off.connection is not None
+                        seed = (
+                            carried[0]
+                            if carried is not None
+                            else _held_normal(None, hang_off.connection, chords[:1, 0])[
+                                0
+                            ]
+                        )
+                e1_a, state_a = _time_transport(
+                    chords[:, 0],
+                    state_a,
+                    reference,
+                    f"line {line_id} End A",
+                    seed=seed,
+                )
+                if hang_off.mode != "transport":
+                    if carried is None:
+                        assert rotation.values is not None
+                        angle = np.radians(rotation.values[slice(n_rows, n_rows + nt)])
+                    else:
+                        angle = _signed_angle(e1_a, carried, chords[:, 0])
                     if roll_start is None:
                         roll_start = float(angle[0])
                     # Relative to the first row, the static state the frame is
@@ -3754,53 +3870,6 @@ def read_cabledyn_sections(
                     e1 = _transport(e1, chords[:, k - 1], chords[:, k])
                     arc_e1[k] = e1
             for plan in plans:
-                if source == "tangent":
-                    dec = np.radians(
-                        np.stack(
-                            [values[:, slot[("dec", j)]] for j in plan.window], axis=1
-                        )
-                    )
-                    azi = np.radians(
-                        np.stack(
-                            [values[:, slot[("azi", j)]] for j in plan.window], axis=1
-                        )
-                    )
-                    samples = np.stack(
-                        (
-                            np.sin(dec) * np.cos(azi),
-                            np.sin(dec) * np.sin(azi),
-                            np.cos(dec),
-                        ),
-                        axis=-1,
-                    )
-                    value, d1, _ = _spline(tangent_arcs[plan.window], samples, plan.arc)
-                    tangent = _unit(value, "section tangent")
-                    kappa = np.cross(tangent, d1)
-                else:
-                    window_xyz = positions[:, [pos_slot[j] for j in plan.window]]
-                    value, d1, d2 = _spline(pos_arcs[plan.window], window_xyz, plan.arc)
-                    speed = np.linalg.norm(d1, axis=-1, keepdims=True)
-                    tangent = d1 / speed
-                    kappa = np.cross(d1, d2) / speed**3
-                norm = np.linalg.norm(kappa, axis=-1)
-                append(plan, "norm", norm)
-                if plan.probe:
-                    node = plan.node
-                    append(plan, "channel", values[:, slot[("curv", node)]])
-                    continue
-                if frame == "arc":
-                    axis1 = _transport(
-                        arc_e1[plan.elem_pos], chords[:, plan.elem_pos], tangent
-                    )
-                else:
-                    axis1, state = _time_transport(
-                        tangent,
-                        state_section[plan.name],
-                        reference,
-                        f"section {plan.name!r}",
-                    )
-                    state_section[plan.name] = state
-                axis2 = np.cross(tangent, axis1)
                 # Linear weights between the bracketing deck nodes (node
                 # channels) and position-grid nodes (positions).
                 weight = (plan.arc - deck_arcs[plan.elem_deck]) / deck_l0[
@@ -3809,23 +3878,110 @@ def read_cabledyn_sections(
                 weight_pos = (plan.arc - pos_arcs[plan.elem_pos]) / pos_l0[
                     plan.elem_pos
                 ]
-                if twist_available:
-                    twist = np.radians(
-                        (1 - weight) * values[:, slot[("twist", plan.elem_deck)]]
-                        + weight * values[:, slot[("twist", plan.elem_deck + 1)]]
+                if source == "components":
+                    # CableDyn's curvature vector (towards the centre of
+                    # curvature) on its section axes (x, y): the rotation
+                    # curvature on the same axes is (-CurvY, CurvX).
+                    curv_x, curv_y = (
+                        (1 - weight) * values[:, slot[(kind, plan.elem_deck)]]
+                        + weight * values[:, slot[(kind, plan.elem_deck + 1)]]
+                        for kind in ("curvx", "curvy")
                     )
-                    cos, sin = np.cos(twist)[:, None], np.sin(twist)[:, None]
-                    axis1, axis2 = cos * axis1 + sin * axis2, -sin * axis1 + cos * axis2
-                    append(plan, "twist", twist)
-                if torque_available:
-                    append(
-                        plan,
-                        "torque",
-                        (1 - weight) * values[:, slot[("torq", plan.elem_deck)]]
-                        + weight * values[:, slot[("torq", plan.elem_deck + 1)]],
-                    )
-                append(plan, "kx", np.sum(kappa * axis1, axis=-1))
-                append(plan, "ky", np.sum(kappa * axis2, axis=-1))
+                    append(plan, "norm", np.hypot(curv_x, curv_y))
+                    if twist_available:
+                        append(
+                            plan,
+                            "twist",
+                            np.radians(
+                                (1 - weight)
+                                * values[:, slot[("twist", plan.elem_deck)]]
+                                + weight
+                                * values[:, slot[("twist", plan.elem_deck + 1)]]
+                            ),
+                        )
+                    if torque_available:
+                        append(
+                            plan,
+                            "torque",
+                            (1 - weight) * values[:, slot[("torq", plan.elem_deck)]]
+                            + weight * values[:, slot[("torq", plan.elem_deck + 1)]],
+                        )
+                    append(plan, "kx", -curv_y)
+                    append(plan, "ky", curv_x)
+                else:
+                    if source == "tangent":
+                        dec = np.radians(
+                            np.stack(
+                                [values[:, slot[("dec", j)]] for j in plan.window],
+                                axis=1,
+                            )
+                        )
+                        azi = np.radians(
+                            np.stack(
+                                [values[:, slot[("azi", j)]] for j in plan.window],
+                                axis=1,
+                            )
+                        )
+                        samples = np.stack(
+                            (
+                                np.sin(dec) * np.cos(azi),
+                                np.sin(dec) * np.sin(azi),
+                                np.cos(dec),
+                            ),
+                            axis=-1,
+                        )
+                        value, d1, _ = _spline(
+                            tangent_arcs[plan.window], samples, plan.arc
+                        )
+                        tangent = _unit(value, "section tangent")
+                        kappa = np.cross(tangent, d1)
+                    else:
+                        window_xyz = positions[:, [pos_slot[j] for j in plan.window]]
+                        value, d1, d2 = _spline(
+                            pos_arcs[plan.window], window_xyz, plan.arc
+                        )
+                        speed = np.linalg.norm(d1, axis=-1, keepdims=True)
+                        tangent = d1 / speed
+                        kappa = np.cross(d1, d2) / speed**3
+                    norm = np.linalg.norm(kappa, axis=-1)
+                    append(plan, "norm", norm)
+                    if plan.probe:
+                        node = plan.node
+                        append(plan, "channel", values[:, slot[("curv", node)]])
+                        continue
+                    if frame == "arc":
+                        axis1 = _transport(
+                            arc_e1[plan.elem_pos], chords[:, plan.elem_pos], tangent
+                        )
+                    else:
+                        axis1, state = _time_transport(
+                            tangent,
+                            state_section[plan.name],
+                            reference,
+                            f"section {plan.name!r}",
+                        )
+                        state_section[plan.name] = state
+                    axis2 = np.cross(tangent, axis1)
+                    if twist_available:
+                        twist = np.radians(
+                            (1 - weight) * values[:, slot[("twist", plan.elem_deck)]]
+                            + weight * values[:, slot[("twist", plan.elem_deck + 1)]]
+                        )
+                        cos, sin = np.cos(twist)[:, None], np.sin(twist)[:, None]
+                        axis1, axis2 = (
+                            cos * axis1 + sin * axis2,
+                            -sin * axis1 + cos * axis2,
+                        )
+                        append(plan, "twist", twist)
+                    if torque_available:
+                        append(
+                            plan,
+                            "torque",
+                            (1 - weight) * values[:, slot[("torq", plan.elem_deck)]]
+                            + weight * values[:, slot[("torq", plan.elem_deck + 1)]],
+                        )
+                    append(plan, "kx", np.sum(kappa * axis1, axis=-1))
+                    append(plan, "ky", np.sum(kappa * axis2, axis=-1))
                 if (
                     pos_order
                     and plan.elem_pos in pos_slot
@@ -4052,7 +4208,7 @@ def read_cabledyn_sections(
             external_pressure_Pa=p_ext,
             torque_Nm=data.get("torque"),
             twist_rad=data.get("twist"),
-            frame=frame,
+            frame="cabledyn section axes" if source == "components" else frame,
             curvature_source=source,
             tension_source=tension_label,
             pressure_model=pressure,
@@ -4072,7 +4228,13 @@ def read_cabledyn_sections(
                         if source == "tangent"
                         else ""
                     ),
-                    f"{frame} frame seeded by e2 = a x t, "
+                    "CableDyn's section axes: its CurvX/CurvY channels"
+                    if source == "components"
+                    else "CableDyn's section axes: x from the restrained end's "
+                    "torsion normal, carried along the line and turned by its twist; "
+                    f"End A frame in time: {hang_off.source}"
+                    if line.torsion_solved
+                    else f"{frame} frame seeded by e2 = a x t, "
                     f"a = {tuple(float(v) for v in reference)}; End A frame in time: "
                     + (
                         hang_off.source

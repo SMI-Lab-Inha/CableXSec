@@ -27,6 +27,9 @@ All notable changes to CableXSec are recorded in this file. The format follows
   body by 40 deg at a 60 deg hang-off read its components turned by 35 deg.
 - `CableDynLine.end_connections` and `end_kinds`: the END CONNECTIONS rows and
   the holders of the ends, as CableDyn reads them.
+- `read_cabledyn_sections(curvature_source="components")` takes CableDyn's
+  `CurvX`/`CurvY` at the deck nodes around each section, on CableDyn's section
+  axes: exact, with no node positions or angles.
 - `SeaStateBatchOptions` takes the reader's curvature check tolerances
   (`curvature_check_rtol`, `curvature_check_end_rtol`, `curvature_check_atol_1_m`):
   a coarse run that fails the check at the default could not be read by the batch.
@@ -458,6 +461,13 @@ All notable changes to CableXSec are recorded in this file. The format follows
   CableDyn refuses (`none` or `-` torsion stiffness, zero `Ez`, a zero or
   parallel `Nx` at a restrained end, two rows for one end, an unknown line, an
   `EI = 0` line). Bytes that are not UTF-8 no longer stop the reader.
+- On a line CableDyn solves in torsion the reconstructed section axes start at
+  End A's torsion normal `Nx` (End B's on a line restrained at End B only), as
+  CableDyn's `CurvX`/`CurvY` axes do; they started at the reference vector and
+  stood 90 deg away on the coupled VolturnUS-S fixture `vu_torsion`, whose
+  components now agree within 0.3 to 1.2 %. `frame="section"` is refused on such
+  a line. An OpenFAST root holding the glue-code `<root>.out` beside
+  `<root>.CD.out` was refused as two runs; the CableDyn file is read.
 - `read_cabledyn_sections` refuses a standalone deck without `TMax` or with
   `TMax 0` (a static run, one row) and a standalone record that ends before
   `TMax` (a run that stopped early), naming the cause; an OpenFAST `.CD.out` is
