@@ -1196,10 +1196,10 @@ guide [global_local_guide.md](global_local_guide.md), Section 8.
 | MX-5 | MM | Hysteretic bending of a global program with the exported table | not run | open |
 | MX-scale | I | Slip scaling variable (`slip_scale=True`): bound homogeneity of `compute_mkappa` (66 kV, 20 → 70 kN, cores); group elements at 60 kN against the 10 kN elements with yield curvatures times `ρ_g` (Ménard); tension cycle 10–70 kN inside ±0.03 1/m bending, scaled law against the contact-tension history over the fixed-tension residual | 6.9e-16; 1.2e-13; 1.21 (1.02 before the support-cut shear stack; symmetric wire bounds on a breakpoint grid: 8e-15, work 7e-15) | PASS |
 | MX-scale-1 | I | One scale for all groups against the per-group law, 10–150 kN (reference 10 kN), backbone and cycles to 1.5 times full slip | 66 kV 0; 33 kV three-core 0.10 % (0.29 % with cores); Ménard 12 %; with p_e 0–2 MPa: 66 kV 21 %, 33 kV 12 %, Ménard 19 % | reported |
-| MX-group-B | I | One law per friction group, each with its own scale table (`BendingLawExport.slip_group_laws`): sum over the groups of `s_g M_g(κ/s_g)` (the backbone table of the group at the reference, scaled by its own `s_g(T)`) against the exported backbone at the same tension (case below) | target (registered): at every grid curvature κ > 0 and every exported tension, within 0.5 % of the exported moment. Result: 4.4e-4, 4.3e-4, 4.3e-4 at 0, 20, 40 MPa (the interpolation of the reference backbone between grid points) | PASS |
-| MX-group-E | I | Same laws, Masing replay: work of three symmetric cycles of amplitude 1e-3, 3e-3, 0.01, 0.03, 0.1 and 0.3 1/m, summed group laws against the exported law at the same tension | target (registered): within ±1 %. Result: 0.99986–1.00019, 0.99997–1.00056, 0.99876–1.00084 at 0, 20, 40 MPa | PASS |
+| MX-group-B | I | One law per friction group, each with its own scale table (`BendingLawExport.slip_group_laws`): sum over the groups of `s_g M_g(κ/s_g)` (the backbone table of the group at the reference, scaled by its own `s_g(T)`) against the exported backbone at the same tension (case below) | target (registered): at every grid curvature κ > 0 and every exported tension, within 0.5 % of the exported moment. Result: 4.6e-4, 4.4e-4, 4.5e-4 at 0, 20, 40 MPa (the interpolation of the reference backbone between grid points) | PASS |
+| MX-group-E | I | Same laws, Masing replay: work of three symmetric cycles of amplitude 1e-3, 3e-3, 0.01, 0.03, 0.1 and 0.3 1/m, summed group laws against the exported law at the same tension | target (registered): within ±1 %. Result: 0.99973–1.00003, 0.99997–1.00054, 0.99973–1.00003 at 0, 20, 40 MPa | PASS |
 | MX-group-0 | A | The default scale table starts at zero tension: `s_g(0)` is the group cap of the contact model at zero tension over its reference cap | registered: without clamping `s_g(0) = 0` to 1e-12; with clamping the zero row equals the direct cap ratio at 0 N to 1e-12 rel., and the table scale at 5 kN equals the direct cap ratio at 5 kN to 1e-9 rel. (bounded chain, affine in tension). Result: 0 without clamping; `s_g(0)` 0.82–0.87 (20 MPa) and 0.90–0.93 (40 MPa) of the 10 kN reference, laid cores lowest; both identities to round-off | PASS |
-| MX-group-1 | I | One cap-weighted scale for all groups (`per_group=False`) on the same case and measures | backbone 0.044 % (0 MPa), 5.3 % (20 MPa), 4.6 % (40 MPa); work 0.9999–1.0002, 0.938–1.073, 0.954–1.072 | reported |
+| MX-group-1 | I | One cap-weighted scale for all groups (`per_group=False`) on the same case and measures | backbone 0.046 % (0 MPa), 5.5 % (20 MPa), 4.8 % (40 MPa); work 0.9997–1.0000, 0.961–1.074, 0.944–1.073 | reported |
 
 The armour laws are parallel spring–sliders at fixed contact pressure, so the Iwan law follows Masing's rules; it is
 exact when every wire's slip interval is symmetric. The signed capstan bound makes the interval asymmetric (the
@@ -1218,8 +1218,8 @@ The elastic full-slip part `EI_slip κ` is carried by the first group (scaling l
 `tests/test_bending_law_groups.py`.
 
 With clamping the laid cores scale unlike the armour (at 10 kN and 20 MPa the cores sit at 0.39 of their 100 kN
-cap, the armour and the profiles at 0.46), which is why one scale for all groups misses the backbone by 5 % (MX-group-1)
-while the summed group laws stay within 4.4e-4: the residual is the linear interpolation of each reference backbone
+cap, the armour and the profiles at 0.46), which is why one scale for all groups misses the backbone by 5.5 % (MX-group-1)
+while the summed group laws stay within 4.6e-4: the residual is the linear interpolation of each reference backbone
 between its grid points, not the scaling.
 
 ## Cable over a sheave (gap SH)

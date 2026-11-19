@@ -15,8 +15,8 @@ All notable changes to CableXSec are recorded in this file. The format follows
   that sums the group laws `s_g(T) B_g(κ / s_g(T))` instead of carrying one scale. Rows
   MX-group-B and MX-group-E (targets registered before the run): on the 66 kV template with
   laid cores, filler profiles and 0 / 20 / 40 MPa armour winding stress, 10–200 kN, the summed
-  group laws reproduce the exported backbone within 4.4e-4 (target 0.5 %) and the cycle work
-  within 0.13 % (target ±1 %); one scale for all groups misses by up to 5.3 % and 7 % with
+  group laws reproduce the exported backbone within 4.6e-4 (target 0.5 %) and the cycle work
+  within 0.06 % (target ±1 %); one scale for all groups misses by up to 5.5 % and 7 % with
   clamping (MX-group-1, reported).
 
 - Reported rows SV11-SPLIT, SV11-REACH and SV11-EQ88: where the SV11 termination increment

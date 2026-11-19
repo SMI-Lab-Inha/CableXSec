@@ -606,8 +606,8 @@ Checks (`tests/test_bending_law_slip_scale.py`; row MX-scale of the [benchmark r
 One scale or one per group. The single scale `s` keeps the stick stiffness and the full-slip moment exact and is
 exact when every group scales alike. Otherwise it misplaces the transition. With armour clamping the laid cores
 scale unlike the armour: on the 66 kV template with cores and filler profiles (μ 0.46) at 20 and 40 MPa winding
-stress, 10–200 kN, one scale misses the exported backbone by up to 5.3 % and the cycle work by up to 7 %, while the
-summed group laws stay within 4.4e-4 and 0.13 % (rows MX-group-B, MX-group-E and MX-group-1 of the
+stress, 10–200 kN, one scale misses the exported backbone by up to 5.5 % and the cycle work by up to 7 %, while the
+summed group laws stay within 4.6e-4 and 0.06 % (rows MX-group-B, MX-group-E and MX-group-1 of the
 [benchmark register](benchmarks.md)). Largest error of the single-scale law
 against the per-group law over 10–150 kN, reference 10 kN, on the virgin backbone and on cycles up to 1.5 times the
 full-slip curvature (moment in % of the range; work per cycle at 1.5 times full slip):
