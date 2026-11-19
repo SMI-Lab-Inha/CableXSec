@@ -112,11 +112,61 @@ contact penalty and the shear of half the mean filler depth
 filler outer radius). The profiles carry no share of the cable tension (the
 filler stays non-structural axially), so they have no capstan load.
 
+Friction models
+---------------
+:func:`core_friction_history` takes the friction model of the cores and the
+filler profiles as the armour does (``friction_model``):
+
+* ``"direction_tied"`` (default): every station a spring--slider with the
+  Papailiou cap of :func:`wire_slip_history`, tied to the current bending
+  direction. Under rotating curvature the cap turns with the bending
+  direction and the friction work is too low (see :func:`wire_slip_history`).
+* ``"distributed"``: each population (cores, profiles) is the distributed
+  helix model of the armour
+  (:func:`~cablexsec.mechanics.distributed_friction.distributed_friction_history`):
+  the axial force of a core is a field along one pitch of its helix with the
+  shear-lag interface of the stick coefficient ``xi`` (``k_hat = xi / (1 -
+  xi)``), the Coulomb bound of its contact pressure and the signed capstan
+  term ``lam = mu_eff |sin beta|``, and the slip of every helix node in the
+  direction of its own traction, with no bending direction. The stations
+  sample that field. The stress unit is the same ``sigma_0`` (the pressure
+  times the station width is the line load ``q_core`` of a core), so the
+  planar full-slip field is ``sigma_0 (C exp(lam x) - 1)``,
+  ``C = lam pi / (2 sinh(lam pi / 2))`` (``x`` the azimuth from the
+  geometric neutral axis toward tension), and the full-slip moment is that of
+  the direction-tied law times ``C``. It needs a compliant interface
+  (``xi < 1``).
+* ``"auto"``: the direction-tied law on a planar curvature path (out-of-plane
+  ratio at most :data:`~cablexsec.analysis.fatigue.PLANAR_PATH_TOLERANCE`, as
+  in the fatigue route), the distributed law otherwise; a rigid population
+  keeps the direction-tied law with a
+  :class:`~cablexsec.provenance.FrictionModelFallbackWarning`.
+
+The internal rings keep the [KarlsenHusoy2026] operator in every model.
+
+Contact loads over a tension history
+------------------------------------
+:func:`core_load_history` evaluates the core and profile contact loads of the
+contact model at every sample of a tension history (the bounded chain is
+affine in tension, so two evaluations give it; the solved model is solved at
+up to 33 tensions and interpolated beyond, as the armour histories). The
+friction bound of each population then follows its own load. The profile
+pressure is proportional to its face load. The core pressure is the pressure
+of the sample's line load times the ratio of the population's full-slip
+friction moment at the sample's load-weighted coefficient to that at the
+reference coefficient, so that loading the contact types in another
+proportion changes the bound level as it changes the group cap of an
+exported law's slip scale
+(:class:`~cablexsec.analysis.bending_law.SlipScaleTable`); the coefficient in
+the capstan term stays at the reference value. The internal rings take the
+tension history; their pressure-held part stays at the reference core load.
+
 Assumptions (stated, not solved)
 --------------------------------
-* Normal contact loads are those of the axisymmetric state and are held
-  fixed during bending (as for the armour); the bending redistribution of
-  core contact is not solved.
+* Normal contact loads are those of the axisymmetric state, at the
+  reference tension or following a tension history
+  (:func:`core_load_history`), and are not changed by bending (as for the
+  armour); the bending redistribution of core contact is not solved.
 * The wedged trefoil assumes touching cores. The outer-face load ``R / n`` of
   a core and the face loads ``2 R / n`` of a profile are estimates: a profile
   face is not radial, and part of ``R`` reaches the cores directly.
@@ -142,8 +192,10 @@ contacts); [Janocha2024] Table 2.
 
 from __future__ import annotations
 
+import dataclasses
 import math
 from dataclasses import dataclass, field
+from typing import Literal
 
 import numpy as np
 from numpy.typing import NDArray
@@ -157,11 +209,13 @@ from cablexsec.exceptions import CableInputError, CableSchemaError
 from cablexsec.materials import library
 from cablexsec.mechanics.axisymmetric import AxisymmetricResult, compute_contact_forces
 from cablexsec.mechanics.core_lay import bending_factor, core_angle
+from cablexsec.mechanics.distributed_friction import DEFAULT_MAX_INCREMENT
 from cablexsec.mechanics.mkappa import HelicalLayerSpec
 from cablexsec.mechanics.papailiou import (
     DIRECTION_HOLD_FRACTION,
     BendingWork,
     wire_slip_history,
+    wire_slip_stress_bounds,
 )
 from cablexsec.mechanics.radial_cable import CableRadialState
 from cablexsec.mechanics.section_geometry import is_interstitial_filler
@@ -180,19 +234,35 @@ from cablexsec.mechanics.yun_coefficient import (
 )
 
 __all__ = [
+    "CORE_FRICTION_MODELS",
+    "CORE_LOAD_MODES",
     "CoreContactLoads",
     "CoreFrictionHistory",
     "CoreFrictionModel",
+    "CoreFrictionModelName",
     "CoreFrictionSpec",
+    "CoreLoadHistory",
+    "CoreLoadMode",
     "FillerProfiles",
     "StrandRingFriction",
     "build_core_friction",
     "core_contact_loads",
     "core_friction_history",
+    "core_load_history",
     "resolve_core_friction",
 ]
 
 FloatArray = NDArray[np.float64]
+
+#: Friction model of the core law (:func:`core_friction_history`).
+CoreFrictionModelName = Literal["direction_tied", "distributed", "auto"]
+CORE_FRICTION_MODELS: tuple[str, ...] = ("direction_tied", "distributed", "auto")
+#: Core contact loads of a route with a tension history: ``"follow"`` the
+#: history (:func:`core_load_history`) or hold the ``"reference"`` state.
+CoreLoadMode = Literal["follow", "reference"]
+CORE_LOAD_MODES: tuple[str, ...] = ("follow", "reference")
+#: Solved tensions of a solved-model load history before it is interpolated.
+_SOLVED_LOAD_NODES = 33
 
 #: Default friction coefficient of every core contact: the value Ménard and
 #: Cartraud (2023, Section 5) adopt for all contacts of a three-core cable.
@@ -882,9 +952,157 @@ def build_core_friction(
 
 
 @dataclass(frozen=True)
+class CoreLoadHistory:
+    """Core and filler-profile contact loads over a tension history.
+
+    ``core_N_per_m`` is the total normal line load of one core and
+    ``core_mu_effective`` its load-weighted friction coefficient at every
+    sample; ``core_pressure_Pa`` the friction-setting pressure of the core
+    population (module notes) and ``core_mu_capstan`` the coefficient of its
+    capstan term over the history: the model's reference coefficient, or,
+    when that is zero while later samples carry frictional loads (an
+    unloaded reference whose filler coefficient is zero), the coefficient of
+    the most loaded sample. ``filler_profile_N_per_m`` and
+    ``filler_pressure_Pa`` are those of the filler profiles (``None``
+    without them). ``contact_model`` names the model the loads come from.
+    """
+
+    tension_N: FloatArray
+    core_N_per_m: FloatArray
+    core_mu_effective: FloatArray
+    core_pressure_Pa: FloatArray
+    contact_model: str
+    filler_profile_N_per_m: FloatArray | None = None
+    filler_pressure_Pa: FloatArray | None = None
+    core_mu_capstan: float | None = None
+
+
+def _population_cap_per_pressure(spec: HelicalLayerSpec, mu: float) -> float:
+    """Planar full-slip friction moment of a population per unit pressure,
+    without the common factor ``A cos(beta) r``."""
+    unit = dataclasses.replace(spec, mu=mu, contact_pressure_Pa=1.0)
+    upper, lower = wire_slip_stress_bounds(unit, 0.0)
+    c = np.cos(unit.phi_wires)
+    return float(np.sum(np.where(c > 0.0, upper, lower) * np.abs(c)))
+
+
+def _load_nodes(tension: FloatArray, contact_model: str) -> FloatArray:
+    """Tensions at which the contact model is evaluated (module notes)."""
+    if contact_model != "solved":
+        # Bounded estimate (also the core loads of the qp model): affine.
+        return np.array([0.0, max(float(np.max(tension)), 1.0)])
+    unique = np.unique(tension)
+    if unique.size <= _SOLVED_LOAD_NODES:
+        return np.asarray(unique, dtype=np.float64)
+    return np.linspace(float(unique[0]), float(unique[-1]), _SOLVED_LOAD_NODES)
+
+
+def core_load_history(
+    cable: CableData,
+    model: CoreFrictionModel,
+    tension_N: FloatArray,
+    *,
+    contact_model: str = "bounded",
+) -> CoreLoadHistory:
+    """Core and filler-profile contact loads of ``model`` over a tension history.
+
+    The loads of :func:`core_contact_loads` with the model's core support at
+    every sample of ``tension_N`` [N] (finite, non-negative, 1-D): exact for
+    the bounded estimate (affine in tension, two evaluations; the ``"qp"``
+    model takes the bounded estimate for the cores too), and for the solved
+    model exact up to 33 distinct tensions and interpolated linearly between
+    33 equally spaced solutions beyond. Pass the result to
+    :func:`core_friction_history` (``loads``) so that the friction bounds of
+    the cores and profiles follow the history (module notes).
+    """
+    tension = np.asarray(tension_N, dtype=np.float64)
+    if tension.ndim != 1 or not tension.size or not np.isfinite(tension).all():
+        raise CableInputError(
+            "the tension history must be a finite, non-empty 1-D array"
+        )
+    if np.any(tension < 0.0):
+        raise CableInputError("the tension history must not be negative")
+    if contact_model not in {"bounded", "qp", "solved"}:
+        raise CableSchemaError("contact_model must be 'bounded', 'qp' or 'solved'.")
+    nodes = _load_nodes(tension, contact_model)
+    support = None if contact_model == "solved" else model.spec.central_filler
+    at_nodes = [
+        core_contact_loads(
+            cable, float(value), contact_model=contact_model, central_filler=support
+        )
+        for value in nodes
+    ]
+
+    def follow(name: str) -> FloatArray:
+        values = np.array([getattr(item, name) for item in at_nodes])
+        if nodes.size == 1:
+            return np.full(tension.shape, float(values[0]))
+        return np.asarray(np.interp(tension, nodes, values), dtype=np.float64)
+
+    core_core = follow("core_core_N_per_m")
+    filler = follow("core_filler_N_per_m")
+    sheath = follow("core_sheath_N_per_m")
+    total = core_core + filler + sheath
+    spec = model.spec
+    weighted = (
+        spec.mu_core_core * core_core
+        + spec.mu_core_filler * filler
+        + spec.mu_core_sheath * sheath
+    )
+    positive = total > 0.0
+    mu = np.full(total.shape, spec.mu_core_filler)
+    mu[positive] = weighted[positive] / total[positive]
+    population = model.population
+    pressure = model.n_cores * total / (2.0 * math.pi * model.r_offset_m)
+    reference_mu = float(population.mu)
+    if reference_mu <= 0.0 and np.any(mu[positive] > 0.0):
+        # A zero reference coefficient cannot carry the friction of later
+        # samples: normalise by the coefficient of the most loaded sample.
+        reference_mu = float(mu[int(np.argmax(total))])
+    if np.any(np.abs(mu - reference_mu) > 1e-12 * max(reference_mu, 1e-300)):
+        # The full-slip friction moment of the population at each sample's
+        # coefficient over that at the normalising coefficient (positive
+        # here unless every sample is frictionless).
+        reference = _population_cap_per_pressure(population, reference_mu)
+        values, inverse = np.unique(mu, return_inverse=True)
+        ratio = np.array(
+            [
+                _population_cap_per_pressure(population, float(value)) / reference
+                if reference > 0.0
+                else 0.0
+                for value in values
+            ]
+        )
+        pressure = pressure * ratio[inverse]
+    profile = profile_pressure = None
+    if model.fillers is not None:
+        profile = follow("filler_profile_N_per_m")
+        r_f = model.fillers.population.r_helix_m
+        profile_pressure = model.fillers.n_profiles * profile / (2.0 * math.pi * r_f)
+    return CoreLoadHistory(
+        tension_N=tension,
+        core_N_per_m=np.asarray(total, dtype=np.float64),
+        core_mu_effective=np.asarray(mu, dtype=np.float64),
+        core_pressure_Pa=np.asarray(pressure, dtype=np.float64),
+        contact_model=contact_model,
+        filler_profile_N_per_m=profile,
+        filler_pressure_Pa=profile_pressure,
+        core_mu_capstan=reference_mu,
+    )
+
+
+@dataclass(frozen=True)
 class CoreFrictionHistory:
     """Moments ``(samples, 2)`` and work of the cores, internal rings and
-    filler profiles (``filler_moment_Nm`` zero without profiles)."""
+    filler profiles (``filler_moment_Nm`` zero without profiles).
+
+    ``friction_model`` is the law the cores and profiles were solved with
+    (``"direction_tied"`` or ``"distributed"``; ``"auto"`` resolved).
+    ``core_slip_fraction`` is the fraction of core stations in slip
+    (direction-tied) or of helix nodes on their bound (distributed).
+    ``loads`` is the load history the bounds followed (``None``: the
+    model's reference loads).
+    """
 
     core_moment_Nm: FloatArray
     strand_moment_Nm: FloatArray
@@ -892,6 +1110,8 @@ class CoreFrictionHistory:
     work: BendingWork
     model: CoreFrictionModel
     filler_moment_Nm: FloatArray | None = None
+    friction_model: str = "direction_tied"
+    loads: CoreLoadHistory | None = None
 
     @property
     def moment_Nm(self) -> FloatArray:
@@ -902,12 +1122,15 @@ class CoreFrictionHistory:
 
 
 def _strand_history(
-    model: CoreFrictionModel, kx: FloatArray, ky: FloatArray
+    model: CoreFrictionModel,
+    kx: FloatArray,
+    ky: FloatArray,
+    tension_N: FloatArray | None = None,
 ) -> tuple[FloatArray, FloatArray, FloatArray, FloatArray, FloatArray]:
     count = kx.size
     moment = np.zeros((count, 2))
     stored, friction, endpoint, remainder = (np.zeros(count) for _ in range(4))
-    tension = np.full(count, model.tension_N)
+    tension = np.full(count, model.tension_N) if tension_N is None else tension_N
     for item in model.strand_rings:
         ring = item.ring
         theta = 2.0 * math.pi * np.arange(ring.n_wires) / ring.n_wires
@@ -928,56 +1151,193 @@ def _strand_history(
     return moment, stored, friction, endpoint, remainder
 
 
+def _resolve_core_model(
+    model: CoreFrictionModel,
+    friction_model: str,
+    kx: FloatArray,
+    ky: FloatArray,
+    stacklevel: int,
+) -> str:
+    """Friction model of the core law over this path (``"auto"`` resolved)."""
+    if friction_model not in CORE_FRICTION_MODELS:
+        raise CableInputError(
+            f"the core friction model must be one of {CORE_FRICTION_MODELS}, "
+            f"got {friction_model!r}"
+        )
+    if friction_model == "direction_tied":
+        return friction_model
+    from cablexsec.analysis.fatigue import (  # noqa: PLC0415
+        PLANAR_PATH_TOLERANCE,
+        _warn_auto_fallback,
+        curvature_path_out_of_plane_ratio,
+    )
+
+    if (
+        friction_model == "auto"
+        and curvature_path_out_of_plane_ratio(kx, ky) <= PLANAR_PATH_TOLERANCE
+    ):
+        return "direction_tied"
+    rigid = [
+        f"the {name} (xi = {pop.xi:.6g})"
+        for name, pop in zip(
+            ("cores", "filler profiles"), model.populations, strict=False
+        )
+        if not (math.isfinite(pop.xi) and 0.0 <= pop.xi < 1.0)
+    ]
+    if not rigid:
+        return "distributed"
+    reason = f"the interface is rigid for {' and '.join(rigid)}"
+    if friction_model == "distributed":
+        raise CableInputError(
+            f"the distributed core law needs a compliant interface (xi < 1): "
+            f"{reason}; give a finite interface stiffness or the core shear "
+            "(CoreFrictionSpec), or use friction_model='direction_tied'"
+        )
+    _warn_auto_fallback("the laid-core law", reason, stacklevel + 1)
+    return "direction_tied"
+
+
+def _distributed_population(
+    spec: HelicalLayerSpec,
+    kx: FloatArray,
+    ky: FloatArray,
+    pressure: FloatArray | None,
+    nodes_per_pitch: int | None,
+    max_increment: float,
+) -> tuple[FloatArray, BendingWork, FloatArray]:
+    """Moment ``(samples, 2)``, work and node slip fraction of one population
+    from the distributed helix model."""
+    from cablexsec.mechanics.distributed_friction import (  # noqa: PLC0415
+        distributed_friction_history,
+    )
+
+    history = distributed_friction_history(
+        spec,
+        kx,
+        ky,
+        contact_pressure_Pa=pressure,
+        nodes_per_pitch=nodes_per_pitch,
+        max_increment=max_increment,
+    )
+    phi = np.asarray(spec.phi_wires, dtype=np.float64)
+    weight = spec.A_wire_m2 * math.cos(spec.lay_angle_rad) * spec.r_helix_m
+    directions = np.column_stack((np.cos(phi), np.sin(phi)))
+    moment = weight * (history.stress_Pa.T @ directions)
+    work = BendingWork(
+        history.stored_J_per_m,
+        history.dissipation_J_per_m,
+        history.endpoint_work_J_per_m,
+        history.integration_remainder_J_per_m,
+        history.balance_residual_J_per_m,
+    )
+    return np.asarray(moment, dtype=np.float64), work, history.slip_fraction
+
+
 def core_friction_history(
     model: CoreFrictionModel,
     kappa_x: FloatArray,
     kappa_y: FloatArray,
     *,
     initial_bending_angle: float = 0.0,
+    friction_model: CoreFrictionModelName = "direction_tied",
+    loads: CoreLoadHistory | None = None,
+    nodes_per_pitch: int | None = None,
+    max_increment: float = DEFAULT_MAX_INCREMENT,
 ) -> CoreFrictionHistory:
     """Biaxial history of the core population, the internal rings and the
     filler profiles.
 
-    The core and profile stations use :func:`wire_slip_history` unchanged
-    (direction-tied Papailiou cap); the rings use :func:`strand_slip_strain`.
-    All return moments in the material frame of the curvature components.
+    ``friction_model`` selects the law of the cores and the profiles (module
+    notes): ``"direction_tied"`` (default) uses :func:`wire_slip_history`
+    unchanged (direction-tied Papailiou cap; ``initial_bending_angle`` is its
+    held direction at the start), ``"distributed"`` the distributed helix
+    model with ``nodes_per_pitch`` helix nodes per pitch (default four per
+    station) and substeps of at most ``max_increment`` slip-onset curvatures
+    (the default of the distributed model), ``"auto"`` the direction-tied
+    law on a planar path and the distributed law otherwise. The rings use
+    :func:`strand_slip_strain`.
+    ``loads`` (:func:`core_load_history`, one sample per curvature sample)
+    makes the contact loads follow a tension history; ``None`` holds the
+    model's reference loads. All return moments in the material frame of the
+    curvature components.
     """
     kx = np.asarray(kappa_x, dtype=np.float64)
     ky = np.asarray(kappa_y, dtype=np.float64)
-    history = wire_slip_history(
-        model.population,
-        kx,
-        ky,
-        initial_bending_angle=initial_bending_angle,
-        direction_hold_fraction=model.spec.direction_hold_fraction,
-    )
+    core_pressure: FloatArray | None = None
+    filler_pressure: FloatArray | None = None
+    tension: FloatArray | None = None
+    if loads is not None:
+        if loads.tension_N.shape != kx.shape:
+            raise CableInputError(
+                "the core load history must have one sample per curvature sample"
+            )
+        if (loads.filler_pressure_Pa is None) != (model.fillers is None):
+            raise CableInputError(
+                "the core load history belongs to another core model "
+                "(its filler profiles differ)"
+            )
+        core_pressure = loads.core_pressure_Pa
+        filler_pressure = loads.filler_pressure_Pa
+        tension = loads.tension_N
+    population = model.population
+    if (
+        loads is not None
+        and loads.core_mu_capstan is not None
+        and loads.core_mu_capstan != population.mu
+    ):
+        population = dataclasses.replace(population, mu=loads.core_mu_capstan)
+    resolved = _resolve_core_model(model, friction_model, kx, ky, stacklevel=2)
     s_moment, s_stored, s_friction, s_endpoint, s_remainder = _strand_history(
-        model, kx, ky
+        model, kx, ky, tension
     )
-    w = history.work
+    if resolved == "distributed":
+        core_moment, w, slip = _distributed_population(
+            population, kx, ky, core_pressure, nodes_per_pitch, max_increment
+        )
+    else:
+        history = wire_slip_history(
+            population,
+            kx,
+            ky,
+            contact_pressure_Pa=core_pressure,
+            initial_bending_angle=initial_bending_angle,
+            direction_hold_fraction=model.spec.direction_hold_fraction,
+        )
+        core_moment, w = np.asarray(history.moment_Nm), history.work
+        slip = history.slipping_count / float(model.population.n_wires)
     stored = w.stored_J_per_m + s_stored
     friction = w.friction_J_per_m + s_friction
     endpoint = w.endpoint_work_J_per_m + s_endpoint
     remainder = w.integration_remainder_J_per_m + s_remainder
     filler_moment = None
     if model.fillers is not None:
-        filler = wire_slip_history(
-            model.fillers.population,
-            kx,
-            ky,
-            initial_bending_angle=initial_bending_angle,
-            direction_hold_fraction=model.spec.direction_hold_fraction,
-        )
-        filler_moment = np.asarray(filler.moment_Nm)
-        fw = filler.work
+        if resolved == "distributed":
+            filler_moment, fw, _ = _distributed_population(
+                model.fillers.population,
+                kx,
+                ky,
+                filler_pressure,
+                nodes_per_pitch,
+                max_increment,
+            )
+        else:
+            filler = wire_slip_history(
+                model.fillers.population,
+                kx,
+                ky,
+                contact_pressure_Pa=filler_pressure,
+                initial_bending_angle=initial_bending_angle,
+                direction_hold_fraction=model.spec.direction_hold_fraction,
+            )
+            filler_moment, fw = np.asarray(filler.moment_Nm), filler.work
         stored = stored + fw.stored_J_per_m
         friction = friction + fw.friction_J_per_m
         endpoint = endpoint + fw.endpoint_work_J_per_m
         remainder = remainder + fw.integration_remainder_J_per_m
     return CoreFrictionHistory(
-        core_moment_Nm=np.asarray(history.moment_Nm),
+        core_moment_Nm=core_moment,
         strand_moment_Nm=s_moment,
-        core_slip_fraction=history.slipping_count / float(model.population.n_wires),
+        core_slip_fraction=np.asarray(slip, dtype=np.float64),
         work=BendingWork(
             stored,
             friction,
@@ -987,4 +1347,6 @@ def core_friction_history(
         ),
         model=model,
         filler_moment_Nm=filler_moment,
+        friction_model=resolved,
+        loads=loads,
     )

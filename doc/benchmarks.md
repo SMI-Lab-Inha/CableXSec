@@ -98,6 +98,7 @@ model) is the full construction.
 | CIGRE TB880 conductor temperature | MM | PARTIAL |
 | Global–local consistency, floating-wind application | I | Full-slip results are upper estimates |
 | Laid-core friction (gap R1b), Ménard and Cartraud (2023) six ranges | M | Stated, not gated (unreliable reference). With the transferred 0.3 MPa the cores raise the work (range (b) +30.2 %); identified on (b) with the full accounting, predictions (a) and (c) outside the registered target (+28.5, +26.2 %), (d)–(f) within 16 % |
+| Laid-core law, distributed form and contact loads that follow the tension (CF-D, CF-T) | A, I | PASS except CF-D-slip (1.02e-4 against 1e-4 at the default stations: station quadrature, documented) |
 | Zeidan (2025) four-point loops, 112 mm three-core cable (Z-EI, Z-ID) | M | Diagnosed on for the shear-stack rule, not independent. Z-EI PASS: measured stick secant 141–240 kN·m² below the no-slip EI_max of 311.1 kN·m² (armour ξ 0.832/1.000; 12.0 kN·m² and ξ 0.009/0.016 before the series stack stopped counting the 8.75 mm EPR of the cores). Z-ID FAIL: P0 759.8 kPa identified on the 40 mm work; predicted work +10.4 to −9.6 %, but branch RMSE 13.7–15.4 % and moment range −33 to −46 % (slip slope near EI_min). Measured curvature axis is the loading-point formula applied to the mid-span deflection (+26 to +29 % on the central curvature of the source's Fig. 18) |
 | Fretting regime and wear (gap 3.1): Mindlin/Cattaneo closed forms, Fouvry ratios, limits, rotation | A | PASS |
 | Fretting transition, Fouvry et al. (1995) Table 4 | MM | PASS with the printed shear moduli; 1.6–1.7 × the measurements with G = E/2(1 + ν) (stated) |
@@ -377,7 +378,9 @@ transfer rows move with the stiffer stick (before: armour only 2.71 %,
   3.88 % and +18.9 %); CF, CFW and MK-Tcyc read FAIL because the stage also
   switches their armour-only references; MX-scale's tension-cycle check on
   the Ménard cable reads 2.36 against at most 1.25 (the Ménard core group
-  then joins the scaled law). No other row moves. The stage stays off by
+  then joins the scaled law). That run held the core contact loads at the
+  first sample of the tension history; they now follow it by default
+  (CF-T-cycle), and the stage has not been rerun. No other row moves. The stage stays off by
   default.
 - **Su et al. (2026).** No bending loop is published for the 35 kV cable
   (axial and torsional results only); not compared.
@@ -474,6 +477,49 @@ figures (about ±5 % of full scale):
 
 The IEA Wind Task 49 slipping stiffness (Table 13), whose row cites the same
 source, is likewise reported code to code.
+
+### Distributed laid-core law and tension-following core loads (CF-D, CF-T)
+
+Registered on 2026-11-19, before any run, in the first commit of the change that adds them. Code
+`core_friction_history(..., friction_model=...)` and `core_load_history`
+(`cablexsec/mechanics/core_friction.py`), `compute_neutral_axes(..., core_friction_model=...,
+core_loads=...)` and `compute_mkappa(..., core_loads=...)`; tests `tests/test_core_friction_distributed.py`.
+Case unless stated: the 66 kV IEA Task 49 template, bounded contact, laid cores with the wedged trefoil and the
+filler profiles, μ 0.46 on every core and profile contact, 50 kN, default stations and helix nodes. Scale: the
+largest core moment magnitude of the history.
+
+The distributed form solves each helical population of the core law (the cores and the filler profiles) with
+the distributed helix model of the armour (`friction_model="distributed"`), its contact pressure and stick
+coefficient taken from the core law; `"auto"` keeps the direction-tied law on planar paths and uses the
+distributed one otherwise, as for the armour.
+
+| ID | Check | Target (registered) | Result | Status |
+| --- | --- | --- | --- | --- |
+| CF-D-planar | `friction_model="auto"` on planar loop histories (two plane azimuths) against the direction-tied core law; `compute_neutral_axes(friction_model="auto")` against `"direction_tied"` on the same path | moment and work ≤ 1e-12 of scale | 0 | PASS |
+| CF-D-rot | Biaxial random walk rotated by 7 station pitches (2π·7/n, a multiple of the helix node spacing) and by 0.3 rad: rotated moment and friction work | ≤ 1e-9 of scale (lattice rotation); ≤ 1e-3 of scale (0.3 rad) | 5.7e-15 (work 1.1e-15); 2.2e-4 (work 1.7e-6) | PASS |
+| CF-D-diss | Biaxial random walk and a circular orbit: friction work non-decreasing, energy balance residual | increments ≥ −1e-12 of the final work; residual ≤ 1e-9 of it | smallest increment −9.5e-20; residual 4.4e-15. Work 1.29 (walk) and 2.33 (orbit) times the direction-tied core law | PASS |
+| CF-D-mu0 | μ = 0 on every core and profile contact: section moment of `compute_neutral_axes(friction_model="distributed")` against the armour-only section | 0 N·m (bit for bit) | 0 | PASS |
+| CF-D-stick | μ = 1e3 on every core and profile contact, amplitude 1e-6 1/m: core-law tangent against its stick stiffness `xi (1/2) EA r_c² cos³β` (cores plus profiles) | ≤ 1e-5 rel. (discrete shear-lag factor `(h²/12)(1 − ξ)`, 6e-6 at the default nodes) | 2.0e-6 | PASS |
+| CF-D-slip | Planar monotonic loading to full slip: moment of the core population and of the profile population against `(2/π) n q r² cos²β/sin²β · λ C cosh(λπ/2)/(1 + λ²)`, `C = λπ/(2 sinh(λπ/2))`, `λ = μ sin β` (the closed form of the armour distributed model with the core loads) | ≤ 1e-4 rel. | 1.02e-4 (cores), 1.03e-4 (profiles) at the default 60 stations per core | FAIL (documented below) |
+| CF-D-numba | Compiled against reference kernel of the distributed core law (biaxial history with a contact-pressure history) | moments and energies ≤ 1e-10 of scale | 3.4e-16; 2.9e-16 | PASS |
+| CF-T-const | Constant tension history equal to the reference: `core_loads="follow"` against `"reference"` (direction-tied and distributed) | ≤ 1e-12 of scale | 0 (both laws) | PASS |
+| CF-T-level | Constant tension history at 120 kN on a model built at 50 kN, loads following, against the law built at 120 kN; 0 and 20 MPa armour winding stress | direction-tied ≤ 1e-12 of scale; distributed ≤ 2e-3 of scale (its substeps are set by the onset at the reference) | direction-tied 0 and 2.4e-16; distributed 1.7e-4 and 6.7e-5 (0 and 20 MPa) | PASS |
+| CF-T-cycle | Tension cycle 10–70 kN inside bending cycles (amplitudes 3e-4 and 3e-3 1/m), 0 and 20 MPa winding stress: slip-scaled exported law (per group) against `compute_mkappa(contact_tension_history_N=..., core_loads="follow")` | deviation ≤ 1.25 times the fixed-tension residual of the same law at 10 and 70 kN, and < 5e-3 of the range (the MX-scale targets); `core_loads="reference"` reported | deviation 9.8e-4, 1.9e-3 (0 MPa; 0.49 and 1.05 times the residual), 7.9e-4, 1.9e-3 (20 MPa; 0.82 and 1.19 times). Loads held at the first sample: 4.1e-2, 0.198, 7.9e-4, 0.118 of the range | PASS |
+
+**CF-D-slip, the failed target.** The registered 1e-4 compared the model with the continuous integral of
+the closed-form field. The model reproduces the sum of that field over its stations to 1e-10 (cores 9e-11,
+profiles 5e-10): the field is exact, and the residual is the station quadrature of a field whose slope changes
+sign at the extreme fibres, second order in the station spacing (120 stations per core: 2.6e-5). The default
+station count of the core law (60 per core) is unchanged; the test pins the documented deviation and the
+second-order convergence (`test_cf_d_full_slip_moment_matches_the_closed_form`). The same quadrature is why the
+direction-tied CF row carries 5e-3.
+
+**What the checks show.** Under non-proportional curvature the distributed core law takes 1.29 times
+(random walk) and 2.33 times (circular orbit) the friction work of the direction-tied core law on the same
+path, the rotation deficit of the direction-tied cap that the armour shows too. With the core loads held at the
+first sample of a tension cycle the section misses the slip-scaled law by up to 20 % of the moment range
+(0 MPa, 3e-3 1/m); with the loads following the tension the miss is the law's own fixed-tension residual
+(CF-T-cycle).
 
 ### Default of the laid-core law
 

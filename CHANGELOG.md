@@ -33,6 +33,24 @@ All notable changes to CableXSec are recorded in this file. The format follows
 - `SeaStateBatchOptions` takes the reader's curvature check tolerances
   (`curvature_check_rtol`, `curvature_check_end_rtol`, `curvature_check_atol_1_m`):
   a coarse run that fails the check at the default could not be read by the batch.
+- Distributed form of the laid-core law: `core_friction_history(...,
+  friction_model="distributed" | "auto")` solves the cores and the filler profiles with the
+  distributed helix model of the armour (the axial force of each core as a field along its
+  pitch, slip of every helix node in the direction of its own traction, no bending direction);
+  `"auto"` keeps the direction-tied law on planar paths, as in the fatigue route, and falls back
+  with `FrictionModelFallbackWarning` on a rigid interface. `compute_neutral_axes` takes
+  `friction_model="auto"` for the armour and gives the cores the armour's model unless
+  `core_friction_model` says otherwise; `SectionLaw.from_cable(friction_model="distributed")`
+  solves the cores with it too. Checks CF-D (targets registered before the run): planar
+  reduction of `"auto"` 0, lattice rotation 5.7e-15, dissipation and balance, μ = 0 bit for bit,
+  stick tangent 2.0e-6, compiled kernel 3.4e-16; the full-slip moment misses the continuous
+  closed form by 1.02e-4 against the registered 1e-4 at the default stations (FAIL, documented:
+  station quadrature; the model reproduces the station sum to 1e-10). Under non-proportional
+  curvature the distributed core law takes 1.3 (random walk) to 2.3 (circular orbit) times the
+  friction work of the direction-tied one on the 66 kV template.
+- `core_load_history`: the core and filler-profile contact loads of the contact model over a
+  tension history (bounded estimate exact, solved model exact up to 33 tensions).
+
 - One exported bending law per friction group, each with its own scale table
   (`BendingLawExport.slip_group_laws()`, `SlipGroupLaw`, `to_group_csv`), for a global model
   that sums the group laws `s_g(T) B_g(κ / s_g(T))` instead of carrying one scale. Rows
@@ -370,6 +388,14 @@ All notable changes to CableXSec are recorded in this file. The format follows
   paths; pass `friction_model` explicitly to keep the current behaviour.
 
 ### Changed
+
+- The laid-core and filler-profile contact loads follow the tension history by default:
+  `compute_neutral_axes(..., core_loads="follow")` with `tension_N` or `contact_tension_N`, and
+  `compute_mkappa(..., core_loads="follow")` with `contact_tension_history_N`; before, they were
+  held at the first sample, which stays available as `core_loads="reference"`. Check CF-T
+  (registered before the run): a tension cycle of 10–70 kN inside bending cycles now meets the
+  slip-scaled exported law within 0.49–1.19 times its fixed-tension residual (target 1.25);
+  with the loads held it missed by up to 20 % of the moment range.
 
 - The default slip-scale table of `export_bending_law(..., slip_scale=True)` starts at zero
   tension, with the caps of the contact model there (zero without clamping, the clamping caps
