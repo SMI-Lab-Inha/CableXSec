@@ -561,6 +561,12 @@ capstan bound included, and its Iwan elements keep their stiffnesses `k_i` while
   `s = Σ R_g / Σ R_g,ref`, and their derivatives `∂/∂T` and `∂/∂p_e` (central differences of the contact model,
   one-sided at zero; the bounded chain is affine, so they are its slopes).
 
+By default the table runs over the exported tensions with zero tension in front. At zero tension the caps are those
+of the contact model: zero without manufacturing clamping (every contact load then comes from the tension, so
+`s → 0` and the law tends to its elastic part), the clamping caps otherwise (66 kV template with cores and profiles
+at 20 MPa winding stress: `ρ_g(0)` 0.82–0.87 of the 10 kN reference). A global model then interpolates the scale
+down to zero tension instead of holding its lowest value. An explicit `slip_scale_tensions_N` is used as given.
+
 ```python
 export = cx.export_bending_law(
     cable, tensions_N=[10e3, 70e3], kappa_max_1_m=0.036, n_points=300,
@@ -571,7 +577,18 @@ table = export.slip_scale
 law = table.law_at(35e3, 0.5e6)                  # scaled law at one state
 moment = table.moment(kappa, tension, pressure)  # sliders follow the changing caps
 table.to_csv("slip_scale.csv")                   # s, rho_g and derivatives per state
+groups = export.slip_group_laws()                # one law per friction group
+moment = sum(g.backbone_at(kappa, 35e3) for g in groups)   # sum of s_g B_g(kappa / s_g)
+export.to_group_csv("groups")                    # <group>_backbone.csv, <group>_slip_scale.csv
 ```
+
+One law per group. A global model that takes one scale per law can still carry the per-group scaling: it takes one
+law per friction group, `M_g(κ; T) = s_g(T) B_g(κ / s_g(T))`, with `B_g` the backbone of the group at the reference
+(`SlipGroupLaw`, from `BendingLawExport.slip_group_laws()`) and `s_g = ρ_g` its own scale, and sums the group laws.
+The first group carries the elastic part `EI_slip κ` (the scaling leaves it unchanged); the others end on the
+plateau of their full-slip friction moment. `to_group_csv` writes each backbone (`kappa_1_m,M_Nm`, with two `# `
+lines that name the group and the slope beyond the last point) and each scale table (`tension_N,
+external_pressure_Pa, s, ds_dT_1_per_N`, plus `ds_dpe_1_per_Pa` with a pressure axis).
 
 Slider update. When the state changes, every element follows the return map with the new cap,
 `e_i ← clip(e_i + Δκ, −ρ_g κ_y,i, ρ_g κ_y,i)` and `M = EI_slip κ + Σ k_i e_i`: the slip state is carried across, a
@@ -592,7 +609,11 @@ Checks (`tests/test_bending_law_slip_scale.py`; row MX-scale of the [benchmark r
   43 %.
 
 One scale or one per group. The single scale `s` keeps the stick stiffness and the full-slip moment exact and is
-exact when every group scales alike. Otherwise it misplaces the transition. Largest error of the single-scale law
+exact when every group scales alike. Otherwise it misplaces the transition. With armour clamping the laid cores
+scale unlike the armour: on the 66 kV template with cores and filler profiles (μ 0.46) at 20 and 40 MPa winding
+stress, 10–200 kN, one scale misses the exported backbone by up to 5.5 % and the cycle work by up to 7 %, while the
+summed group laws stay within 4.6e-4 and 0.06 % (rows MX-group-B, MX-group-E and MX-group-1 of the
+[benchmark register](benchmarks.md)). Largest error of the single-scale law
 against the per-group law over 10–150 kN, reference 10 kN, on the virgin backbone and on cycles up to 1.5 times the
 full-slip curvature (moment in % of the range; work per cycle at 1.5 times full slip):
 

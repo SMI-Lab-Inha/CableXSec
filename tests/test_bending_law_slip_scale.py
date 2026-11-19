@@ -153,7 +153,8 @@ def test_single_scale_reproduces_the_export_when_groups_scale_alike(iea66):
     )
     table = export.slip_scale
     assert table is not None and table.reference_tension_N == t1
-    np.testing.assert_allclose(table.scale[:, 0], [1.0, s], rtol=1e-12)
+    # The default table starts at zero tension: no clamping, no contact.
+    np.testing.assert_allclose(table.scale[:, 0], [0.0, 1.0, s], rtol=1e-12)
     # The grid carries the slip curvatures of every exported tension: at
     # [t2, s t2] it is the reference grid times s.
     direct = export_bending_law(
