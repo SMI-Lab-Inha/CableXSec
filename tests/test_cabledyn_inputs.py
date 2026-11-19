@@ -86,7 +86,7 @@ def test_at_least_one_section(tmp_path):
         (
             "--------------------- LINES ---\n",
             "--------------------- WIRES ---\n",
-            "no LINES",
+            "deck line 12: unknown deck section 'WIRES'",
         ),
         ("1.2 0.1 1.0 0.0\n", "1.2 0.1 1.0 0.0 7 8\n", "'cable' has 12 columns"),
         ("1.2 0.1 1.0 0.0\n", "1.2 0.1 1.0 0x\n", "Ca_t of cable is not numeric"),
@@ -143,9 +143,7 @@ def test_seven_column_lines_comments_defaults_and_adaptive_flag(tmp_path):
         "1 cable 1 2 10.0 100 pt # one row per line\n",
     )
     _edit(
-        path,
-        "--------------------- SECTIONS ---\n",
-        "--------------------- UNUSED ---\n",
+        path, "LineID LineType Length NumSegs\n(-) (-) (m) (-)\n1 cable 10.0 100\n", ""
     )
     _edit(
         path,
@@ -456,7 +454,7 @@ def test_deck_length_must_describe_the_output_mesh(tmp_path):
 )
 def test_output_time_axis(tmp_path, time, match):
     positions = _bending_case(np.full(time.size, 0.02), np.zeros(time.size), time.size)
-    root, deck = _write_case(tmp_path, positions, time=time)
+    root, deck = _write_case(tmp_path, positions, time=time, deck_kwargs={"t_max": 0.3})
     with pytest.raises(CableSchemaError, match=match):
         _read(root, deck)
 
@@ -477,7 +475,7 @@ def test_streamed_chunks_give_the_single_chunk_result(tmp_path):
     nt = 40
     kappa = 0.03 + 0.01 * np.sin(np.arange(nt) / 3.0)
     positions = _bending_case(kappa, 0.2 * np.sin(np.arange(nt) / 5.0), nt)
-    root, deck = _write_case(tmp_path, positions, deck_kwargs={"t_max": 4.0})
+    root, deck = _write_case(tmp_path, positions)
     for frame in ("section", "arc"):
         one = _read(root, deck, frame=frame).histories["mid"]
         many = _read(root, deck, frame=frame, chunk_rows=16).histories["mid"]
@@ -1055,3 +1053,250 @@ def test_alpha_force_blend_must_be_logical(tmp_path):
     )
     with pytest.raises(CableSchemaError, match="alpha_force_blend 'maybe'"):
         read_cabledyn_deck(path)
+
+
+# --------------------------------------------------------------------------- #
+# Records CableDyn refuses, and the sections it knows                         #
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize(
+    "header",
+    [
+        "STIFFENERS",
+        "VIV",
+        "VIV FRAME",
+        "WAKE OSCILLATOR",
+        "ATTACHMENTS",
+        "Rod Types",
+        "external loads",
+        "SYROPE IC",
+        "TURBINES",
+        "FAILURE",
+        "CONTROL",
+    ],
+)
+def test_every_cabledyn_section_is_known(tmp_path, header):
+    """A section CableDyn reads and the section reader does not need is
+    skipped, as before; only an unknown header is refused."""
+    path = _deck(tmp_path / "d.dat")
+    _edit(
+        path,
+        "--------------------- OPTIONS ---\n",
+        f"--------------------- {header} ---\nanything 1 2 3\n"
+        "--------------------- OPTIONS ---\n",
+    )
+    assert read_cabledyn_deck(path).line(1).n_elements == 100
+
+
+@pytest.mark.parametrize(
+    ("header", "shown"),
+    [
+        ("VORTEX-INDUCED VIBRATION", "VORTEXINDUCED VIBRATION"),  # dashes drop
+        ("LINE  TYPES2", "LINE TYPES2"),
+        ("\u00dcnknown", "\u00dcNKNOWN"),
+    ],
+)
+def test_unknown_section_header_is_refused_as_cabledyn_refuses_it(
+    tmp_path, header, shown
+):
+    path = _deck(tmp_path / "d.dat")
+    _edit(
+        path,
+        "--------------------- OPTIONS ---\n",
+        f"--------------------- {header} ---\n--------------------- OPTIONS ---\n",
+    )
+    with pytest.raises(CableSchemaError, match=f"unknown deck section '{shown}'"):
+        read_cabledyn_deck(path)
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "match"),
+    [
+        ("1 1 2 pt\n", "1 1\x002 pt\n", "deck line 15 contains a NUL character"),
+        (
+            "1 1 2 pt\n",
+            "1 1\u00a02 pt\n",
+            r"non-ASCII whitespace character\(s\) U\+00A0",
+        ),
+        ("1 1 2 pt\n", "1 1\u20032 pt\n", r"U\+2003"),
+        ("1 1 2 pt\n", f"1 1 2 pt {'x' * 600}\n", "longer than 512 characters"),
+        ("cable 0.2 40.0", "cable 1e-310 40.0", "Diam of cable is subnormal"),
+        ("9.81 g - gravity\n", "1e-320 g - gravity\n", "option g is subnormal"),
+    ],
+)
+def test_records_cabledyn_refuses(tmp_path, old, new, match):
+    path = _deck(tmp_path / "d.dat")
+    _edit(path, old, new)
+    with pytest.raises(CableSchemaError, match=match):
+        read_cabledyn_deck(path)
+
+
+def test_records_cabledyn_accepts(tmp_path):
+    """Exotic characters inside a comment, a long record whose comment starts
+    within 512 bytes, a byte that is not UTF-8 in a comment, CRLF line ends
+    and the 1x1c-1x1f control characters CableDyn takes as token text."""
+    path = _deck(tmp_path / "d.dat")
+    _edit(path, "1 1 2 pt\n", f"1 1 2 pt # \u00a0\x00 {'x' * 600}\n")
+    text = path.read_text(encoding="utf-8").replace("\n", "\r\n")
+    data = text.encode("utf-8").replace(b"# points", b"# points \xe9")
+    path.write_bytes(data.replace(b"synthetic", b"synthetic \xff\xfe"))
+    line = read_cabledyn_deck(path).line(1)
+    assert line.outputs == "pt"
+    path = _deck(tmp_path / "e.dat", channels=["FairTen1\x1cAnchTen1"])
+    assert read_cabledyn_deck(path).channels == ("FairTen1\x1cAnchTen1",)
+
+
+# --------------------------------------------------------------------------- #
+# END CONNECTIONS as CableDyn reads them                                      #
+# --------------------------------------------------------------------------- #
+_TWO_ENDS = "1 A Rigid 1 0 0 Rigid 0 1 0 0\n1 B Rigid 1 0 0 Rigid 0 1 0 0\n"
+
+
+def test_end_connection_rows_are_kept(tmp_path):
+    path = _deck(tmp_path / "d.dat", torsion=True)
+    _edit(path, _TWO_ENDS, "1 A 2.5e3 0 0 -2 1.5e3 1 1 0 30\n1 B Pinned 3 4 0\n")
+    line = read_cabledyn_deck(path).line(1)
+    a, b = line.end_connections["a"], line.end_connections["b"]
+    assert (a.bending, a.bending_stiffness_Nm_rad) == ("finite", 2.5e3)
+    assert a.direction == (0.0, 0.0, -1.0)
+    assert (a.torsion, a.torsion_stiffness_Nm_rad, a.pretwist_deg) == (
+        "finite",
+        1.5e3,
+        30.0,
+    )
+    assert a.normal == pytest.approx((2**-0.5, 2**-0.5, 0.0))
+    assert (b.bending, b.torsion, b.normal) == ("pinned", "free", None)
+    assert b.direction == pytest.approx((0.6, 0.8, 0.0))
+    assert line.end_kinds == ("coupled", "fixed")
+    assert line.torsion_restrained_ends == {"a"}
+
+
+def test_anchor_first_swap_negates_the_directions_and_pretwists(tmp_path):
+    path = _deck(tmp_path / "d.dat", torsion=True)
+    _edit(path, "1 1 2 pt\n", "1 2 1 pt\n")
+    _edit(path, _TWO_ENDS, "1 A Rigid 1 0 0 Rigid 0 1 0 25\n1 B Pinned 0 0 1\n")
+    line = read_cabledyn_deck(path).line(1)
+    assert line.reversed_by_parser and line.end_kinds == ("coupled", "fixed")
+    b = line.end_connections["b"]  # End A of the deck row, now End B
+    assert b.direction == (-1.0, 0.0, 0.0) and b.pretwist_deg == -25.0
+    assert b.normal == (0.0, 1.0, 0.0)
+    assert line.end_connections["a"].direction == (0.0, 0.0, -1.0)
+
+
+@pytest.mark.parametrize(
+    ("row", "match"),
+    [
+        ("1 A Stiff 1 0 0\n", "End A Stiffness is not numeric: 'Stiff'"),
+        ("1 A -2 1 0 0\n", "Stiffness must be finite and non-negative"),
+        ("1 A Rigid 0 0 0\n", "the direction Ez must be non-zero"),
+        ("1 A Rigid 1 0 nan\n", "End A Ez is not finite"),
+        ("1 A Rigid 1 0 0 none 0 1 0\n", "TorsStiffness of line 1 is not numeric"),
+        ("1 A Rigid 1 0 0 - 0 1 0\n", "TorsStiffness of line 1 is not numeric"),
+        ("1 A Rigid 1 0 0 Rigid 0 0 0\n", "normal .NxX NxY NxZ. must be non-zero"),
+        ("1 A Rigid 1 0 0 Rigid 1 1e-4 0\n", "must not be parallel to the direction"),
+        ("1 A Rigid 1 0 0 Rigid 0 1 0 inf\n", "Pretwist is not finite"),
+        ("1 A Rigid 1 0 0\n1 EndA Pinned 1 0 0\n", "names End A of line 1 twice"),
+        ("1 A Rigid 1 0 0\n3 B Rigid 1 0 0\n", r"names line\(s\) \[3\]"),
+        ("0 A Rigid 1 0 0\n", "LineID must be >= 1"),
+    ],
+)
+def test_end_connection_rows_cabledyn_refuses(tmp_path, row, match):
+    path = _deck(tmp_path / "d.dat", torsion=True)
+    _edit(path, _TWO_ENDS, row)
+    with pytest.raises(CableSchemaError, match=match):
+        read_cabledyn_deck(path)
+
+
+def test_end_connection_on_an_ei_zero_line_is_refused(tmp_path):
+    path = _deck(tmp_path / "d.dat", torsion=True, ei=0.0)
+    with pytest.raises(CableSchemaError, match="no finite-EI section"):
+        read_cabledyn_deck(path)
+
+
+def test_free_end_keeps_no_torsion_frame(tmp_path):
+    """At an end free in torsion CableDyn uses neither Nx nor Pretwist, so a
+    zero or parallel normal there is no error."""
+    path = _deck(tmp_path / "d.dat", torsion=True)
+    _edit(path, _TWO_ENDS, "1 A Rigid 1 0 0 Free 0 0 0 45\n1 B Rigid 1 0 0 0 1 0 0\n")
+    line = read_cabledyn_deck(path).line(1)
+    assert line.end_connections["a"].normal is None
+    assert line.end_connections["a"].pretwist_deg == 0.0
+    assert line.torsion_restrained_ends == frozenset()
+
+
+# --------------------------------------------------------------------------- #
+# Reader arguments and malformed tables                                       #
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize(
+    ("kwargs", "match"),
+    [
+        ({"curvature_check_rtol": float("nan")}, "curvature_check_rtol"),
+        ({"curvature_check_rtol": -0.1}, "curvature_check_rtol"),
+        ({"curvature_check_end_rtol": float("inf")}, "curvature_check_end_rtol"),
+        ({"curvature_check_atol_1_m": True}, "curvature_check_atol_1_m"),
+        ({"curvature_check_atol_1_m": "1e-5"}, "curvature_check_atol_1_m"),
+        ({"line_id": 0}, "line_id must be a positive integer"),
+        ({"line_id": 1.0}, "line_id must be a positive integer"),
+        ({"hang_off_rotation": "yes"}, "hang_off_rotation"),
+    ],
+)
+def test_reader_tolerances_and_ids_are_checked(tmp_path, kwargs, match):
+    with pytest.raises(CableSchemaError, match=match):
+        read_cabledyn_sections(
+            tmp_path / "none", tmp_path / "none.dat", {"s": 1.0}, **kwargs
+        )
+
+
+@pytest.mark.parametrize(
+    "sections",
+    [{"s": "5.0"}, {"s": True}, {3: 5.0}, {"s": None}],
+)
+def test_section_mapping_is_checked(tmp_path, sections):
+    root, deck = _case(tmp_path)
+    with pytest.raises(CableSchemaError, match="sections maps a name"):
+        read_cabledyn_sections(root, deck, sections, pressure="none")
+
+
+@pytest.mark.parametrize(
+    ("name", "old", "new", "match"),
+    [
+        ("static.out", "\n1\t1\t0.0\t ", "\n1\t1\t0.0\tx", "column 4 is not a"),
+        ("static.out", "\t5000.0\t0.0\n", "\t5000.0\n", "cells, the header 8"),
+        ("static.out", "\t(N)\t(1/m)", "\t(N)", "units row has 7 cells"),
+        ("Line1.p.out", "\tNode2X(m)", "\tNode2W(m)", "column 5: .Node2W"),
+    ],
+)
+def test_malformed_tables_are_named(tmp_path, name, old, new, match):
+    root, deck = _case(tmp_path)
+    path = tmp_path / f"case.{name}"
+    text = path.read_text(encoding="utf-8")
+    assert old in text, old
+    path.write_text(text.replace(old, new, 1), encoding="utf-8")
+    with pytest.raises(CableSchemaError, match=match):
+        _read(root, deck)
+
+
+def test_malformed_history_row_is_named(tmp_path):
+    root, deck = _case(tmp_path)
+    path = tmp_path / "case.Line1.p.out"
+    rows = path.read_text(encoding="utf-8").splitlines()
+    rows[3] = rows[3].replace("\t", "\tabc\t", 1)  # a cell that is no number
+    path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+    with pytest.raises(CableSchemaError, match="case.Line1.p.out: malformed row"):
+        _read(root, deck)
+
+
+def test_output_header_without_rows_is_named(tmp_path):
+    root, deck = _case(tmp_path)
+    path = tmp_path / "case.out"
+    path.write_text("\n".join(path.read_text().splitlines()[:2]) + "\n")
+    with pytest.raises(
+        CableSchemaError, match="fewer than two output rows|different row counts"
+    ):
+        _read(root, deck)
+
+
+def test_output_table_that_is_not_text_is_named(tmp_path):
+    root, deck = _case(tmp_path)
+    (tmp_path / "case.Line1.p.out").write_bytes(b"\xff\xfe\x00\x01binary\n" * 3)
+    with pytest.raises(CableSchemaError, match="not plain text"):
+        _read(root, deck)

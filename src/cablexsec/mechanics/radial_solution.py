@@ -275,6 +275,33 @@ class RadialSectionResult:
         inner, outer = self.helical_face_pressure_Pa[name]
         return inner + outer
 
+    @property
+    def interface_open(self) -> NDArray[np.bool_]:
+        """Whether each interface is open: its contact carries no line force.
+
+        The contact solver decides it (the complementarity of
+        :func:`solve_lcp`): an open contact has exactly zero reaction, a
+        closed one a positive line force. The reported gap of a closed
+        contact is the round-off of the linear solve, of the order of the
+        solver's complementarity tolerance in metres, ``1e-8`` of the scaled
+        problem times the square root of the contact flexibility (1e-10 to
+        4e-10 m on the 66 kV template), and it moves with the platform's
+        linear algebra; so a gap threshold would classify a closed contact by
+        its noise. ``interface_gap_m`` keeps the reported gaps.
+        """
+        return np.asarray(self.interface_line_force_N_per_m <= 0.0)
+
+    @property
+    def open_interfaces(self) -> tuple[tuple[str, str], ...]:
+        """Names of the open interfaces (:attr:`interface_open`)."""
+        return tuple(
+            name
+            for name, is_open in zip(
+                self.interface_names, self.interface_open, strict=True
+            )
+            if is_open
+        )
+
 
 class RadialSection:
     """Assembled section; solve repeatedly for different load states.

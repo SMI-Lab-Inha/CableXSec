@@ -357,3 +357,33 @@ def test_json_specification_and_command_line(tmp_path, cable, stiffness):
     path.write_text(json.dumps(spec), encoding="utf-8")
     with pytest.raises(CableInputError, match="unknown keys"):
         load_batch_spec(path)
+
+
+def test_hang_off_rotation_enters_the_input_digest(tmp_path, cable, stiffness):
+    """The hang-off rotation turns the material frame, so two assessments of
+    the same files with different rotations have different input digests;
+    the same rotation gives the same digest."""
+    nt = 31
+    t = np.arange(nt) * 0.1
+    positions = _bending_case(0.03 + 0.01 * np.sin(t), 0.2 * np.sin(t), nt)
+    channels = {f"Twist1N{j}": np.zeros(nt) for j in (21, 22)}
+    root, deck = _write_case(
+        tmp_path,
+        positions,
+        tension=np.full((nt, 100), 30000.0),
+        channels=channels,
+        deck_kwargs={
+            "ea": stiffness.ea_fixed_N,
+            "ei": stiffness.ei_min_Nm2,
+            "torsion": True,
+        },
+    )
+    options = SeaStateBatchOptions(tension_basis="true", allow_property_mismatch=True)
+    digests = []
+    for rotation in ("none", np.linspace(0.0, 30.0, nt), "none"):
+        run = SeaStateRun("r", root, deck, 1.0, hang_off_rotation=rotation)
+        result = run_sea_state_batch(
+            cable, [run], [SectionRequest("a", 2.0)], options=options
+        )
+        digests.append(result.manifest["inputs_sha256"])
+    assert digests[0] == digests[2] != digests[1]

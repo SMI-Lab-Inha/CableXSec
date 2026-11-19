@@ -26,12 +26,20 @@ if _WORKER:
     _NUMBA_CACHE = Path(_ROOT) / f"cablexsec-numba-{_RUN}-{_WORKER}"
     os.environ["NUMBA_CACHE_DIR"] = str(_NUMBA_CACHE)
 
+# The sea-state batch workers keep persistent numba caches in the user cache
+# directory; the tests give them a folder of this process, removed at the end.
+_BATCH_CACHE: Path | None = None
+if "CABLEXSEC_BATCH_CACHE_DIR" not in os.environ:
+    _BATCH_CACHE = Path(tempfile.gettempdir()) / f"cablexsec-batch-{os.getpid()}"
+    os.environ["CABLEXSEC_BATCH_CACHE_DIR"] = str(_BATCH_CACHE)
+
 _SCRIPTS = Path(__file__).resolve().parents[1] / "validation" / "scripts"
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
 
 def pytest_unconfigure(config: object) -> None:
-    """Remove the worker's own numba cache at the end of the run."""
-    if _NUMBA_CACHE is not None:
-        shutil.rmtree(_NUMBA_CACHE, ignore_errors=True)
+    """Remove the numba caches of this process at the end of the run."""
+    for folder in (_NUMBA_CACHE, _BATCH_CACHE):
+        if folder is not None:
+            shutil.rmtree(folder, ignore_errors=True)
