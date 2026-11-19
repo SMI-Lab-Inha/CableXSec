@@ -371,7 +371,7 @@ All notable changes to CableXSec are recorded in this file. The format follows
   `compute_mkappa(..., core_loads="follow")` with `contact_tension_history_N`; before, they were
   held at the first sample, which stays available as `core_loads="reference"`. Check CF-T
   (registered before the run): a tension cycle of 10–70 kN inside bending cycles now meets the
-  slip-scaled exported law within 0.47–1.19 times its fixed-tension residual (target 1.25);
+  slip-scaled exported law within 0.49–1.19 times its fixed-tension residual (target 1.25);
   with the loads held it missed by up to 20 % of the moment range.
 
 - The default slip-scale table of `export_bending_law(..., slip_scale=True)` starts at zero
