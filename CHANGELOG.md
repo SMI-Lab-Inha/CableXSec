@@ -538,7 +538,8 @@ All notable changes to CableXSec are recorded in this file. The format follows
   segment forces by one ulp on a repeated sample (1e-69 damage on the outer armour), and the
   critical angle of such a damage was arbitrary. Under a friction law a repeated sample is
   still solved, since a node can heal while it sticks; the compiled kernel now starts it from
-  a zero increment, as the reference does. Only exactly repeated samples change.
+  a zero increment, as the reference does. Only histories with exactly repeated samples
+  change: the repeated samples themselves, and the later ones at round-off.
 - The capstan bounds of the compiled direction-tied and progressive kernels give `inf` past
   the floating-point range when the kernels run as Python, as they do compiled
   (`friction_law._expm1_or_inf`). Before, `math.expm1` raised `OverflowError` there. Without
