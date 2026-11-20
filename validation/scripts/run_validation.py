@@ -31,7 +31,6 @@ from concurrent.futures import Future, ProcessPoolExecutor
 from dataclasses import astuple, dataclass
 from functools import partial
 from pathlib import Path
-from types import ModuleType
 from typing import IO
 
 import numpy as np
@@ -1082,35 +1081,7 @@ def _torque_rows() -> list[Row]:
             and p["uj_test_max"] <= 1.15
             else "FAIL",
         ),
-        _chae_torsion_row(sv),
     ]
-
-
-def _chae_torsion_row(sv: ModuleType) -> Row:
-    """CH-GJ: model-to-model torsional stiffness of the Chae cable (stated)."""
-    gj = sv.chae_checks()
-    pitches = sorted(sv.CHAE_TABLE5_GJ)
-
-    def pair(values: dict[float, float]) -> str:
-        return " / ".join(f"{values[p] / 1e3:.1f}" for p in pitches)
-
-    tools = " / ".join(
-        f"{min(sv.CHAE_TABLE5_GJ[p]) / 1e3:.1f}-{max(sv.CHAE_TABLE5_GJ[p]) / 1e3:.1f}"
-        for p in pitches
-    )
-    return Row(
-        "2",
-        "CH-GJ",
-        "Chae, Nam and Shim (2023) Table 5: free torsional stiffness at "
-        "0.125 rad/m (unwinding, zero tension), armour pitch 1.8 / 3.0 m, "
-        "against the range of the source's three cross-section tools [kN m^2]: "
-        "packaged straight cores; cores laid S as in the source (Sec. 2.1.2) at "
-        "an assumed pitch of 2.5 m and 3.0 m (the source gives none)",
-        "stated, not gated (model-to-model; no measurement; core pitch not published)",
-        f"tools {tools}; straight {pair(gj['straight'])}; S 2.5 m "
-        f"{pair(gj['S 2.5 m'])}; S 3.0 m {pair(gj['S 3.0 m'])}",
-        "INFO",
-    )
 
 
 def _mkappa_tension_cycle(cable: CableData) -> tuple[float, float]:
@@ -1324,16 +1295,6 @@ def _zeidan_rows() -> list[Row]:
         )
     )
     return rows
-
-
-def _menard_status(verdict: str) -> str:
-    """Status of a row against the measured Ménard and Cartraud (2023) loops.
-
-    The test is an unreliable reference (doc/benchmarks.md, "Reliability of
-    the Ménard and Cartraud (2023) test"): its rows are stated, not gated.
-    The verdict against the registered target stays in the status.
-    """
-    return f"INFO (unreliable reference, stated not gated; registered target {verdict})"
 
 
 def _rows() -> list[Row]:
@@ -2063,14 +2024,24 @@ def _rows() -> list[Row]:
         )
     )
 
-    # Ménard and Cartraud calibrated mu=0.2 and P=0.3 MPa on the +/-0.05
-    # cycle, then held them fixed. Evaluate the separate +/-0.10 cycle as a
-    # calibration-transfer validation. The label remains explicit because this
-    # is not a parameter-free prediction of the manufacturing state.
+    # Menard and Cartraud fixed mu = 0.2 from the literature and tuned the
+    # radial pressure of their own FE model (0.3 MPa) on the +/-0.05 1/m cycle,
+    # range (a). That pressure is a parameter of their model, not a measured
+    # state, so it is not transferred: the clamping is identified on the
+    # measured cycle work of range (a) with this model, and the separate
+    # +/-0.10 1/m cycle, range (b), is predicted against the registered target.
+    from check_core_friction import (  # noqa: PLC0415
+        _with_initial_pressure,
+        identify_initial_pressure,
+        identify_then_predict,
+    )
+
+    p_bm1 = identify_initial_pressure(menard, "a", None, "all_contacts")
+    menard_bm1 = _with_initial_pressure(menard, p_bm1, "all_contacts", "a")
     phase_bm1 = np.linspace(0.0, 6.0 * np.pi, 1801)
     kappa_bm1 = 0.1 * np.sin(phase_bm1)
     bm1_prediction = cx.compute_mkappa(
-        menard,
+        menard_bm1,
         kappa_bm1,
         tension_N=0.0,
         contact_model="bounded",
@@ -2083,78 +2054,40 @@ def _rows() -> list[Row]:
     measured_min = float(np.min(measured["moment_Nm"]))
     measured_max = float(np.max(measured["moment_Nm"]))
     measured_curvature = np.asarray(measured["curvature_1_per_m"], dtype=float)
-    sequence_prediction = cx.compute_mkappa(
-        menard, np.tile(measured_curvature, 2), tension_N=0.0, mu=0.2
-    )
-    sequence_moment = sequence_prediction.moment_Nm[-len(measured_curvature) :]
     measured_moment = np.asarray(measured["moment_Nm"], dtype=float)
-    range_rmse = (
-        float(np.sqrt(np.mean((sequence_moment - measured_moment) ** 2)))
-        / float(np.ptp(measured_moment))
-        * 100.0
-    )
-    # Table 3 prints energy in J, while M d(kappa) has units J/m. Compare
-    # the measured and calculated traces on identical cycles instead of
-    # assuming an undocumented length conversion for that table entry.
-    augmented, _, crossings = insert_cycle_crossings(measured_curvature, crossing=0.0)
-    work_result = cx.compute_mkappa(
-        menard, np.tile(augmented, 2), tension_N=0.0, mu=0.2
-    )
-    work = work_result.work
-    mechanical = (work.stored_J_per_m + work.friction_J_per_m)[-len(augmented) :]
-    matched_work = float(np.mean(np.diff(mechanical[crossings])))
     measured_work = float(
         np.mean(cycle_work(measured_curvature, measured_moment, crossing=0.0))
     )
-    energy_error = _pct(matched_work, measured_work)
-    # Gap T1: the same comparison in the test's own arrangement (four-point
-    # bench, M = Fa L1, curvature from a parabola through three LVDTs between
-    # the actuators; Menard and Cartraud 2023, Sec. 3). The measured curvature
-    # lies in the uniform-moment zone, so the result must equal the
-    # uniform-curvature row, which is kept for continuity.
-    arr_rmse, arr_work = _menard_four_point(menard, measured_curvature, measured_moment)
-    arr_error = _pct(arr_work, measured_work)
-    for ident, label, rmse_v, work_v, err_v in (
-        (
+    # In the test's own arrangement (four-point bench, M = Fa L1, curvature
+    # from a parabola through three LVDTs between the actuators; Menard and
+    # Cartraud 2023, Sec. 3). The measured curvature lies in the uniform-moment
+    # zone, so the result equals the uniform-curvature calculation.
+    arr_rmse, arr_work = _menard_four_point(
+        menard_bm1, measured_curvature, measured_moment
+    )
+    arr_error = (arr_work / measured_work - 1.0) * 100.0
+    rows.append(
+        Row(
+            "2",
             "BM1-loop",
-            "M\u00e9nard +/-0.10 M-kappa after published +/-0.05 calibration, "
-            "four-point test arrangement (Sec. 3: M = Fa L1, LVDT parabola)",
-            arr_rmse,
-            arr_work,
-            arr_error,
-        ),
-        (
-            "BM1-loop-uniform",
-            "M\u00e9nard +/-0.10 M-kappa after published +/-0.05 calibration, "
-            "uniform curvature (pre-T1 basis, kept for continuity)",
-            range_rmse,
-            matched_work,
-            energy_error,
-        ),
-    ):
-        rows.append(
-            Row(
-                "2",
-                ident,
-                label,
-                "ordered RMSE < 5%; matched experimental cycle work within 10%",
-                f"model {model_min:.0f}/{model_max:.0f} N\u00b7m and "
-                f"W={work_v:.1f} J/m vs measured {measured_work:.1f} J/m; measured {measured_min:.0f}/"
-                f"{measured_max:.0f} N\u00b7m; ordered RMSE {rmse_v:.2f}%; "
-                f"matched experimental work difference {err_v:.1f}%",
-                _menard_status(
-                    "PASS (published calibration transfer)"
-                    if rmse_v < 5.0 and err_v < 10.0
-                    else "FAIL"
-                ),
-            )
+            "Ménard +/-0.10 M-kappa (range b), clamping identified on the "
+            "measured +/-0.05 cycle work (range a), four-point test arrangement "
+            "(Sec. 3: M = Fa L1, LVDT parabola)",
+            "ordered RMSE < 5%; matched experimental cycle work within 10%",
+            f"P0 {p_bm1 / 1e3:.1f} kPa; model {model_min:.0f}/{model_max:.0f} "
+            f"N·m and W={arr_work:.1f} J/m vs measured {measured_work:.1f} "
+            f"J/m; measured {measured_min:.0f}/{measured_max:.0f} N·m; "
+            f"ordered RMSE {arr_rmse:.2f}%; matched experimental work "
+            f"difference {arr_error:+.1f}%",
+            "PASS (identified on range a, then predicted)"
+            if arr_rmse < 5.0 and abs(arr_error) < 10.0
+            else "FAIL",
         )
+    )
 
     # Laid-core law with full contact accounting: P0 identified on range (b),
     # ranges (a), (c)-(f) predicted (gap R1b; registered targets in
     # doc/benchmarks.md).
-    from check_core_friction import identify_then_predict  # noqa: PLC0415
-
     ident = identify_then_predict()
     id_rows = ident["rows"]
     assert isinstance(id_rows, dict)
@@ -2172,9 +2105,7 @@ def _rows() -> list[Row]:
                 f"{id_rows[tag]['rmse_percent']:.2f}%"
                 for tag in "abcdef"
             ),
-            _menard_status(
-                "PASS (identified, then predicted)" if ident["pass"] else "FAIL"
-            ),
+            "PASS (identified, then predicted)" if ident["pass"] else "FAIL",
         )
     )
 

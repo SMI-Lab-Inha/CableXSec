@@ -91,13 +91,13 @@ model) is the full construction.
 | Armour compression: Malta et al. (2022), sheath-only FE | MM | Reported only: screen 49% below the FE limit load (conservative) |
 | Ménard and Cartraud (2023) full-slip stiffness | MM | PASS |
 | Ménard and Cartraud (2023) six measured bending ranges, moment | M | Moment errors 2.71–10.55% (transfer) |
-| Ménard and Cartraud (2023) six measured bending ranges, work | M | Unreliable reference, stated, not gated since 2026-11-18 (evidence in its section); range (b) +11.8 % (registered 10 % target not met since the support-cut shear stack; +8.8 % before); ranges (a), (c), (d) +40 to +56 % (+32 to +47 % before) |
+| Ménard and Cartraud (2023) six measured bending ranges, work | M | FAIL (BM1-loop, gated): clamping identified on range (a), range (b) work −28.8 %, ordered RMSE 5.45 %. With the source FE's 0.3 MPa transferred (reported, not gated: a tuning parameter of that model): range (b) +11.8 %, ranges (a), (c), (d) +40 to +56 % |
 | Armour longitudinal displacement, Ménard and Cartraud FE | MM | Phase and scale reproduced; peaks over-predicted |
 | Tjahjanto et al. (2017), Leroy et al. (2017) FE armour slip | MM | Qualitative agreement only |
 | Sævik and Bruaseth (2005) umbilical axial stiffness | M | NOT VALIDATED |
 | CIGRE TB880 conductor temperature | MM | PARTIAL |
 | Global–local consistency, floating-wind application | I | Full-slip results are upper estimates |
-| Laid-core friction (gap R1b), Ménard and Cartraud (2023) six ranges | M | Stated, not gated (unreliable reference). With the transferred 0.3 MPa the cores raise the work (range (b) +30.2 %); identified on (b) with the full accounting, predictions (a) and (c) outside the registered target (+28.5, +26.2 %), (d)–(f) within 16 % |
+| Laid-core friction (gap R1b), Ménard and Cartraud (2023) six ranges | M | FAIL (BM1-ID, gated). With the transferred 0.3 MPa the cores raise the work (range (b) +30.2 %); identified on (b) with the full accounting, predictions (a) and (c) outside the registered target (+28.5, +26.2 %), (d)–(f) within 16 % |
 | Laid-core law, distributed form and contact loads that follow the tension (CF-D, CF-T) | A, I | PASS except CF-D-slip (1.02e-4 against 1e-4 at the default stations: station quadrature, documented) |
 | Zeidan (2025) four-point loops, 112 mm three-core cable (Z-EI, Z-ID) | M | Diagnosed on for the shear-stack rule, not independent. Z-EI PASS: measured stick secant 141–240 kN·m² below the no-slip EI_max of 311.1 kN·m² (armour ξ 0.832/1.000; 12.0 kN·m² and ξ 0.009/0.016 before the series stack stopped counting the 8.75 mm EPR of the cores). Z-ID FAIL: P0 759.8 kPa identified on the 40 mm work; predicted work +10.4 to −9.6 %, but branch RMSE 13.7–15.4 % and moment range −33 to −46 % (slip slope near EI_min). Measured curvature axis is the loading-point formula applied to the mid-span deflection (+26 to +29 % on the central curvature of the source's Fig. 18) |
 | Fretting regime and wear (gap 3.1): Mindlin/Cattaneo closed forms, Fouvry ratios, limits, rotation | A | PASS |
@@ -241,18 +241,30 @@ Scorecard gate:
 
 | ID | Class | Target | Result | Status |
 | --- | --- | --- | --- | --- |
-| BM1-loop | M | Range (b), transferred inputs: ordered RMSE < 5%; matched work within 10% | RMSE 2.86%; work 69.7 vs 62.3 J/m, +11.8% (former shear stack: 2.71 %, 67.8 J/m, +8.8 %, PASS; former bound: 3.16 %, 70.4 J/m, +12.9 %, FAIL) | INFO: unreliable reference, stated, not gated (registered target FAIL) |
+| BM1-loop | M | Range (b), predicted with the clamping identified on the measured work of range (a): ordered RMSE < 5%; matched work within 10% | P0 190.1 kPa; RMSE 5.45%; work 44.4 vs 62.3 J/m, −28.8% (with the transferred 0.3 MPa, reported: 2.86 %, 69.7 J/m, +11.8 %; former shear stack 2.71 %, +8.8 %; former bound 3.16 %, +12.9 %) | FAIL |
 
-### Reliability of the Ménard and Cartraud (2023) test (rows BM1-loop, BM1-loop-uniform, BM1-ID: stated, not gated)
+### The 0.3 MPa of the source FE and the limits of the test (rows BM1-loop and BM1-ID, gated)
 
-Since 2026-11-18 the rows that compare with the measured loops of this test
-are reported as INFO, "stated, not gated"; each keeps its registered target
-and its verdict against it in the scorecard (BM1-loop and BM1-loop-uniform
-PASS then, FAIL since the support-cut shear stack of 2026-11-19; BM1-ID
-FAIL). The change was made after those results were known; its
-reason is the evidence below about the reference, not a model result. BM1
-(full-slip EI_min against the source's analytical value) is not a comparison
-with the test and is unchanged.
+The unreliable quantity is the source's clamping pressure, 0.3 MPa: a tuning
+parameter of its own FE model, fitted on range (a) together with a friction
+coefficient taken from the literature (item 4). The measured loops are a
+reference. From 2026-11-18 to 2026-11-20 the rows that compare with the loops
+were reported as INFO, "stated, not gated", on a broader reading that took
+the measurements to be unreliable as well; they are gated again. BM1-loop no longer transfers
+the 0.3 MPa: the clamping is identified on the measured cycle work of range
+(a), the range the source calibrated on, and range (b) is predicted
+(`check_core_friction.identify_initial_pressure`). BM1-ID identifies on range
+(b) and predicts the other five. Both fail their registered targets: BM1-loop
+predicts −28.8 % work (RMSE 5.45 %); BM1-ID over-predicts ranges (a) and (c)
+by 28.5 and 26.2 %. Identified on either amplitude, one clamping does not fit
+the work of both the small and the large cycles. BM1-loop-uniform, the same
+comparison at uniform curvature, gave the same numbers, because the measured
+curvature lies in the uniform-moment zone; it is removed. BM1 (full-slip
+EI_min against the source's analytical value) is not a comparison with the
+test and is unchanged.
+
+The limits of the test below bound what the comparison can show; none of them
+is a reason not to gate it.
 
 1. **The source states the limits of its own test.** One specimen; a 1.25 m
    uniform-moment zone against armour and core pitches of 0.64–0.73 m, with
@@ -285,14 +297,17 @@ with the test and is unchanged.
 5. **CableXSec.** With the transferred inputs the small ranges (a), (c), (d)
    are 40–56 % above the measured work while (b), (e), (f) are within 12 %;
    identified on (b), ranges (a) and (c) remain +28.5 and +26.2 % (BM1-ID;
-   32–47 %, within 9 %, +26.0 and +23.7 % with the former shear stack).
+   32–47 %, within 9 %, +26.0 and +23.7 % with the former shear stack);
+   identified on (a) with the armour law, 190 kPa, ranges (b), (e) and (f)
+   are 28.8, 33.1 and 36.9 % below and (c), (d) within 11 % (BM1-loop on (b)).
 
 Since gap T1 the row is computed through the test's four-point arrangement
 (moment `Fa L1`, curvature from a parabola through three LVDTs between the
-actuators); the result is identical, because the measured curvature lies in
-the uniform-moment zone. The uniform-curvature calculation is kept as
-`BM1-loop-uniform`. The 10% work target is retained and pinned by
-`tests/test_validation_report.py`.
+actuators); the result is identical to the uniform-curvature calculation,
+because the measured curvature lies in the uniform-moment zone. The 10% work
+target is retained and pinned by `tests/test_validation_report.py`.
+The paragraphs below describe the row with the transferred 0.3 MPa, as it
+was computed until 2026-11-20 and is still reported in the table above.
 With the former symmetric capstan bound the row failed (+12.9 %); the signed
 bound lowers the full-slip loop work by 3.7 % at this cable's `λ` (0.069),
 which brings it inside the target. Gap G8 had tested whether a gradual
@@ -349,8 +364,8 @@ transfer rows move with the stiffer stick (before: armour only 2.71 %,
 | Janocha (2024) 66 kV, 50 kN, Fig. 6 loop half-height at κ = 0 | C2C (FE, no initial contact state) | reported (about 1.0 kN·m) | 0.115 kN·m (solved) | 0.209 kN·m (μ 0.46, Table 2); 0.409 kN·m with the filler profiles | reported |
 | Same, slipping slope; IEA Wind Task 49 Table 13 (its row cites the same source) | C2C | reported (42.47 kN·m²; Fig. 6 about 29) | 21.7 kN·m² | 21.7 kN·m² | reported |
 | Same, Fig. 12b moment at 0.01 1/m and stick slope | — | retired (below) | 0.23 / 0.37 / 0.53 kN·m | 0.25 / 0.57 / 0.93 kN·m | retired |
-| Ménard (2023) range (b), transferred inputs (0.3 MPa of the source FE), core μ 0.2 as in the source FE | M | RMSE < 5 %; work within 10 % (BM1-loop) | 2.86 %; +11.8 % | 5.08 %; +30.2 % | FAIL with and without the cores against the BM1-loop target; stated, not gated (unreliable reference) |
-| Ménard (2023) ranges (a), (c)–(f), work | M | — | +56.4, +53.8, +40.2, +5.1, −0.9 % | +72.3, +68.9, +54.4, +22.2, +15.3 % | (worse); stated, not gated |
+| Ménard (2023) range (b), transferred inputs (0.3 MPa of the source FE), core μ 0.2 as in the source FE | M | RMSE < 5 %; work within 10 % (BM1-loop) | 2.86 %; +11.8 % | 5.08 %; +30.2 % | FAIL with and without the cores against the BM1-loop target; reported, not gated (the 0.3 MPa is a tuning parameter of the source FE) |
+| Ménard (2023) ranges (a), (c)–(f), work | M | — | +56.4, +53.8, +40.2, +5.1, −0.9 % | +72.3, +68.9, +54.4, +22.2, +15.3 % | (worse); reported, not gated |
 
 - **Janocha.** The source is a finite-element model, not a test, and states
   no initial contact state; its figures are compared code to code and not
@@ -436,8 +451,8 @@ with the former shear stack 220 and 275 kPa).
 | (f) | 69.2 | −11.7 %, 4.43 % | −11.3 %, 4.57 % | PASS |
 
 The registered target fails on ranges (a) and (c), the two small-amplitude
-ranges. Since 2026-11-18 the row is stated, not gated (see "Reliability of
-the Ménard and Cartraud (2023) test"). The full accounting brings every small-amplitude prediction closer
+ranges. The row is gated: FAIL (see "The 0.3 MPa of the source FE and the
+limits of the test"). The full accounting brings every small-amplitude prediction closer
 than the armour law identified the same way ((a) +40.1 % → +28.5 %, (c)
 +37.7 % → +26.2 %, (d) +25.5 % → +15.2 %) and leaves the large ranges (e)
 and (f) unchanged within 0.5 %. What remains is an over-prediction of the work
@@ -795,7 +810,7 @@ regenerated; a row that fails reads FAIL.
 | BM1-loop, BM1-loop-uniform | **held out** (measured; stated, not gated) | see below: the registered 10 % work target turns from PASS to FAIL |
 | BM1-ID | **held out** (measured; stated, not gated) | see below: stays FAIL |
 | A11, slip-onset, xsec-K, M-rec, M-rec-3core, MX-scale, CF, CFW, MK-Tcyc | identities on cables whose ξ changes (the 33 kV single-core legacy cable, Ménard, 66 kV) | stay within their targets; A11 and slip-onset are not identities in ξ and may move |
-| TQ, TQ-SV, TQ-KL, TQ-UJ, CH-GJ, WITZ-EI, BM1, HU-3PB, HU-uniform, AW-DONG25, AW-ZT14, DAI20-KAPPA, DAI20-COULOMB, DAI18-*, the remaining Tier-1 and Tier-2 rows | ξ not on their path (torsion, full slip, conductor law, stand-alone wire, rig beam, spring-slider) | unchanged |
+| TQ, TQ-SV, TQ-KL, TQ-UJ, WITZ-EI, BM1, HU-3PB, HU-uniform, AW-DONG25, AW-ZT14, DAI20-KAPPA, DAI20-COULOMB, DAI18-*, the remaining Tier-1 and Tier-2 rows | ξ not on their path (torsion, full slip, conductor law, stand-alone wire, rig beam, spring-slider) | unchanged |
 
 **Held-out predictions, written before the run.** The estimate uses the
 closed-form ξ and EI_max above and an elastic–perfectly-plastic (Masing)
@@ -2463,7 +2478,7 @@ arrangement from the far end fitting to the tensioner pin (Fig. 1 sketch);
 no inlet tube between the end fitting and the entrance; no gravity (the
 source applies self-weight, value not printed); small slopes (the largest
 angle is 17°); tube steel 207 GPa. The umbilical bending stiffness and weight
-are not printed ("obtained from UFLEX").
+are not printed ("obtained from one of the source's cross-section tools").
 
 **DAI20-KAPPA (registered).** The SV11 rig beam (`check_saevik2011.Beam` with
 this rig: clamp at the end fitting, free inlet, entrance gap 3 mm, curved
@@ -2809,24 +2824,22 @@ so the coiling stresses themselves are not benchmarked.
 Request `cablexsec.compute_coiling`, tests `tests/test_coiling.py`. Any coiling
 result depends on the core lay, which must be stated with it.
 
-### Torsional stiffness of the coiling cable (CH-GJ, model-to-model)
+### Torsional stiffness of the coiling cable: core-lay sensitivity (stated)
 
-The source's Table 5 gives the torsional stiffness of its cable from three
-cross-section tools; none is measured. CH-GJ reports the free torsional
-stiffness of the packaged cable at the source's twist (0.125 rad/m, Table 4;
-the sense that unwinds the armour; zero tension), as a stated comparison
-without a gate:
+No torsional stiffness of the source's cable is measured, so none is
+benchmarked. The free torsional stiffness of the packaged cable at the
+source's twist (0.125 rad/m, Table 4; the sense that unwinds the armour; zero
+tension) depends on the core lay, which must be stated with it
+(`validation/scripts/check_section_torsion.py`, `chae_checks`):
 
 | Core lay | Armour pitch 1.8 m (kN m²) | Armour pitch 3.0 m (kN m²) |
 | --- | --- | --- |
-| Range of the three tools (Table 5) | 59.6–83.2 | 34.3–44.7 |
 | Straight (packaged) | 81.9 | 50.5 |
 | S, assumed pitch 2.5 m | 61.1 | 35.0 |
 | S, assumed pitch 3.0 m | 64.4 | 37.3 |
 
-With straight cores the value is inside the tools' range at 1.8 m and 13 %
-above its top at 3.0 m; with S-lay cores at either assumed pitch it is inside
-at both pitches, at 0.88–0.93 of the middle tool at 1.8 m and 0.79–0.84 at 3.0 m.
+S-lay cores lower it by 21–25 % at 1.8 m and 26–31 % at 3.0 m against
+straight cores.
 
 - **Core lay.** The source lays the cores S, like the armour (Sec. 2.1.2), but
   gives no core pitch; the packaged file keeps straight cores. Under an
@@ -2845,6 +2858,10 @@ at both pitches, at 0.88–0.93 of the middle tool at 1.8 m and 0.79–0.84 at 3
   then takes `k22 − k12²/k11` with the cylinders in `k11`. The published column
   (69.6–25.1 kN m²) is proportional to `1/P²` within 0.2 % and therefore holds
   no pitch-independent `G_c J_c` term; it is not used as a reference here.
+- **Removed row.** CH-GJ compared these values with the range of the
+  source's three cross-section tools (Table 5), the only reference values
+  there. It was a model-to-model comparison with no measurement and is
+  removed from the validation report.
 
 ### Torsional stiffness of the Su et al. (2026) 35 kV cable
 
