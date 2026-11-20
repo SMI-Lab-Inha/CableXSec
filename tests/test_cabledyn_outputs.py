@@ -746,3 +746,85 @@ def test_components_route_needs_the_component_channels(tmp_path):
         read_cabledyn_sections(
             root, deck, {"s": 4.95}, curvature_source="components", pressure="none"
         )
+
+
+def _vu_without(tmp_path, dropped):
+    """``vu_torsion`` with the named ``.CD.out`` channels left out."""
+    root, deck = _vu_copy(tmp_path)
+    path = tmp_path / "vu.CD.out"
+    rows = [row.split("\t") for row in path.read_text(encoding="utf-8").splitlines()]
+    keep = [i for i, name in enumerate(rows[0]) if name not in dropped]
+    path.write_text(
+        "\n".join("\t".join(row[i] for i in keep) for row in rows) + "\n",
+        encoding="utf-8",
+    )
+    return root, deck
+
+
+def test_components_section_on_a_deck_node_reads_that_node_alone(tmp_path):
+    """A section on a deck node takes that node's CurvX/CurvY, Ten, Twist and
+    Torq without the next node's channels, bit for bit; a section just off
+    the node still needs both and is told where the node lies."""
+    channels = _main_channels_units(DATA / "vu_torsion.CD.out")
+    arcs = read_cabledyn_deck(DATA / "vu_torsion.dat").line(1).node_arc_lengths()
+    on_node = float(arcs[10])  # deck node 11
+    full = read_cabledyn_sections(
+        DATA / "vu_torsion",
+        DATA / "vu_torsion.dat",
+        {"s": on_node},
+        curvature_source="components",
+        pressure="none",
+    ).histories["s"]
+    root, deck = _vu_without(
+        tmp_path,
+        {f"{kind}1N12" for kind in ("Ten", "Curv", "CurvX", "CurvY", "Twist", "Torq")},
+    )
+    read = read_cabledyn_sections(
+        root, deck, {"s": on_node}, curvature_source="components", pressure="none"
+    )
+    history = read.histories["s"]
+    np.testing.assert_array_equal(
+        history.rotation_curvature_x_1_m, -channels["CurvY1N11"]
+    )
+    np.testing.assert_array_equal(
+        history.rotation_curvature_y_1_m, channels["CurvX1N11"]
+    )
+    np.testing.assert_array_equal(history.effective_tension_N, channels["Ten1N11"])
+    np.testing.assert_array_equal(history.twist_rad, np.radians(channels["Twist1N11"]))
+    np.testing.assert_array_equal(history.torque_Nm, channels["Torq1N11"])
+    for name in (
+        "rotation_curvature_x_1_m",
+        "effective_tension_N",
+        "twist_rad",
+        "torque_Nm",
+    ):
+        np.testing.assert_array_equal(getattr(history, name), getattr(full, name))
+    with pytest.raises(CableSchemaError, match="from deck node 11"):
+        read_cabledyn_sections(
+            root,
+            deck,
+            {"s": on_node + 1e-6},
+            curvature_source="components",
+            pressure="none",
+        )
+
+
+def test_components_route_records_the_twist_where_it_is_written(tmp_path):
+    """CableDyn's components carry the twist in their axes: a section whose
+    nodes write no Twist channel is still read, without a twist history, and
+    the other sections keep theirs."""
+    arcs = read_cabledyn_deck(DATA / "vu_torsion.dat").line(1).node_arc_lengths()
+    root, deck = _vu_without(tmp_path, {"Twist1N30", "Torq1N30"})
+    read = read_cabledyn_sections(
+        root,
+        deck,
+        {"upper": float(arcs[10]), "mid": float(arcs[29])},
+        curvature_source="components",
+        pressure="none",
+    )
+    assert read.histories["upper"].twist_rad is not None
+    assert read.histories["upper"].torque_Nm is not None
+    assert read.histories["mid"].twist_rad is None
+    assert read.histories["mid"].torque_Nm is None
+    assert "'upper'" in read.checks["torsion"]["material_twist"]
+    assert "'mid'" not in read.checks["torsion"]["material_twist"]

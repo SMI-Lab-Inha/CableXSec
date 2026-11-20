@@ -333,7 +333,13 @@ rotating plane, separators, a missing column). The station reader takes one
 station's columns under the names above; a CableDyn `.out` file holds them as
 `Ten<L>N<J>`, `CurvX<L>N<J>` and `CurvY<L>N<J>` for every requested node, so a
 station is passed to `series_from_curvature_components` from its three
-columns. `read_cabledyn_sections` does not read `CurvX`/`CurvY`.
+columns. `read_cabledyn_sections(..., curvature_source="components")` reads
+them at the deck nodes around each section (Section 2); a section placed on a
+deck node, at the arc length `CableDynLine.node_arc_lengths()` gives it, needs
+that node's `CurvX`, `CurvY` and `Ten` channels only (and its `Twist`/`Torq`,
+recorded where written). A station given by a rounded arc length a few
+micrometres off its node needs the next node's channels too; the error names
+the node and its arc length.
 
 ## 3. Sea-state batch
 
@@ -535,10 +541,10 @@ law (`xsec_stiffness`, the backbone of `compute_mkappa`) returned to CableDyn
 as an element constitutive law with history (biaxial stick–slip state per
 element and Gauss point, consistent tangent for the implicit integrator,
 state transfer between steps and restarts), followed by the local recovery
-of this guide on the consistently bent histories. Also open: hang-off roll
-about the cable axis (from the vessel attitude), wave dynamic pressure,
-temperature histories from a coupled thermal run, and conductor fatigue in
-the batch.
+of this guide on the consistently bent histories. Also open: wave dynamic
+pressure, temperature histories from a coupled thermal run, and conductor
+fatigue in the batch. (The hang-off roll about the cable axis is read since
+the `hang_off_rotation` input and `curvature_source="components"`, Section 2.)
 
 Two findings shape stage 2:
 
