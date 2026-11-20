@@ -447,8 +447,8 @@ All notable changes to CableXSec are recorded in this file. The format follows
   0.3 MPa it gave +11.8 % (reported in the benchmark register, not gated). BM1-ID (identified on
   range (b), five ranges predicted) is gated: FAIL on ranges (a) and (c) (+28.5, +26.2 %).
   BM1-loop-uniform, which gave the same numbers at uniform curvature, is removed. For a short
-  time these rows were reported as INFO, "stated, not gated", on a reading of that ruling as
-  covering the measurements. The register keeps the limits of the test: one specimen, end
+  time these rows were reported as INFO, "stated, not gated", on a broader reading that took
+  the measurements to be unreliable as well. The register keeps the limits of the test: one specimen, end
   effects not investigated, table and figure disagreeing on equal-span ranges, and an
   independent FE reconstruction (Kwon et al. 2026) that does not match.
 - CH-GJ is removed from the validation report. Its only reference values were the outputs of

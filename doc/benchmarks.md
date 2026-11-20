@@ -249,8 +249,8 @@ The unreliable quantity is the source's clamping pressure, 0.3 MPa: a tuning
 parameter of its own FE model, fitted on range (a) together with a friction
 coefficient taken from the literature (item 4). The measured loops are a
 reference. From 2026-11-18 to 2026-11-20 the rows that compare with the loops
-were reported as INFO, "stated, not gated", on a reading of that ruling as
-covering the measurements; they are gated again. BM1-loop no longer transfers
+were reported as INFO, "stated, not gated", on a broader reading that took
+the measurements to be unreliable as well; they are gated again. BM1-loop no longer transfers
 the 0.3 MPa: the clamping is identified on the measured cycle work of range
 (a), the range the source calibrated on, and range (b) is predicted
 (`check_core_friction.identify_initial_pressure`). BM1-ID identifies on range
