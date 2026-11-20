@@ -38,7 +38,9 @@ def _history(n=64):
 def test_very_large_mu_sticks_on_both_kernel_paths(monkeypatch):
     """mu = 1e6 overflowed the capstan factor of the reference return map
     ("wire history exceeds floating-point range") while the compiled path
-    held the wires stuck. Both now give the stuck answer, that of mu = 1."""
+    held the wires stuck. Both now give the stuck answer, that of mu = 1.
+    The kernel of the compiled path also runs as Python without numba, where
+    ``math.expm1`` raised ``OverflowError`` instead of returning ``inf``."""
     cable = bundled(CABLE)
     kx, ky, ten = _history()
     reference = cx.compute_fatigue(
@@ -46,8 +48,9 @@ def test_very_large_mu_sticks_on_both_kernel_paths(monkeypatch):
     )
     import cablexsec.analysis.fatigue as fatigue
 
-    # The compiled kernels where numba runs them, and the reference kernels.
-    for compiled in sorted({fatigue._FAST_SLIP, False}):
+    # The kernel of fast_slip (compiled, or as Python without numba) and the
+    # reference return map.
+    for compiled in (False, True):
         monkeypatch.setattr(fatigue, "_FAST_SLIP", compiled)
         result = cx.compute_fatigue(
             cable, kx, ky, tension_N=ten, mu=1e6, friction_model="direction_tied"
@@ -57,6 +60,68 @@ def test_very_large_mu_sticks_on_both_kernel_paths(monkeypatch):
             np.testing.assert_allclose(
                 damage, reference.D_total_per_wire[name], rtol=0.0, atol=1e-12 * scale
             )
+
+
+def test_very_large_mu_sticks_in_the_progressive_model():
+    """The progressive kernel runs as Python without numba, where the capstan
+    factor at mu = 1e6 raised ``OverflowError``; compiled it gave the stuck
+    answer, which mu = 3e4 already reaches on this history."""
+    cable = bundled(CABLE)
+    kx, ky, ten = _history()
+    stuck = cx.compute_fatigue(
+        cable, kx, ky, tension_N=ten, mu=3e4, friction_model="progressive"
+    )
+    huge = cx.compute_fatigue(
+        cable, kx, ky, tension_N=ten, mu=1e6, friction_model="progressive"
+    )
+    for name, damage in huge.D_total_per_wire.items():
+        scale = float(np.max(stuck.D_total_per_wire[name]))
+        np.testing.assert_allclose(
+            damage, stuck.D_total_per_wire[name], rtol=0.0, atol=1e-12 * scale
+        )
+
+
+def test_expm1_guard_is_the_compiled_expm1_at_every_argument():
+    """``_expm1_or_inf`` is ``math.expm1`` up to log(DBL_MAX) and ``inf``
+    beyond it, compiled and run as Python alike."""
+    from cablexsec.mechanics.friction_law import _EXPM1_MAX, _expm1_or_inf
+
+    python = getattr(_expm1_or_inf, "py_func", _expm1_or_inf)
+    beyond = math.nextafter(_EXPM1_MAX, math.inf)
+    for guard in (_expm1_or_inf, python):
+        for x in (-1e6, -1.0, 0.0, 1e-300, 1.0, 700.0, _EXPM1_MAX):
+            assert guard(x) == math.expm1(x)
+        assert math.isfinite(guard(_EXPM1_MAX))
+        assert guard(beyond) == math.inf and guard(1e6) == math.inf
+        assert math.isnan(guard(math.nan))
+    with pytest.raises(OverflowError):
+        math.expm1(beyond)
+
+
+@pytest.mark.parametrize("fast", [False, True], ids=["reference", "fast"])
+def test_constant_curvature_gives_no_distributed_damage(monkeypatch, fast):
+    """A constant curvature and tension cycle nothing. The compiled kernel
+    started each repeated sample from the increment of the last substep and
+    converged to a drift of the Newton tolerance (2e-6 Pa per sample on the
+    inner armour), counted as 1e-58 damage; both kernels moved the segment
+    forces by round-off on a repeated sample (1e-69 damage on the outer
+    armour). A repeated sample now keeps the state on both kernels."""
+    from cablexsec.mechanics import distributed_friction as dfm
+
+    monkeypatch.setattr(dfm, "_FAST_KERNEL", fast)
+    cable = bundled(CABLE)
+    n = 24
+    result = cx.compute_fatigue(
+        cable,
+        np.full(n, 0.01),
+        np.zeros(n),
+        tension_N=np.full(n, 2e5),
+        friction_model="distributed",
+        distributed_max_increment=0.5,
+    )
+    for name, damage in result.D_total_per_wire.items():
+        assert np.all(damage == 0.0), name
+        assert np.all(result.D_bulk_with_termination_per_fibre[name] == 0.0), name
 
 
 def test_overflowing_capstan_bound_is_finite_and_unreachable():

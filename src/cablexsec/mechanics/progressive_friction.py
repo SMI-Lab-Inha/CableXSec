@@ -75,7 +75,9 @@ from numpy.typing import NDArray
 
 from cablexsec._numba import njit
 from cablexsec.exceptions import CableInputError
+from cablexsec.mechanics.friction_law import _expm1_or_inf
 from cablexsec.mechanics.papailiou import (
+    _UNREACHABLE_CAP_PA,
     DIRECTION_HOLD_FRACTION,
     BendingWork,
     WireSlipHistory,
@@ -207,11 +209,11 @@ def _caps_kernel(
                 q = (j + 1.0) / n_el
                 if j + 1 == n_el:
                     q = 1.0
-                upper = side * math.expm1(side * lam * math.asin(q * c))
+                upper = side * _expm1_or_inf(side * lam * math.asin(q * c))
                 out[w, j] = base * scale * (upper - lower)
                 lower = upper
         else:
-            cap = base * side * math.expm1(side * lam * math.asin(c))
+            cap = base * side * _expm1_or_inf(side * lam * math.asin(c))
             for j in range(n_el):
                 out[w, j] = cap * (1.0 + spread * (2.0 * (j + 0.5) / n_el - 1.0))
     return out
@@ -245,8 +247,13 @@ def progressive_caps(
         if layer.shape_g is None
         else np.ascontiguousarray(layer.shape_g, dtype=np.float64)
     )
-    return np.asarray(
-        _caps_kernel(
+    # A sub-element whose capstan factor is beyond the floating-point range
+    # (inf, or inf - inf between two such cumulative bounds) has a cap no wire
+    # stress reaches: held at _UNREACHABLE_CAP_PA, as the bound of
+    # papailiou.wire_slip_stress_bounds, so the reference history sticks there
+    # as the compiled kernel does, instead of an overflow error.
+    with np.errstate(over="ignore", invalid="ignore"):
+        caps = _caps_kernel(
             np.ascontiguousarray(layer.phi_wires, dtype=np.float64),
             float(phi_bend),
             float(pressure),
@@ -261,7 +268,7 @@ def progressive_caps(
             spec.spread,
             float(side),
         )
-    )
+    return np.asarray(np.where(np.isfinite(caps), caps, _UNREACHABLE_CAP_PA))
 
 
 # --------------------------------------------------------------------------- #

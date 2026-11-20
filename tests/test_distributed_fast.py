@@ -144,6 +144,58 @@ def test_fast_kernel_matches_reference_with_friction_law():
         _assert_close(fast, ref)
 
 
+def _held_path(steps=STEPS):
+    """A ramp past the slip onset, a hold, a reversal and a second hold."""
+    q = steps // 4
+    ax = np.concatenate(
+        (
+            np.linspace(0.0, 4.0, q),
+            np.full(q, 4.0),
+            np.linspace(4.0, -2.0, q),
+            np.full(steps - 3 * q, -2.0),
+        )
+    )
+    return ax, 0.3 * ax, q
+
+
+@pytest.mark.parametrize("lam", [0.127, 0.0], ids=["signed", "uniform"])
+def test_a_repeated_sample_keeps_the_state(lam):
+    """Under the Coulomb bound a sample that repeats the last one leaves the
+    state as it is, in both kernels: its outputs equal the last sample's bit
+    for bit and it takes no substep. Solved, it moved the forces by round-off
+    (the fast kernel by the Newton tolerance), which counted as cycles."""
+    ax, ay, q = _held_path()
+    held = np.r_[q : 2 * q, 3 * q : ax.size]
+    runs = {}
+    for kernel in (dfm._distributed_kernel, dfm._distributed_kernel_fast):
+        run = _run(kernel, ax, ay, lam=lam)
+        out, hist, slip, stats, fld = run[0]
+        for i in held:
+            assert np.array_equal(out[:, i], out[:, i - 1])
+            assert np.array_equal(fld[i], fld[i - 1])
+            assert np.array_equal(hist[i], hist[i - 1])
+            assert slip[i] == slip[i - 1]
+        runs[kernel] = run
+        assert stats[0] == 0
+    fast, ref = runs[dfm._distributed_kernel_fast], runs[dfm._distributed_kernel]
+    _assert_close(fast, ref)
+    moving = _run(dfm._distributed_kernel, ax + 1e-3 * np.arange(ax.size), ay)
+    assert moving[0][3][3] > ref[0][3][3]  # the held samples took no substep
+
+
+def test_a_repeated_sample_under_a_friction_law_is_solved_from_zero():
+    """With a friction law a repeated sample can change the law state (a node
+    heals while it sticks), so it is solved; the fast kernel starts it from a
+    zero increment, as the reference does."""
+    ax, ay, _q = _held_path()
+    rho = np.ones(ax.size)
+    law = (np.array([1.3, 1.0, 0.05]), np.full(ax.size, 0.01), None, 0.0)
+    options = {"nodes": 48, "rho": rho, "law": law}
+    ref = _run(dfm._distributed_kernel, ax, ay, **options)
+    fast = _run(dfm._distributed_kernel_fast, ax, ay, **options)
+    _assert_close(fast, ref)
+
+
 def test_fast_kernel_on_a_small_helix():
     # Fewer than three nodes go to the reference kernel unchanged.
     ax, ay = _paths("rotating", steps=40)

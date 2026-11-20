@@ -105,6 +105,7 @@ for bit.
 from __future__ import annotations
 
 import math
+import sys
 from dataclasses import dataclass
 
 import numpy as np
@@ -406,6 +407,23 @@ def friction_law_time_steps(
 @njit(cache=True)
 def _em1(y: float) -> float:
     return math.expm1(min(y, _EXP_LIMIT))
+
+
+#: Largest argument of a finite ``expm1`` in binary64, ``log(DBL_MAX)``.
+_EXPM1_MAX = math.log(sys.float_info.max)
+
+
+@njit(cache=True)
+def _expm1_or_inf(x: float) -> float:
+    """``math.expm1(x)``, and ``inf`` beyond the binary64 range.
+
+    Compiled, ``math.expm1`` already returns ``inf`` there; run as Python
+    (without numba) it raises ``OverflowError``. With this guard the two
+    agree, bit for bit, at every argument.
+    """
+    if x > _EXPM1_MAX:
+        return math.inf
+    return math.expm1(x)
 
 
 @njit(cache=True)
