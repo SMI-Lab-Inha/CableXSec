@@ -11,6 +11,7 @@ entry point; refusal of an unknown model; and the model-to-model row XI-FE.
 from __future__ import annotations
 
 import math
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -171,6 +172,34 @@ def test_unknown_stick_support_is_refused_everywhere() -> None:
         cx.compute_stiffness(cable, stick_support="series")
     with pytest.raises(CableInputError, match="stick_support"):
         SectionLaw.from_cable(cable, stick_support="series")
+
+
+@pytest.mark.analytical_sanity
+def test_free_bore_only_where_nothing_lies_inside(tmp_path: Path) -> None:
+    import check_stick_support_fe as fe
+
+    source = fe.DATA / "line_contact_tube_hollow.yaml"
+    hollow = cx.load_cable(source, geometry_override=None)
+    # A layer without an isotropic modulus fills the bore: the stack skips
+    # it, and the support is then kept rigid (as in the default model), not
+    # treated as a free bore.
+    text = source.read_text(encoding="utf-8").replace(
+        "layers:\n",
+        "materials:\n  yarn_probe:\n    description: yarn without a modulus\n"
+        "    rho_kg_m3: {value: 500.0, source: test}\n\nlayers:\n"
+        "  - name: bore_yarn\n    layer_type: cylindrical\n    material: yarn_probe\n"
+        "    r_inner_m: 0.0\n    r_outer_m: 0.020\n    source: test\n\n",
+        1,
+    )
+    path = tmp_path / "filled_bore.yaml"
+    path.write_text(text, encoding="utf-8")
+    filled = cx.load_cable(path, geometry_override=None)
+    free = xi_for_layer(hollow, "armour", stick_support="annulus")
+    with filled.material_scope():
+        supported = xi_for_layer(filled, "armour", stick_support="annulus")
+        series = xi_for_layer(filled, "armour")
+    assert free < 0.6 * supported
+    assert supported == pytest.approx(series, rel=0.05)
 
 
 @pytest.mark.independent_method
