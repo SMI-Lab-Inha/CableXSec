@@ -138,8 +138,9 @@ torsion); where a later release changed a channel, the item says so.
 returns, per section at unstretched arc length `s` from End A:
 `time_s`, `effective_tension_N`, `rotation_curvature_x_1_m`,
 `rotation_curvature_y_1_m`, `curvature_norm_1_m`, `elevation_m`,
-`external_pressure_Pa`, `torque_Nm`, `twist_rad`, the labels of the frame,
-curvature source and tension source, and a provenance record. The read also
+`external_pressure_Pa`, `torque_Nm`, `twist_rad`, `twist_rate_per_m`
+(Section 2.2), the labels of the frame, curvature source and tension source,
+and a provenance record. The read also
 returns the digests of every file read and the consistency checks.
 
 **Curvature vector.** `curvature_source="tangent"` splines the tangents of
@@ -296,8 +297,9 @@ nodes cannot be placed: the positions are read at the deck nodes,
 channels the tangent source needs for the section frame: `Dec`/`Azi` on the
 window, `Ten`, `Curv` and `p{x,y,z}` at the bracketing nodes, and
 `Twist`/`Torq` on a line CableDyn solves in torsion (`torsion_solved`;
-CableDyn refuses them on any other line). The arc frame also needs the
-line's `p` flag. Adding `t` gives the element tensions.
+CableDyn refuses them on any other line), with `Twist` also at the node before
+a section that lies on a deck node (its twist rate, Section 2.2). The arc frame
+also needs the line's `p` flag. Adding `t` gives the element tensions.
 
 ### 2.1 CableDyn 0.4.0 signed curvature components
 
@@ -340,6 +342,68 @@ that node's `CurvX`, `CurvY` and `Ten` channels only (and its `Twist`/`Torq`,
 recorded where written). A station given by a rounded arc length a few
 micrometres off its node needs the next node's channels too; the error names
 the node and its arc length.
+
+### 2.2 Twist rate and the torsional wire stress
+
+A twist of the cable stresses its helical wires, not only the frame. With plane
+sections and fixed layer radii a wire of lay angle `a`, helix radius `R` and lay
+sign `s` (+1 right hand, Z; −1 left hand, S) strains by
+
+```text
+eps_w = eps cos^2(a) + s R tau sin(a) cos(a)
+```
+
+under the cable strain `eps` and the twist rate `tau` (Knapp 1981, Eq. 11 with a
+radially rigid core and the twist strain of its Eq. 2). `compute_fatigue(...,
+twist_rate_per_m=tau)` adds this stress to every armour wire, the same for every
+wire of a layer: the bending slip and the friction stress are unchanged, on
+every friction model. With `tension_N` the tension is held, so the strain also
+changes by `−K_et tau / K_ee` with the fixed-radius coupling `K_et` and
+`EA_fixed = K_ee` of `compute_stiffness`. This is the section law `T = EA eps +
+K tau`, `M = GJ tau + K eps` that CableDyn solves with `GJ|K`, so a deck
+whose `EA`, `GJ` and `K` are the section's `K_ee`, `K_tt` and `K_et` gives
+CableXSec the strain CableDyn has. `compute_conductor_fatigue(...,
+twist_rate_per_m=tau)` adds the twist strain of the laid core, `(r_c tan(b) −
+K_et/K_ee) tau`, to the conductor axis, and the twist of the ring wires about it.
+
+**Input: the twist rate, not the torque.** The reader forms
+`twist_rate_per_m` from `Twist<L>N<J>` alone. CableDyn's element twist is
+`Twist_{k+1} − Twist_k = M L_0/GJ − (K/GJ)(l − L_0)`, the material twist of
+the element, so `(Twist_{k+1} − Twist_k)/L_0` is its kinematic twist rate per
+unstretched length. A section inside an element takes that element's rate, from
+the two `Twist` channels the frame needs already. A section on a deck node takes
+the mean of its two elements' rates, the definition CableDyn uses for
+`Torq<L>N<J>`, and needs `Twist` at the node and at both neighbours (one
+element at a line end). The torque is not converted:
+
+- it includes the Kelvin–Voigt torsional damping (`GJ|K|Bt`);
+- under a bend stiffener it is the section torque, not the cable's share;
+- its conversion would need a torsional law, while the twist rate is the global
+  model's own kinematics, like the curvature.
+
+`Torq` is a consistency check instead: `Torq = GJ tau + K eps` with `eps =
+(Ten − K tau)/EA`, to the print precision of the `Twist` channels.
+
+**Signs.** CableDyn's `Twist` is right-handed about the End A → End B
+tangent, so `tau > 0` tightens a right-hand lay: CableXSec's sign (Section 12
+of the local analysis guide), with no flip. A right-hand (Z) armour layer takes
+tension and a left-hand (S) layer compression under a positive twist rate.
+
+**Deck outputs for the torsional stress.** At every station on deck node `J`
+write `Twist<L>N<J−1>`, `Twist<L>N<J>` and `Twist<L>N<J+1>` (the end node and
+its neighbour at a line end), and `Torq<L>N<J>` for the check. Where CableDyn
+writes twist or torque at a section but not these channels, the reader warns
+(`TorsionalStressWarning`, naming them) and `twist_rate_per_m` is `None`.
+`checks["twist_rate"]` records the elements used for each section.
+
+**Limits.** The term is the linear fixed-radius helix strain. It leaves out
+the radial contraction of the layers (on the 66 kV template the solved radial
+section gives the same twist stress within 6 %), the opening of a contact
+under a twist that unloads a layer, the twist's change of the interlayer
+contact pressure (the friction caps follow the tension), and the bending and
+twisting of the individual wires. No measured wire strain under torsion is in
+the validation set; row TQ-FT verifies the arithmetic and the consistency with
+`K_et` and `K_tt` ([benchmarks.md](benchmarks.md)).
 
 ## 3. Sea-state batch
 
@@ -409,6 +473,11 @@ result.sections["sag"].long_term.annual_damage, result.sections["sag"].life_year
   the wider tolerance; a 10-column row gives no `GJ` and is not compared. A
   mismatch stops the batch unless `allow_property_mismatch=True` is
   declared, and the comparison is written to the manifest either way.
+- Torsional wire stress: `twist_stress=True` passes each section's
+  `twist_rate_per_m` (Section 2.2) to `compute_fatigue`; on a line CableDyn
+  solves in torsion a section without it is refused. With the default `False`
+  a section whose history has a twist rate warns (`TorsionalStressWarning`)
+  that the stress is omitted, and the result is that of earlier releases.
 - Workers: `workers` processes, one numerical thread each, spawned, at most
   one per run; there is no upper limit, so choose the count for the machine
   (the runs are independent and the batch scales with the worker count while
@@ -457,6 +526,7 @@ Paths are relative to the JSON file; unknown keys are rejected.
 | Rigid heading rotation of the configuration | components unchanged (1e-9) |
 | Bending plane turning about the hang-off tangent by `φ(t)` (arc frame) | `κ(−sin φ, cos φ)` within 5e-6 1/m |
 | Material twist of a restrained line | axes turned by the `Twist` channel; components `κ(sin φ, cos φ)` |
+| Twist rate from `Twist` channels of two element rates (1e-3 and 3e-3 rad/m) | inside each element its rate, on the node their mean (1e-12); missing neighbour channels named |
 | Tangent placement on a non-uniform mesh (0.2 m then 0.3 m elements): node tangents of a finite-EI line; chords of an `EI = 0` line and, with `tangent_placement="chord"`, of a finite-EI line | curvature within 1e-4 of `κ` at End A, the mesh junction and End B; node tangents read as chords give more than 1.5 `κ` at End A |
 | Tension between element mid-arcs, hydrostatic pressure, `T_e − p_o A_o` | exact for a linear field; elevation within 1e-7 m |
 | Round trip through the time-history CSV path: section history written as a CSV export (`x curvature`, `y curvature`, `Wall tension`) and read with `read_time_history_csv` | identical `LoadCaseSeries` (1e-12) and identical fixed-fibre damage |

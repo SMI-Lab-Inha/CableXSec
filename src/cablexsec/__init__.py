@@ -316,6 +316,7 @@ from cablexsec.provenance import (
     DirectionTiedFrictionWarning,
     FrictionModelFallbackWarning,
     MissingClampingStateWarning,
+    TorsionalStressWarning,
     UnmodelledPolymerSofteningWarning,
 )
 
@@ -589,6 +590,7 @@ __all__ = [
     "UnevaluatedFatigueCurveWarning",
     "UnvalidatedModelWarning",
     "MissingClampingStateWarning",
+    "TorsionalStressWarning",
     "UnmodelledPolymerSofteningWarning",
     "CableXSecError",
     "CableInputError",

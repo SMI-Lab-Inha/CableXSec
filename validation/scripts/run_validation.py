@@ -1008,7 +1008,8 @@ def _torque_rows() -> list[Row]:
     v = tq.verification_checks()
     p = tq.published_checks()
     w = sv.verification_checks()
-    # The first two rows are tier 1 and are reported with the analytical rows.
+    ft = tq.fatigue_torsion_checks()
+    # The first three rows are tier 1 and are reported with the analytical rows.
     return [
         Row(
             "1",
@@ -1035,6 +1036,24 @@ def _torque_rows() -> list[Row]:
             f"{w['rectangle']:.1e}; {w['annulus']:.1e}",
             "PASS"
             if abs(w["rectangle"]) < 3e-4 and abs(w["annulus"]) < 1e-6
+            else "FAIL",
+        ),
+        Row(
+            "1",
+            "TQ-FT",
+            "Twist-rate wire stress of the fatigue path (Knapp 1981 Eqs. 2, 11): "
+            "66 kV armour stress and damage under tension and twist vs closed "
+            "form; Feyrer 1x37 torque and tension from the wire stresses vs "
+            "K_et, K_tt; mirror lay with reversed twist; zero twist vs none",
+            "< 1e-12; < 1e-12; < 1e-12; 0",
+            f"{max(ft['closed_form'], ft['damage']):.1e}; "
+            f"{max(ft['torque'], ft['force']):.1e}; {ft['mirror']:.1e}; "
+            f"{ft['zero']:.1e}",
+            "PASS"
+            if max(ft["closed_form"], ft["damage"]) < 1e-12
+            and max(ft["torque"], ft["force"]) < 1e-12
+            and ft["mirror"] < 1e-12
+            and ft["zero"] == 0.0
             else "FAIL",
         ),
         Row(
@@ -1541,7 +1560,7 @@ def _rows() -> list[Row]:
     )
 
     torque_rows = _torque_rows()
-    rows.extend(torque_rows[:2])
+    rows.extend(torque_rows[:3])
 
     # A11 energy closure on a synthetic dense layer (loop area vs closed form).
     from cablexsec.mechanics.mkappa import HelicalLayerSpec  # noqa: PLC0415
@@ -2031,7 +2050,7 @@ def _rows() -> list[Row]:
             ("OST12-in", "OST12-out", "OST12-sum"),
         )
     )
-    rows.extend(torque_rows[2:])
+    rows.extend(torque_rows[3:])
     ei_min = ei_min_slip(menard)
     rows.append(
         Row(

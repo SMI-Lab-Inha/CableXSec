@@ -172,6 +172,24 @@ CableDyn writes no pressure. ``pressure="hydrostatic"`` forms
 ``rhoW`` and ``g``; wave dynamic pressure is not included. Torque and twist
 are taken from ``Torq<L>N<J>`` and ``Twist<L>N<J>`` when written.
 
+The material twist rate ``twist_rate_per_m`` (the input of the torsional wire
+stress, :func:`cablexsec.compute_fatigue` ``twist_rate_per_m``) is formed from
+``Twist<L>N<J>`` alone, which is kinematic: CableDyn's element twist is
+``Twist_{k+1} - Twist_k = M L_0/GJ - (K/GJ)(l - L_0)`` (CableDyn
+``doc/outputs.rst``), so its rate per unstretched length is
+``(Twist_{k+1} - Twist_k)/L_0``. A section inside an element takes that
+element's rate (the two bracketing nodes); a section on a deck node takes the
+mean of the rates of its two elements, as CableDyn's ``Torq<L>N<J>`` is the
+mean of their torques, which needs ``Twist`` at the node and at both
+neighbours (the end element alone at a line end). It is positive in the sense
+that tightens a right-hand lay, CableXSec's sign, which is CableDyn's
+right-handed twist about the End A -> End B tangent. Where ``Twist`` or
+``Torq`` channels are written at a section but the rate cannot be formed,
+:class:`~cablexsec.provenance.TorsionalStressWarning` names the channels to
+add. Torque is not converted: it contains the torsional damping and, under a
+bend stiffener, the sleeve's share, and its conversion would need a torsional
+law where the twist rate is the global model's own kinematics.
+
 Every required file, column and channel is checked by name and unit; a
 missing one raises :class:`~cablexsec.exceptions.CableSchemaError` naming it.
 """
@@ -183,6 +201,7 @@ import math
 import numbers
 import re
 import sys
+import warnings
 from collections.abc import Generator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -198,7 +217,7 @@ from cablexsec.mechanics.section_conventions import (
     rotation_to_strain_curvature,
     true_tension_from_effective,
 )
-from cablexsec.provenance import Provenance
+from cablexsec.provenance import Provenance, TorsionalStressWarning
 
 FloatArray = NDArray[np.float64]
 Frame = Literal["arc", "section"]
@@ -2254,6 +2273,13 @@ class CableDynSectionHistory:
         Hydrostatic external pressure [Pa] (``pressure="hydrostatic"``).
     torque_Nm, twist_rad : numpy.ndarray or None
         Torque and material twist from End A, when written.
+    twist_rate_per_m : numpy.ndarray or None
+        Material twist rate [rad/m] formed from ``Twist<L>N<J>`` at the
+        section's element(s) (module notes), positive in the sense that
+        tightens a right-hand lay: the ``twist_rate_per_m`` input of
+        :func:`cablexsec.compute_fatigue` and
+        :func:`cablexsec.compute_conductor_fatigue`. ``None`` when the
+        channels are not written.
     """
 
     name: str
@@ -2274,6 +2300,7 @@ class CableDynSectionHistory:
     pressure_model: str
     source: str
     provenance: Provenance
+    twist_rate_per_m: FloatArray | None = None
 
     def __post_init__(self) -> None:
         n = np.asarray(self.time_s).size
@@ -2287,6 +2314,7 @@ class CableDynSectionHistory:
             "external_pressure_Pa",
             "torque_Nm",
             "twist_rad",
+            "twist_rate_per_m",
         ):
             values = _frozen(getattr(self, item))
             if values is not None and (
@@ -2346,6 +2374,7 @@ class CableDynSectionHistory:
             "external_pressure_Pa",
             "torque_Nm",
             "twist_rad",
+            "twist_rate_per_m",
         ):
             values = getattr(self, item)
             changes[item] = None if values is None else values[keep]
@@ -2381,6 +2410,8 @@ class CableDynSectionHistory:
             values = getattr(self, item)
             if values is not None:
                 columns[item] = values
+        if self.twist_rate_per_m is not None:
+            columns["twist_rate_per_m"] = self.twist_rate_per_m
         return {key: np.asarray(value) for key, value in columns.items()}
 
 
@@ -3518,6 +3549,52 @@ def read_cabledyn_sections(
     }
     twist_available = all(twist_at.values())
     torque_available = all(torque_at.values())
+    # Elements whose twist rate gives each section's (module notes): the
+    # element of a section inside it, both elements of a section on a deck
+    # node (one at a line end).
+    rate_elements: dict[str, tuple[tuple[int, int], ...]] = {}
+    for plan in sections_plans:
+        pairs: tuple[tuple[int, int], ...]
+        if len(plan.deck_nodes) == 2:
+            pairs = ((plan.deck_nodes[0][0], plan.deck_nodes[1][0]),)
+        else:
+            node = plan.deck_nodes[0][0]
+            pairs = tuple(
+                (a, a + 1) for a in (node - 1, node) if a >= 0 and a + 1 < n_deck
+            )
+        rate_elements[plan.name] = pairs
+    rate_at = {
+        plan.name: line.torsion_solved
+        and all(
+            ("twist", line_id, j + 1) in channels
+            for pair in rate_elements[plan.name]
+            for j in pair
+        )
+        for plan in sections_plans
+    }
+    for plan in sections_plans:
+        if rate_at[plan.name] or not (
+            any(("twist", line_id, n + 1) in channels for n, _ in plan.deck_nodes)
+            or any(("torq", line_id, n + 1) in channels for n, _ in plan.deck_nodes)
+        ):
+            continue
+        absent = sorted(
+            {
+                f"Twist{line_id}N{j + 1}"
+                for pair in rate_elements[plan.name]
+                for j in pair
+                if ("twist", line_id, j + 1) not in channels
+            },
+            key=lambda name: int(name.rsplit("N", 1)[1]),
+        )
+        warnings.warn(
+            f"section {plan.name!r}: CableDyn writes twist or torque there, but "
+            "the twist rate of the torsional wire stress needs "
+            + ", ".join(absent)
+            + "; its fatigue would omit the torsional stress",
+            TorsionalStressWarning,
+            stacklevel=2,
+        )
     if source != "components":
         twist_at = dict.fromkeys(twist_at, twist_available)
         torque_at = dict.fromkeys(torque_at, torque_available)
@@ -3562,6 +3639,10 @@ def read_cabledyn_sections(
             "end), so the material frame needs "
             f"Twist{line_id}N<J> channels at the nodes bracketing every section"
         )
+    checks["twist_rate"] = {
+        name: [f"N{a + 1}-N{b + 1}" for a, b in rate_elements[name]] if ok else None
+        for name, ok in rate_at.items()
+    }
     checks["torsion"] = {
         "restrained_ends": sorted(line.torsion_restrained_ends),
         "solved": line.torsion_solved,
@@ -3683,6 +3764,10 @@ def read_cabledyn_sections(
             if wanted:
                 for node, _ in plan.deck_nodes:
                     want(kind, node)
+        if rate_at[plan.name]:
+            for pair in rate_elements[plan.name]:
+                for node in pair:
+                    want("twist", node)
     probe_nodes = [plan.node for plan in plans if plan.probe]
     for node in probe_nodes:
         want("curv", node)
@@ -4053,6 +4138,14 @@ def read_cabledyn_sections(
                         )
                     append(plan, "kx", np.sum(kappa * axis1, axis=-1))
                     append(plan, "ky", np.sum(kappa * axis2, axis=-1))
+                if rate_at[plan.name]:
+                    rates = [
+                        (values[:, slot[("twist", b)]] - values[:, slot[("twist", a)]])
+                        / (deck_arcs[b] - deck_arcs[a])
+                        for a, b in rate_elements[plan.name]
+                    ]
+                    rate = rates[0] if len(rates) == 1 else 0.5 * (rates[0] + rates[1])
+                    append(plan, "twist_rate", np.radians(rate))
                 if (
                     pos_order
                     and plan.elem_pos in pos_slot
@@ -4277,6 +4370,7 @@ def read_cabledyn_sections(
             external_pressure_Pa=p_ext,
             torque_Nm=data.get("torque"),
             twist_rad=data.get("twist"),
+            twist_rate_per_m=data.get("twist_rate"),
             frame="cabledyn section axes" if source == "components" else frame,
             curvature_source=source,
             tension_source=tension_label,
@@ -4317,6 +4411,18 @@ def read_cabledyn_sections(
                     "channels at the section)"
                     if source == "components" and line.torsion_solved
                     else "no material twist (line not restrained in torsion)",
+                    "twist rate from Twist channels at "
+                    + ", ".join(
+                        f"N{a + 1}-N{b + 1}" for a, b in rate_elements[plan.name]
+                    )
+                    + (
+                        " (mean of the two element rates)"
+                        if len(rate_elements[plan.name]) == 2
+                        else ""
+                    )
+                    if rate_at[plan.name]
+                    else "no twist rate (Twist channels at the section's elements "
+                    "not written)",
                     "hydrostatic external pressure only (no wave dynamic pressure)"
                     if pressure == "hydrostatic"
                     else "external pressure declared zero",
@@ -4350,9 +4456,10 @@ def section_channels(
     nodes, ``Curv<L>N<J>`` there for the consistency check, and
     ``Twist``/``Torq`` on a line CableDyn solves in torsion
     (:attr:`CableDynLine.torsion_solved`; CableDyn refuses them on any other
-    line), with ``Body<N>Rx/Ry/Rz`` of a body holding a restrained End A and
-    ``Twist<L>`` of a line restrained at End B only (the hang-off rotation of
-    the module notes). With these
+    line), with ``Twist`` also at the node before a section that lies on a
+    deck node (its twist rate), and ``Body<N>Rx/Ry/Rz`` of a body holding a
+    restrained End A and ``Twist<L>`` of a line restrained at End B only (the
+    hang-off rotation of the module notes). With these
     channels alone use ``frame="section"``; the default ``frame="arc"`` also needs the
     ``p`` flag of the line (node positions from End A to the section; to End B
     on a line restrained at End B only).
@@ -4383,6 +4490,10 @@ def section_channels(
             if line.torsion_solved:
                 add(f"Twist{line_id}N{node}")
                 add(f"Torq{line_id}N{node}")
+        if line.torsion_solved and element > 0 and arc == arcs[element]:
+            # A section on a deck node: its twist rate is the mean of its two
+            # elements' (read_cabledyn_sections, module notes).
+            add(f"Twist{line_id}N{element}")
     # The hang-off rotation (module notes): the attitude of a body holding a
     # restrained End A, or the total twist of a line restrained at End B only.
     if line.torsion_solved and "a" in line.torsion_restrained_ends:

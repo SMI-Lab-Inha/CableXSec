@@ -179,6 +179,7 @@ __all__ = [
     "miner_damage",
     "rainflow_cycles",
     "select_wires",
+    "twist_stress_coefficient",
 ]
 
 FloatArray = NDArray[np.float64]
@@ -394,6 +395,84 @@ def _validate_tension(
         raise CableInputError("tension_N requires finite positive EA_full_N")
 
 
+def twist_stress_coefficient(
+    layer: FatigueLayer,
+    *,
+    axial_twist_coupling_Nm: float | None = None,
+    EA_full_N: float | None = None,
+) -> float:
+    r"""Axial wire stress per unit cable twist rate [Pa per rad/m].
+
+    The linear wire strain of a helical layer under the cable strain
+    ``epsilon`` and the twist rate ``tau`` with plane sections and fixed
+    layer radii is ``cos^2(a) epsilon + s r sin(a) cos(a) tau`` ([Knapp1981]
+    Eq. 11 with a radially rigid core, ``theta = 0``, and the twist strain
+    ``gamma = r tau / tan(a)`` of its Eq. 2), with the lay sign ``s``
+    (``layer.lay_hand``: +1 right hand, -1 left hand). A positive ``tau``
+    tightens a right-hand lay.
+
+    Without ``axial_twist_coupling_Nm`` the cable strain is held (the
+    prescribed-strain route) and the coefficient is ``E s r sin(a) cos(a)``.
+    With the coupling ``K_et`` of the section law ``T = K_ee epsilon + K_et
+    tau`` and ``EA_full_N = K_ee``, the tension is held instead, so the twist
+    also changes the strain by ``-K_et tau / K_ee``: the coefficient is
+    ``E (s r sin(a) cos(a) - cos^2(a) K_et / K_ee)``. ``E`` is the axial
+    modulus of the tension stress (``E_eff_axial_Pa``, else the wire modulus).
+    """
+    spec = layer.spec
+    a = abs(spec.lay_angle_rad)
+    e_ax = layer.E_eff_axial_Pa or spec.E_wire_Pa
+    per_rate = layer.lay_hand * spec.r_helix_m * math.sin(a) * math.cos(a)
+    if axial_twist_coupling_Nm is not None:
+        if not math.isfinite(axial_twist_coupling_Nm):
+            raise CableInputError("axial_twist_coupling_Nm must be finite")
+        if EA_full_N is None or not math.isfinite(EA_full_N) or EA_full_N <= 0:
+            raise CableInputError(
+                "axial_twist_coupling_Nm requires finite positive EA_full_N"
+            )
+        per_rate -= math.cos(a) ** 2 * axial_twist_coupling_Nm / EA_full_N
+    return e_ax * per_rate
+
+
+def _validate_twist(
+    twist_rate_per_m: FloatArray | None,
+    axial_twist_coupling_Nm: float | None,
+    shape: tuple[int, ...],
+    *,
+    tension_given: bool,
+    strain_given: bool,
+    normal_given: bool,
+) -> FloatArray | None:
+    """Check the twist-rate input against the axial loading route."""
+    if twist_rate_per_m is None:
+        if axial_twist_coupling_Nm is not None:
+            raise CableInputError(
+                "axial_twist_coupling_Nm is used only with twist_rate_per_m"
+            )
+        return None
+    twist = real_array(twist_rate_per_m, "twist_rate_per_m")
+    if twist.shape != shape or not np.isfinite(twist).all():
+        raise CableInputError(
+            "twist_rate_per_m must be finite and match the curvature histories"
+        )
+    if normal_given:
+        raise CableInputError(
+            "a solved normal stress carries its own twist; supply the twist rate "
+            "with tension or prescribed axial strain instead"
+        )
+    if strain_given and axial_twist_coupling_Nm is not None:
+        raise CableInputError(
+            "with a prescribed axial strain the twist does not change the strain; "
+            "omit axial_twist_coupling_Nm"
+        )
+    if tension_given and axial_twist_coupling_Nm is None:
+        raise CableInputError(
+            "twist_rate_per_m with tension_N requires axial_twist_coupling_Nm "
+            "(K_et of the section; 0 for an uncoupled section)"
+        )
+    return twist
+
+
 def rainflow_cycles(
     sigma_series_Pa: FloatArray,
 ) -> Iterator[tuple[float, float, float, int, int]]:
@@ -593,9 +672,12 @@ class FatigueLayer:
         the geodesic slip. ``None`` with ``eta > 0`` selects the legacy map
         and issues ``TransverseMapWarning``.
     lay_hand : int, optional
-        ``+1`` right-hand lay (default), ``-1`` left-hand lay; used only by the
+        ``+1`` right-hand lay (default), ``-1`` left-hand lay; used by the
         termination (clamp) correction to set the sense in which a wire turns
-        along the cable.
+        along the cable, and for the sign of the twist-rate stress
+        (:func:`twist_stress_coefficient`). Layers built from a cable
+        (:func:`~cablexsec.cable_adapters.cable_to_fatigue_layers`) take it
+        from the layer's ``lay_direction``.
     mean_stress : MeanStressSpec or None, optional
         Mean-stress correction of the bulk cycles
         (:mod:`cablexsec.materials.mean_stress`); ``None`` (default) counts
@@ -816,6 +898,8 @@ def _wire_stress_parts(
     time_s: FloatArray | None = None,
     distributed_bound: DistributedBound = "signed",
     wires: IntArray | None = None,
+    twist_rate_per_m: FloatArray | None = None,
+    axial_twist_coupling_Nm: float | None = None,
 ) -> _StressParts:
     """Friction, axial and thermal parts of ``sigma_total(phi_k, t)`` [Pa].
 
@@ -840,8 +924,19 @@ def _wire_stress_parts(
     A solved normal_stress_Pa history instead retains the layer's extension,
     twist, pressure and thermal response, without separate axial/thermal terms.
     Optional moduli carry material and shear-support changes between steps.
+    ``twist_rate_per_m`` adds the axial stress of the cable twist rate,
+    ``twist_stress_coefficient(layer, ...) * tau``, to ``sigma_A`` (the same
+    for every wire of the layer).
     """
     spec = layer.spec
+    twist = _validate_twist(
+        twist_rate_per_m,
+        axial_twist_coupling_Nm,
+        kappa_x.shape,
+        tension_given=tension_N is not None,
+        strain_given=axial_strain is not None,
+        normal_given=normal_stress_Pa is not None,
+    )
     if normal_stress_Pa is not None and any(
         value is not None for value in (tension_N, axial_strain, thermal_stress_Pa)
     ):
@@ -972,6 +1067,17 @@ def _wire_stress_parts(
         assert EA_full_N is not None  # validated before stress recovery
         e_ax = layer.E_eff_axial_Pa or spec.E_wire_Pa
         sigma_A_t += e_ax * math.cos(a) ** 2 * np.asarray(tension_N) / EA_full_N
+    if twist is not None:
+        # Twist-rate strain of the helix ([Knapp1981] Eqs. 2, 11): uniform
+        # over the layer, so it adds to sigma_A and leaves the slip unchanged.
+        sigma_A_t += (
+            twist_stress_coefficient(
+                layer,
+                axial_twist_coupling_Nm=axial_twist_coupling_Nm,
+                EA_full_N=EA_full_N,
+            )
+            * twist
+        )
 
     sigma_T_t = np.zeros(n_steps, dtype=np.float64)
     if thermal_stress_Pa is not None:
@@ -1129,6 +1235,8 @@ def wire_stress_field(
     time_s: FloatArray | None = None,
     distributed_bound: DistributedBound = "signed",
     wires: IntArray | None = None,
+    twist_rate_per_m: FloatArray | None = None,
+    axial_twist_coupling_Nm: float | None = None,
 ) -> WireStressField:
     """Recover the shared stress field once, retaining all preceding slip history.
 
@@ -1189,6 +1297,12 @@ def wire_stress_field(
     termination clamp increment is rate independent and is refused with a
     non-neutral law. ``None`` or a neutral law leaves the field unchanged,
     bit for bit.
+
+    ``twist_rate_per_m`` [rad/m] adds the axial stress of the cable twist
+    rate (positive tightens a right-hand lay) to every wire of the layer,
+    :func:`twist_stress_coefficient` times the rate; with ``tension_N`` it
+    needs the section coupling ``axial_twist_coupling_Nm``. ``None`` leaves
+    the field unchanged, bit for bit.
     """
     kx, ky = real_array(kappa_x, "kappa_x"), real_array(kappa_y, "kappa_y")
     _check_distributed_bound(distributed_bound)
@@ -1278,6 +1392,8 @@ def wire_stress_field(
         time_s=time_s,
         distributed_bound=distributed_bound,
         wires=wires,
+        twist_rate_per_m=twist_rate_per_m,
+        axial_twist_coupling_Nm=axial_twist_coupling_Nm,
     )
     spec = layer.spec
     increment = None
@@ -1599,6 +1715,8 @@ def compute_fatigue(
     friction_law: FrictionLaw | None = None,
     time_s: FloatArray | None = None,
     wire_positions: WirePositions | None = None,
+    twist_rate_per_m: FloatArray | None = None,
+    axial_twist_coupling_Nm: float | None = None,
 ) -> FatigueResult:
     """Run the per-wire fatigue pipeline over a curvature/tension history.
 
@@ -1727,6 +1845,22 @@ def compute_fatigue(
     time_s : numpy.ndarray, optional
         Sample times [s] of the history, required by a law that depends on
         time (slip rate or a finite healing time).
+    twist_rate_per_m : numpy.ndarray or None, optional
+        Material twist rate of the cable [rad/m], positive in the sense that
+        tightens a right-hand (Z) lay, which is a twist increasing
+        right-handed about the cable tangent along the arc length. Each wire
+        gains the axial stress ``twist_stress_coefficient(layer, ...) * tau``
+        of the helix strain ``s r sin(a) cos(a) tau`` ([Knapp1981] Eqs. 2,
+        11), the same for every wire of a layer, so the bending slip is
+        unchanged. With ``tension_N`` the tension is held and
+        ``axial_twist_coupling_Nm`` (``K_et`` of the section, as
+        :func:`cablexsec.compute_stiffness` reports it) is required; with
+        ``axial_strain`` the strain is held and the coupling is refused.
+        Refused with ``normal_stress_Pa``. ``None`` (default) gives the
+        earlier result, bit for bit.
+    axial_twist_coupling_Nm : float or None, optional
+        Axial-twist coupling ``K_et`` [N m] of the section law
+        ``T = EA_full epsilon + K_et tau``; only with ``twist_rate_per_m``.
 
     Returns
     -------
@@ -1815,6 +1949,14 @@ def compute_fatigue(
             "supply solved normal stress or separate axial/thermal loads"
         )
     _validate_tension(tension_N, EA_full_N, kx.shape)
+    twist = _validate_twist(
+        twist_rate_per_m,
+        axial_twist_coupling_Nm,
+        kx.shape,
+        tension_given=tension_N is not None,
+        strain_given=axial_strain is not None,
+        normal_given=normal_stress_Pa is not None,
+    )
     layer_names = {layer.name for layer in layers}
     if len(layer_names) != len(layers):
         raise CableInputError("fatigue layer names must be unique")
@@ -1969,6 +2111,8 @@ def compute_fatigue(
             friction_law=friction_law,
             time_s=time_s,
             wires=selected[name],
+            twist_rate_per_m=twist,
+            axial_twist_coupling_Nm=axial_twist_coupling_Nm,
         )
         if field.termination is not None and layer_termination is not None:
             clamp_summary[name] = _clamp_summary(layer_termination, field.termination)
@@ -2304,6 +2448,8 @@ def compute_fatigue(
                 "and are not counted",
             ),
         )
+    if twist is not None:
+        prov = _twist_provenance(prov, axial_twist_coupling_Nm)
     return FatigueResult(
         D_bulk_per_wire=d_bulk,
         D_fretting_per_wire=d_fret,
@@ -2332,6 +2478,33 @@ def compute_fatigue(
             for lyr in layers
             if (wires := selected[lyr.name]) is not None
         },
+    )
+
+
+#: Limitations of the twist-rate stress, recorded whenever it is applied.
+TWIST_LIMITATIONS = (
+    "twist-rate stress: linear helix strain with plane sections and fixed layer "
+    "radii (Knapp 1981 Eq. 11 with a radially rigid core); radial contraction, "
+    "contact opening under a twist that unloads a layer and the bending and "
+    "twisting moments of the individual wires are not included",
+    "twist-rate stress: the twist does not change the interlayer contact "
+    "pressure, so the friction caps follow the tension alone",
+)
+
+
+def _twist_provenance(prov: Provenance, coupling: float | None) -> Provenance:
+    """Record the twist-rate stress of the wires."""
+    held = (
+        f"tension held, coupling K_et = {coupling:.6g} N m"
+        if coupling is not None
+        else "axial strain held"
+    )
+    return Provenance(
+        method=prov.method
+        + f"; twist-rate wire stress s r sin(a) cos(a) tau in sigma_A ({held})",
+        citations=(*prov.citations, "[Knapp1981] Eqs. 2, 11"),
+        gates=(*prov.gates, "tests/test_fatigue_torsion.py"),
+        limitations=(*prov.limitations, *TWIST_LIMITATIONS),
     )
 
 

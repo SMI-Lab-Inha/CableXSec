@@ -95,6 +95,7 @@ Distances, Elsevier, 2007.
 
 from __future__ import annotations
 
+import dataclasses
 import math
 import warnings
 from collections.abc import Sequence
@@ -138,6 +139,7 @@ from cablexsec.mechanics.strand_slip import (
     ConductorRing,
     PressureTransmission,
     StrandSlipParameters,
+    StrandSlipResult,
     conductor_axial_stiffness,
     conductor_ring_parameters,
     interface_line_loads,
@@ -152,6 +154,7 @@ __all__ = [
     "ConductorFatigueResult",
     "TrellisContact",
     "assess_conductor_fatigue",
+    "ring_twist_strain_per_rate",
     "trellis_contact",
     "trellis_force_ratio",
 ]
@@ -557,6 +560,38 @@ def _trellis_critical_distance(
     return best, best_e, best_x
 
 
+def ring_twist_strain_per_rate(
+    ring: ConductorRing, axis_strain_per_twist_m: float
+) -> float:
+    """Axial wire strain of a ring per unit twist rate [m] ([Knapp1981] Eq. 11).
+
+    ``cos^2(a) e_tau + s r sin(a) cos(a)``: the conductor axis strain
+    ``e_tau tau`` resolved along the wire and the helix strain of the ring
+    twisting with the conductor (fixed radii, radially rigid support).
+    """
+    a = ring.lay_angle_rad
+    c = math.cos(a)
+    return (
+        c * c * axis_strain_per_twist_m
+        + ring.lay_sign * ring.r_helix_m * math.sin(a) * c
+    )
+
+
+def _with_twist_strain(
+    ring: ConductorRing,
+    result: StrandSlipResult,
+    twist: FloatArray,
+    axis_strain_per_twist_m: float,
+) -> StrandSlipResult:
+    """Add the uniform twist strain of a ring to its axial and total strain."""
+    strain = ring_twist_strain_per_rate(ring, axis_strain_per_twist_m) * twist
+    return dataclasses.replace(
+        result,
+        axial_strain=result.axial_strain + strain[None, :],
+        strain=result.strain + strain[None, :],
+    )
+
+
 def assess_conductor_fatigue(
     rings: Sequence[ConductorRing],
     E_Pa: float,
@@ -584,6 +619,8 @@ def assess_conductor_fatigue(
     mean_stress: MeanStressSpec | None = None,
     scf: ComponentSCF | None = None,
     critical_distance: CriticalDistanceSpec | None = None,
+    twist_rate_per_m: ArrayLike | None = None,
+    axis_strain_per_twist_m: float | None = None,
 ) -> ConductorFatigueResult:
     """Bulk and trellis-fretting damage of every ring of a stranded conductor.
 
@@ -648,6 +685,19 @@ def assess_conductor_fatigue(
         mean-stress correction against ``sn_bulk``. The ring damage is then
         the larger of the bulk and the trellis value (the trellis value
         already contains the bulk stress). Exclusive with ``swt_const``.
+    twist_rate_per_m : array_like or None, optional
+        Twist rate of the conductor [rad/m], positive in the sense that
+        tightens a right-hand lay; it adds the uniform axial strain
+        ``cos^2(a) e_tau tau + s r sin(a) cos(a) tau`` to every wire of a
+        ring ([Knapp1981] Eqs. 2 and 11, fixed radii), with ``e_tau =
+        axis_strain_per_twist_m`` the strain of the conductor axis per unit
+        twist rate (required with the twist rate). It does not change the
+        ring contact. ``None`` (default) leaves the result unchanged, bit for
+        bit.
+    axis_strain_per_twist_m : float or None, optional
+        Axial strain of the conductor axis per unit twist rate [m]: for a
+        laid core of a cable, ``r_c tan(b) - K_et/K_ee`` with the tension held
+        (:func:`cablexsec.compute_conductor_fatigue`).
 
     Returns
     -------
@@ -667,6 +717,23 @@ def assess_conductor_fatigue(
     if reference_tension_N is None:
         peak = 0.0 if tension is None else float(np.max(np.abs(tension)))
         reference_tension_N = peak if peak > 0 else 1.0
+    twist = None
+    if twist_rate_per_m is not None:
+        twist = np.asarray(twist_rate_per_m, dtype=np.float64)
+        if twist.shape != kx.shape or not np.isfinite(twist).all():
+            raise CableInputError(
+                "twist_rate_per_m must be finite and match the curvature histories"
+            )
+        if axis_strain_per_twist_m is None or not math.isfinite(
+            axis_strain_per_twist_m
+        ):
+            raise CableInputError(
+                "twist_rate_per_m requires a finite axis_strain_per_twist_m"
+            )
+    elif axis_strain_per_twist_m is not None:
+        raise CableInputError(
+            "axis_strain_per_twist_m is used only with twist_rate_per_m"
+        )
     if swt_const is not None:
         warnings.warn(
             "conductor trellis fretting (per-slip-cycle SWT) is not validated: "
@@ -724,6 +791,9 @@ def assess_conductor_fatigue(
     cd_face = np.full(n_rings, np.nan)
     for i, (ring, params) in enumerate(zip(rings, parameters, strict=True)):
         result = strand_slip_strain(params, kx, ky, tension, theta_rad=theta)
+        if twist is not None:
+            assert axis_strain_per_twist_m is not None  # checked above
+            result = _with_twist_strain(ring, result, twist, axis_strain_per_twist_m)
         # Compaction indentations raise the stress of the whole wire section
         # (axial and bending parts alike) by the ring's factor (gap CF3).
         compaction = ring.compaction_scf
