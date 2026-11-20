@@ -1485,6 +1485,9 @@ def _law_options(options: dict[str, Any]) -> tuple[str, dict[str, Any]]:
         "progressive": (options.get("progressive") or ProgressiveFriction())
         if friction_model == "progressive"
         else None,
+        # The slip transitions and the slip-scale group laws take the stick
+        # support of the exported backbones (compute_mkappa).
+        "stick_support": options.get("stick_support", "yun_stack"),
     }
     return options.get("contact_model") or "bounded", common
 

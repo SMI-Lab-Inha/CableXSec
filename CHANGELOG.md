@@ -591,6 +591,11 @@ VALIDATION.md holds the values of the release.
 
 ### Fixed
 
+- `export_bending_law(..., stick_support="annulus")` prepares its slip transitions and the
+  laws of its slip-scale table with the selected stick support. Before, these took the
+  default `"yun_stack"` while the exported backbones took the annulus, so the group laws
+  missed the backbone at the reference tension (by 0.14 % of the moment range on the 66 kV
+  template). The default is unchanged.
 - The provenance of `compute_coiling` lists CH-CR as its only gate. It also named CH-EI, CH-P
   and CH-D, rows that were removed before 0.1.0 and no longer exist in the validation report.
 - `read_cabledyn_sections` reads a section placed on a deck node from that node's channels

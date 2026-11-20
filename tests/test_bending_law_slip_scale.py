@@ -30,6 +30,7 @@ from cablexsec.analysis.bending_law import (
 from cablexsec.api import _prepare_mkappa_law
 from cablexsec.cable_adapters import armour_contact_pressure
 from cablexsec.exceptions import CableInputError
+from cablexsec.mechanics.stiffness import xi_for_layer
 
 pytestmark = [
     pytest.mark.analytical_sanity,
@@ -175,6 +176,32 @@ def test_single_scale_reproduces_the_export_when_groups_scale_alike(iea66):
     assert np.max(np.abs(moment - export.moment_Nm[0])) < 1e-12 * np.ptp(
         export.moment_Nm[0]
     )
+
+
+def test_slip_scale_laws_take_the_stick_support_of_the_backbones(iea66):
+    # The annulus stick support changes xi on this cable, so group laws
+    # prepared with the default stack would miss the annulus backbone.
+    names = [layer.name for layer in iea66.helical_layers]
+    assert any(
+        xi_for_layer(iea66, name, stick_support="annulus") != xi_for_layer(iea66, name)
+        for name in names
+    )
+    export = export_bending_law(
+        iea66,
+        tensions_N=[2.0e4],
+        kappa_max_1_m=2e-3,
+        n_points=120,
+        slip_scale=True,
+        stick_support="annulus",
+    )
+    table = export.slip_scale
+    assert table is not None
+    merged = table.law_at(2.0e4)
+    moment = merged.backbone(export.kappa_1_m)
+    assert np.max(np.abs(moment - export.moment_Nm[0])) < 1e-12 * np.ptp(
+        export.moment_Nm[0]
+    )
+    assert merged.ei_stick_Nm2 == pytest.approx(export.laws[0].ei_stick_Nm2, rel=1e-12)
 
 
 def _symmetric_bounds(monkeypatch):
