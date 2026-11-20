@@ -52,6 +52,7 @@ from cablexsec.cables.schema import (
     CylindricalOffsetLayer,
     CylindricalShellLayer,
     HelicalLayer,
+    _radial_tol,
     is_serving,
     layer_stiffness,
 )
@@ -88,6 +89,8 @@ __all__ = [
     "ea_fixed",
     "ea_free",
     "load_sharing",
+    "STICK_SUPPORTS",
+    "require_stick_support",
     "xi_for_layer",
     "yun_shear_stack",
     "BendingStiffnessContribution",
@@ -539,11 +542,111 @@ def yun_shear_stack(
     return tuple(stack)
 
 
+STICK_SUPPORTS: tuple[str, ...] = ("yun_stack", "annulus")
+"""Stick-support models of :func:`xi_for_layer`; ``"yun_stack"`` is the default."""
+
+
+def require_stick_support(stick_support: object) -> str:
+    """Return ``stick_support`` if it names a model of :data:`STICK_SUPPORTS`."""
+    if not isinstance(stick_support, str) or stick_support not in STICK_SUPPORTS:
+        raise CableInputError(
+            f"stick_support must be one of {STICK_SUPPORTS}, got {stick_support!r}"
+        )
+    return stick_support
+
+
+def _stack_support(
+    cable: CableData,
+    layer_name: str,
+    stack: tuple[CylindricalLayer | CylindricalOffsetLayer, ...],
+) -> str:
+    """Inner boundary of the stack of :func:`yun_shear_stack`.
+
+    ``"rigid"`` where the walk stops at a helical layer or at laid cores, or
+    where a layer the stack skips (no isotropic modulus, a shell, a filler)
+    lies inside it; ``"axis"`` where its innermost layer reaches the cable
+    axis; ``"bore"`` only where nothing lies inside the innermost layer (an
+    empty inner surface).
+    """
+    names = [lyr.name for lyr in cable.layers]
+    inside = cable.layers[: names.index(layer_name)]
+    for lyr in reversed(inside):
+        if isinstance(lyr, HelicalLayer):
+            return "rigid"
+        if isinstance(lyr, CylindricalOffsetLayer) and not (
+            lyr.n_cores == 1 and lyr.r_offset_m == 0.0
+        ):
+            return "rigid"
+    innermost = stack[-1]
+    r_bore = innermost.r_inner_m or 0.0
+    if r_bore <= 0.0:
+        return "axis"
+    in_stack = {lyr.name for lyr in stack}
+    if any(
+        lyr.name not in in_stack
+        and (getattr(lyr, "r_outer_m", None) or 0.0) <= r_bore + _radial_tol(r_bore)
+        for lyr in inside
+    ):
+        # A skipped body inside the stack: keep the plane-section support of
+        # the default model rather than assume a free bore.
+        return "rigid"
+    return "bore"
+
+
+def _annulus_support_stiffness(
+    cable: CableData,
+    layer: HelicalLayer,
+    stack: tuple[CylindricalLayer | CylindricalOffsetLayer, ...],
+    youngs_modulus_Pa: Mapping[str, float] | None,
+) -> float:
+    """Per-wire stick-support stiffness of the ``"annulus"`` model [N/m²]."""
+    from cablexsec.mechanics.stick_support import (  # noqa: PLC0415
+        annulus_mode1_compliance,
+        strip_concentration_compliance,
+    )
+
+    assert layer.lay_angle_rad is not None and layer.r_helix_m is not None
+    assert layer.n_wires is not None
+    rows: list[tuple[float, float, float]] = []
+    local = 0.0
+    for lyr in stack:
+        e = (
+            youngs_modulus_Pa[lyr.name]
+            if youngs_modulus_Pa is not None
+            else _E(lyr.material)
+        )
+        g = shear_modulus(e, library.get_property(lyr.material, "nu"))
+        r_in, r_out = lyr.r_inner_m or 0.0, lyr.r_outer_m or 0.0
+        rows.append((r_in, r_out, g))
+        local += (r_out - r_in) / g
+    support = _stack_support(cable, layer.name, stack)
+    alpha = abs(layer.lay_angle_rad)
+    r_contact = rows[0][1]
+    alpha_c = math.atan(math.tan(alpha) * r_contact / layer.r_helix_m)
+    spacing = 2.0 * math.pi * r_contact * math.cos(alpha_c) / layer.n_wires
+    try:
+        c_axial = annulus_mode1_compliance(rows, support)  # type: ignore[arg-type]
+        compliance = (
+            math.cos(alpha) ** 2 * c_axial + math.sin(alpha) ** 2 * local
+        ) / spacing + strip_concentration_compliance(
+            spacing,
+            min(0.5 * layer.wire_surface_width_m, 0.5 * spacing),
+            rows[0][1] - rows[0][0],
+            rows[0][2],
+        )
+    except ValueError as error:
+        raise CableInputError(
+            f"{layer.name}: the annulus stick support cannot be evaluated: {error}"
+        ) from error
+    return math.inf if compliance <= 0.0 else 1.0 / compliance
+
+
 def xi_for_layer(
     cable: CableData,
     layer_name: str,
     *,
     youngs_modulus_Pa: Mapping[str, float] | None = None,
+    stick_support: str = "yun_stack",
 ) -> float:
     """Yun shear coefficient for a helical layer ([Yun2020]).
 
@@ -573,7 +676,20 @@ def xi_for_layer(
     a support-compliance approximation, not a resolved shear solution of the
     section. ``youngs_modulus_Pa`` (keyed by layer name) replaces the library
     moduli of the wire and of the stack layers, for example at a temperature.
+
+    ``stick_support="annulus"`` (opt-in) keeps the same stack and support but
+    replaces the series strips with the exact mode-1 antiplane shear of the
+    layered annulus (:mod:`cablexsec.mechanics.stick_support`). The support is
+    rigid where the walk stops at a helical layer or at laid cores, free at an
+    empty bore and regular at the axis. The traction is spread over the wire
+    spacing, plus the concentration of the load on the wire's own width. For a
+    thin layer on a rigid support it agrees with the default to within the
+    ratio of the wire width to the spacing. For a soft or hollow core it is
+    much softer, because the core shears as a beam: a free bore of radius
+    ratio rho gives `R (1 + rho^2) / (G (1 - rho^2))` against the strip's
+    `t / G`.
     """
+    require_stick_support(stick_support)
     layer = cable.get_layer(layer_name)
     assert isinstance(layer, HelicalLayer)
     assert (
@@ -582,6 +698,24 @@ def xi_for_layer(
         and layer.r_helix_m is not None
         and layer.lay_angle_rad is not None
     )
+    if stick_support == "annulus":
+        annulus_stack = yun_shear_stack(cable, layer_name)
+        if not annulus_stack:
+            return 1.0
+        e_wire = (
+            youngs_modulus_Pa[layer.name]
+            if youngs_modulus_Pa is not None
+            else _E(layer.material)
+        )
+        k_support = _annulus_support_stiffness(
+            cable, layer, annulus_stack, youngs_modulus_Pa
+        )
+        return yun_xi(
+            k_support,
+            e_wire * _wire_area(layer),
+            layer.lay_angle_rad,
+            layer.r_helix_m,
+        )
     b = layer.wire_surface_width_m
     stack: list[tuple[float, float, float]] = []
     for lyr in yun_shear_stack(cable, layer_name):

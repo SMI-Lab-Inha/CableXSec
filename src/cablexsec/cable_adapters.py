@@ -581,6 +581,7 @@ def cable_to_mkappa_specs(
     contact_model: str = "bounded",
     section_state: SectionState | None = None,
     radial_state: CableRadialState | None = None,
+    stick_support: str = "yun_stack",
 ) -> list[HelicalLayerSpec]:
     r"""Build frozen M-κ specs for a cable's structural armour layers.
 
@@ -593,6 +594,9 @@ def cable_to_mkappa_specs(
     exploratory inner-foundation reaction is not used as an outer-face load.
     Independently prescribed distributions can be supplied to the lower-level
     HelicalLayerSpec, with their force balance and physical face specified.
+    ``stick_support`` selects the ξ model of
+    :func:`~cablexsec.mechanics.stiffness.xi_for_layer` (``"yun_stack"``,
+    the default, or the opt-in ``"annulus"``).
 
     Raises
     ------
@@ -642,6 +646,7 @@ def cable_to_mkappa_specs(
                     youngs_modulus_Pa=section_state.youngs_modulus_Pa
                     if section_state is not None
                     else None,
+                    stick_support=stick_support,
                 ),
                 mu=mu_eff,
                 F_n_axi_N=fn_map[lyr.name],

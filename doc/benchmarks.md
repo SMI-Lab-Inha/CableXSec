@@ -1553,6 +1553,65 @@ geodesic) and of tension-coupled re-sticking (Kim 2020).
 Interlocked carcass and Zeta layer types (G2), orthotropic tapes (G3)
 and an asymmetric, non-Masing loop law (G8) are open.
 
+### Known limitation: slip-branch stiffness of compact sections
+
+Gap G8 is closed for release 0.2.0 as a documented known limitation. No
+mechanism tested with source inputs closes it. Every candidate below was
+registered (formulation, predictions and pass rules) before it was run, with
+held-out rows chosen in advance. No band, target or source input was changed.
+
+**What fails, and by how much.**
+
+| Row | Measured | Model |
+| --- | --- | --- |
+| Z-ID (Zeidan 2025, four-point, reading R2) | slip tangent (ascending branch, 0 to 0.8 of the amplitude) 8.65–9.70 kN·m²; stick secant 113–143 kN·m² (plotted curvature) | slip tangent 2.50–2.59 kN·m²; stick secant 215 kN·m²; moment range −33 to −46 % at the identified initial pressure of 760 kPa |
+| WITZ-ID, G8-W1, G8-W3 (Witz 1996, 300 bar) | width 1990–2164 N·m; energy/width 1.44–1.57 1/m | width 1356 N·m; energy/width 2.01 1/m (energy −12.8 %, inside its band) |
+| HU-3PB (Hu et al. 2022, conductor) | loop area 3.185 N·m/m | +36.7 % (Papailiou cap), +64.4 % (Karlsen–Husøy amplitude) |
+| BM1-loop, BM1-ID (Ménard and Cartraud 2023) | loops at one clamping | BM1-loop: clamping identified on range (a), range (b) work −28.8 % and ordered RMSE 5.45 %; BM1-ID: clamping identified on range (b), ranges (a) and (c) work +28.5 % and +26.2 %. No single clamping fits both the small and the large ranges. |
+
+**Mechanisms tested, and why each was ruled out.**
+
+| Mechanism | Finding |
+| --- | --- |
+| Stick-support compliance | Two candidates were tested: the exact layered-annulus shear of the polymer under the armour (now the opt-in `stick_support="annulus"`; the support compliance was checked against an independent model of two verification tubes, not published), and that support with an elastic line contact of round wires on polymer. On every measured section the support is a thin polymer layer over a stiff body, so the annulus moves ξ by 8 % or less. The line contact moves round-wire sections by 5–40 %. Neither moves the Witz width: ξ from ×0.25 to ×1 changes it by 0.0 %, and the line contact leaves it at 1356 N·m with energy/width 2.00. The Ménard work moves by 0.5–1.8 points. |
+| Residual (manufacturing) contact pressure | Already represented by the initial pressure identified on each loop. It sets the loop height and slip onset, not the slopes, and the slope errors do not follow it: Ménard's slip slope is right at 216 kPa, Zeidan's is 3.5 times too soft at 760 kPa. |
+| Contact between neighbouring wires of one layer | Zeidan's and Ménard's armours have the same coverage, 0.95–0.97, with positive nominal gaps, yet only Zeidan shows the deficit. By magnitude, neighbours slip together to within about 1/n of the slip, and lateral locking acts on the individual wire bending term of order 0.1 kN·m², against a deficit of about 6 kN·m². |
+| Compacted laid-core bundle (cores and fillers bonded to the section) | The laid-core law already keeps Zeidan's cores stuck over the whole test range. A bonded bundle gives the registered Z-ID result unchanged to every printed digit. The copper is coupled to the bundle only through the 8.75 mm insulation at its 6 MPa (ξ_core 0.030), so a bonded bundle keeps 0.6 kN·m². Even a rigid bond gives 8.1 kN·m² at uniform curvature, about 6.3 in the plotted reduction. Zeidan's cross-wound armours balance their transverse shear to within 1.4 %, so the bundle carries almost none of it, and its compliance cannot soften the stick branch. Counting the filler depth in series under the inner armour alone (an earlier variant) softens Z-ID's stick for that reason and breaks Z-EI. |
+| End anchorage of the specimen | No row with a slip deficit has anchored ends. Zeidan's ends are free: the outer wires moved and partly separated near the cable ends, and the supports carry no axial restraint. A free end makes the slip branch softer near the ends, not stiffer. The one anchored row (SV11) is already over-predicted by the anchored correction. |
+| Conductor strand compaction | Zeidan's conductor is already a solid body in the input: a fully stuck conductor adds 0.01 kN·m². Measured compressed and shaped conductors (Yan et al. 2022, China Ocean Engineering 36(4) 629–637, Tables 1 and 3; three conductors of equal section on a 440 mm three-point rig at 0.37 1/m) slip at about 4 % of the solid bending stiffness. |
+| The metric | Model and measurement are reduced by the same function: the least-squares tangent over the same curvature range of the simulated and of the measured loop. The model reaches its final tangent at about 0.003 1/m, 37–76 times below the test amplitudes, so the comparison is not a partial-slip tangent set against a full-slip value. |
+| The insulation modulus | Zeidan's 6 MPa is the source finite-element model's input (Zeidan et al. 2026, Table 4), with no stated test rate or temperature; no measured value for that compound is in the reference set. Diagnostic only: any value from 6 MPa to 10 GPa gives a slip tangent of at most 4.1 kN·m² at uniform curvature. A stiffer coupling raises the cores' friction demand until they slip in the test range. |
+
+**Where the model is reliable, and where it is not.**
+
+- **Rope-filler construction** (Ménard and Cartraud 2023, Sec. 2.2: "fillers,
+  which are made of polypropylene (PP) ropes"). The full-slip stiffness is
+  right without calibration (BM1, 0.6 %). So is the reversal stiffness over
+  the first 0.0025 1/m (50 000–68 000 against 56 000 N·m²).
+- **Compact, solid-filler construction.** Zeidan (2025), Ch. 5: interstices
+  "filled with polymeric fillers and bedding layers that … improve the
+  transfer of loads between components"; an LDPE filler. The model's slip
+  branch is about 3.5 times too soft, and its stick secant too stiff.
+- **Direction of the error.** A slip branch that is too soft over-predicts the
+  curvature under a given moment in a global analysis. That is conservative
+  for curvature-driven quantities (armour stress ranges, fatigue from
+  curvature). It under-predicts the section moment at a given curvature, and
+  therefore the loads the section puts on interfaces: bend stiffeners,
+  hang-offs, and the contact and friction forces inside the section. Those are
+  **not** conservative.
+
+**Data that would settle it.**
+
+- **For the Zeidan test.** The raw time series (force, actuator displacement,
+  camera), the curvature method used for each plotted loop, the zeroing of the
+  force channel, and the construction of the metallic screen and the insulation
+  compound. The thesis cites two test reports for these (its references [6] and
+  [8]).
+- **Or a new test.** A loop test on a compact, solid-filler three-core cable,
+  with the curvature measured from a deflection profile in a long
+  uniform-moment zone, the raw records published, and the insulation and
+  filler moduli measured at the test rate and temperature.
+
 ## Sævik (2011) FBG armour stresses (SV11-PLANE, SV11-GJ)
 
 Gap 2.5. The 8-inch non-bonded riser of Sævik (2011,

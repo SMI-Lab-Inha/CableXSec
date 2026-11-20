@@ -108,6 +108,16 @@ quantities are those of the passing rows. In particular:
   no-slip bound since the armour shear stack stops at its support (Z-EI, diagnosed on), but the
   identified loops miss the moment range by a third or more (Z-ID); absolute dissipation
   predictions therefore carry the uncertainty shown by WITZ-ID and Z-ID.
+- **Known limitation (gap G8, closed for 0.2.0).**
+  - On a compact, solid-filler three-core cable (Zeidan 2025), the slip-branch tangent is
+    about 3.5 times softer than measured (Z-ID: 2.5–2.6 against 8.65–9.70 kN·m²).
+  - With rope fillers (Ménard and Cartraud 2023), the full-slip stiffness is right (BM1).
+  - Eight mechanisms, each registered and tested with source inputs, were ruled out:
+    stick-support compliance, residual pressure, neighbour-wire contact, a compacted bundle,
+    end anchorage, conductor compaction, the metric, and the insulation modulus
+    (doc/benchmarks.md, "Known limitation: slip-branch stiffness of compact sections").
+  - Direction of the error: conservative for curvature-driven quantities, not conservative
+    for the section moment and the interface loads.
 - The termination-corrected (anchored-wire) armour stress is an upper estimate that the
   published near-termination measurements do not support (SV11-PLANE, SV11-GJ); the sectional
   result is the one closest to them (median 1.19, 12 of 14 in band, against the 1.18 bound). At

@@ -10,6 +10,26 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Added
 
+- `stick_support` keyword on `compute_mkappa`, `compute_stiffness`,
+  `SectionLaw.from_cable`, `cable_to_mkappa_specs` and `xi_for_layer`.
+  - It selects the model of the armour stick coefficient ξ. The default,
+    `"yun_stack"`, is unchanged, bit for bit.
+  - The opt-in `"annulus"` (`cablexsec.mechanics.stick_support`) solves the
+    mode-1 antiplane shear of the layered polymer annulus under the armour,
+    with its actual inner boundary (rigid support, free bore or axis), plus
+    the concentration of the load on each wire's width.
+  - On thin layers over a stiff support it agrees with the default within a
+    few per cent. A soft or hollow core shears as a beam and gives a much
+    smaller ξ (free bore: `R(1+ρ²)/(G(1−ρ²))` against the strip's `t/G`).
+  - Closed-form limits and an independent finite-difference solution in
+    `tests/test_stick_support.py`.
+- Gap G8 documented as a known limitation for 0.2.0 (doc/benchmarks.md,
+  VALIDATION.md, local analysis guide).
+  - It covers what fails and by how much, and the eight mechanisms tested with
+    source inputs and why each was ruled out.
+  - It states where the model is reliable (rope-filler bundles) and where it
+    under-predicts the slip stiffness (compact solid-filler bundles), the
+    direction of the error, and the data that would settle it.
 - Torsional wire stress in the fatigue path. `compute_fatigue` and `compute_conductor_fatigue`
   take `twist_rate_per_m`, the material twist rate of the cable [rad/m], positive in the sense
   that tightens a right-hand (Z) lay. Every armour wire gains the axial stress of its helix strain

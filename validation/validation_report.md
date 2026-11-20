@@ -18,8 +18,8 @@ Every row is computed from published data or closed-form references in this repo
 | 1 | OvM | Frictionless contact slip vs Out-von Morgen geodesic (Eqs. 26-28): loxodromic slip = wire-direction component; magnitude within bound; closed forms vs exact geodesic | < 1e-12 relative; ratio <= 1; < 1e-3 relative at k = 1e-4 | identity 1.07e-15; ratio 0.333; closed form 3.76e-04 | PASS |
 | 1 | OvM-g | Geodesic transverse map (eta = 1) vs Out-von Morgen slip vector (Eqs. 26-28) at mu = 0; vs exact geodesic | < 1e-12 relative; < 1e-3 relative at k = 1e-4 | closed form 1.05e-15; delta*/Eq. 28 - 1 2.9e-15; exact 2.62e-04 | PASS |
 | 1 | Out89 | Contact plastic slip vs Out (1989) effective curvature change dk - 2 kappa_s (Eq. 1) and damage ratios (Eqs. A8, A11) | < 1e-12 relative; < 1e-4 absolute | Eq. 1 9.63e-16; A8/A11 5.0e-07 | PASS |
-| 1 | CF | Laid-core friction: mu = 0 armour-only loop; large mu tangent vs EI_max; full-slip core moment vs closed form; dissipation >= 0; rotation equivariance | 0 N m; < 1e-9; < 5e-3; >= 0; < 1e-9 relative | 0.0e+00 N m; 8.9e-16; 1.0e-04; 4.9e-06; 4.8e-14 | PASS |
-| 1 | CFW | Laid-core contact statics (wedged trefoil, central filler) and laid filler profiles: mu = 0 armour-only loop; full-slip profile moment vs closed form; stick tangent vs EI_max + E J_f cos^3 / 2 | < 1e-12 relative; 0 N m; < 5e-3; < 1e-9 | 9.5e-17; 0.0e+00 N m; 1.0e-04; 8.9e-16 | PASS |
+| 1 | CF | Laid-core friction: mu = 0 armour-only loop; large mu tangent vs EI_max; full-slip core moment vs closed form; dissipation >= 0; rotation equivariance | 0 N m; < 1e-9; < 5e-3; >= 0; < 1e-9 relative | 0.0e+00 N m; 7.8e-16; 1.0e-04; 4.9e-06; 4.8e-14 | PASS |
+| 1 | CFW | Laid-core contact statics (wedged trefoil, central filler) and laid filler profiles: mu = 0 armour-only loop; full-slip profile moment vs closed form; stick tangent vs EI_max + E J_f cos^3 / 2 | < 1e-12 relative; 0 N m; < 5e-3; < 1e-9 | 9.5e-17; 0.0e+00 N m; 1.0e-04; 6.7e-16 | PASS |
 | 1 | FR | Fretting regime: Mindlin energy vs numerical Masing loop; Fouvry A/D/B at transition; Cattaneo strip I(0) = pi/16; mu = inf stick energy; planar-path rotation | < 1e-9; < 1e-12; < 1e-12; 0 J; < 1e-12 relative | 7.8e-12; 4.4e-16; 1.6e-15; 0.0e+00 J; 4.4e-16 | PASS |
 | 1 | TQ | Torque balance: Feyrer Ex. 2.8 torque constant c_1S (fixed radius); coupled section vs Knapp (1981) core factor, theta = 2 nu; mirror lay reverses torque and twist | 0.0345 +/- 0.2%; < 1e-4 relative; < 1e-9 relative | 0.03446 (-0.11%); -1.3e-06; 0.0e+00 | PASS |
 | 1 | TQ-SV | Saint-Venant twist rigidity with free warping (trefoil filler lobes): 2 x 1 rectangle vs series solution; bonded annulus as a mirrored 60 deg sector vs polar moment | < 3e-4 relative; < 1e-6 relative | 1.0e-04; -1.5e-08 | PASS |
@@ -29,7 +29,7 @@ Every row is computed from published data or closed-form references in this repo
 | 1 | M-rec | Assembled per-wire moment vs compute_mkappa (cross-engine, single-core) | < 2% | 0.000% | PASS |
 | 1 | M-rec-3core | Cross-engine moment vs compute_mkappa with offset-core geometry and shared mean armour pressure | < 2% | 0.000% | PASS |
 | 1 | MK-Tcyc | compute_mkappa with a tension history cycling within the bending cycles vs the fatigue-path friction stress on the same history; work balance under the changing friction bound | < 1e-12 relative; < 1e-12 relative | 3.4e-16; 8.9e-16 | PASS |
-| 1 | MX-scale | Exported law with a slip scaling variable: compute_mkappa at T2 vs the T1 law with the bound scaled (66 kV, cores included); group elements at T2 vs the T1 elements with yield curvatures scaled (Menard, two layers); tension cycle inside the bending cycles, scaled law vs the contact-tension history over the fixed-tension Iwan residual | < 1e-12 relative; < 1e-9 relative; ratio <= 1.25 | 6.9e-16; 1.2e-13; 1.21 | PASS |
+| 1 | MX-scale | Exported law with a slip scaling variable: compute_mkappa at T2 vs the T1 law with the bound scaled (66 kV, cores included); group elements at T2 vs the T1 elements with yield curvatures scaled (Menard, two layers); tension cycle inside the bending cycles, scaled law vs the contact-tension history over the fixed-tension Iwan residual | < 1e-12 relative; < 1e-9 relative; ratio <= 1.25 | 5.5e-16; 1.2e-13; 1.21 | PASS |
 | 1 | FL-P | Pressure-dependent friction coefficient (FrictionLaw.pressure_factor): spring-slider under pressure steps vs closed form; compiled vs NumPy direction-tied kernel under a pressure history (static/dynamic law, local pressures across the table); work balance | < 1e-9 relative; < 1e-9 relative; < 1e-9 relative | 3.0e-16; 8.7e-16; 2.5e-15 | PASS |
 | 1 | slip-onset | First-to-slip wire at the neutral axis (|cos| → 0, compression side at psi ≈ 3 lam/2; Raoof/Papailiou, not extreme-fibre loop) | |cos| < 0.2 | |cos|=0.156 | PASS |
 | 1 | xsec-K | Coupling tangent bounds (κ→0=EI_max, κ→∞=EI_min); slip-front local slope | < 0.01% | κ0:1.91e-14% / κ∞:5.99e-13% | PASS |
@@ -79,8 +79,8 @@ Every row is computed from published data or closed-form references in this repo
 
 ## Test taxonomy (full gate suite)
 
-- analytical_sanity: `1254 passed`
-- independent_method: `77 passed`
+- analytical_sanity: `1264 passed`
+- independent_method: `79 passed`
 - full_scale: `59 passed`
 
 Run `pytest -m <marker>` to reproduce each group.
