@@ -1573,7 +1573,7 @@ held-out rows chosen in advance. No band, target or source input was changed.
 
 | Mechanism | Finding |
 | --- | --- |
-| Stick-support compliance | Two candidates were tested: the layered-annulus shear of the polymer under the armour (now the opt-in `stick_support="annulus"`, row XI-FE), and that support with an elastic line contact of round wires on polymer. On every measured section the support is a thin polymer layer over a stiff body, so the annulus moves ξ by 8 % or less. The line contact moves round-wire sections by 5–40 %. Neither moves the Witz width: ξ from ×0.25 to ×1 changes it by 0.0 %, and the line contact leaves it at 1356 N·m with energy/width 2.00. The Ménard work moves by 0.5–1.8 points. |
+| Stick-support compliance | Two candidates were tested: the exact layered-annulus shear of the polymer under the armour (now the opt-in `stick_support="annulus"`; the support compliance was checked against an independent model of two verification tubes, not published), and that support with an elastic line contact of round wires on polymer. On every measured section the support is a thin polymer layer over a stiff body, so the annulus moves ξ by 8 % or less. The line contact moves round-wire sections by 5–40 %. Neither moves the Witz width: ξ from ×0.25 to ×1 changes it by 0.0 %, and the line contact leaves it at 1356 N·m with energy/width 2.00. The Ménard work moves by 0.5–1.8 points. |
 | Residual (manufacturing) contact pressure | Already represented by the initial pressure identified on each loop. It sets the loop height and slip onset, not the slopes, and the slope errors do not follow it: Ménard's slip slope is right at 216 kPa, Zeidan's is 3.5 times too soft at 760 kPa. |
 | Contact between neighbouring wires of one layer | Zeidan's and Ménard's armours have the same coverage, 0.95–0.97, with positive nominal gaps, yet only Zeidan shows the deficit. By magnitude, neighbours slip together to within about 1/n of the slip, and lateral locking acts on the individual wire bending term of order 0.1 kN·m², against a deficit of about 6 kN·m². |
 | Compacted laid-core bundle (cores and fillers bonded to the section) | The laid-core law already keeps Zeidan's cores stuck over the whole test range. A bonded bundle gives the registered Z-ID result unchanged to every printed digit. The copper is coupled to the bundle only through the 8.75 mm insulation at its 6 MPa (ξ_core 0.030), so a bonded bundle keeps 0.6 kN·m². Even a rigid bond gives 8.1 kN·m² at uniform curvature, about 6.3 in the plotted reduction. Zeidan's cross-wound armours balance their transverse shear to within 1.4 %, so the bundle carries almost none of it, and its compliance cannot soften the stick branch. Counting the filler depth in series under the inner armour alone (an earlier variant) softens Z-ID's stick for that reason and breaks Z-EI. |
@@ -1611,43 +1611,6 @@ held-out rows chosen in advance. No band, target or source input was changed.
   with the curvature measured from a deflection profile in a long
   uniform-moment zone, the raw records published, and the insulation and
   filler moduli measured at the test rate and temperature.
-
-### Model-to-model stick coefficient (row XI-FE)
-
-`validation/scripts/check_stick_support_fe.py` compares ξ for two armoured
-verification tubes with the sectional stick coefficient of a three-dimensional
-line-contact finite-element model. Both tubes have 40 round steel wires of 5 mm
-at 15°; one has a hollow MDPE core, the other a copper core under MDPE.
-
-**The finite-element model.**
-
-- 8-node hexahedra; each wire's generators facing the core and the sheath are
-  node-based contact surfaces, with zero clearance.
-- Full stick on the core face, frictionless sheath face.
-- Rigid end plates, tension 40 kN.
-- ξ is taken from the in-phase wire-tension amplitude at mid-length of a 2- or
-  3-pitch tube, against the local curvature.
-- The meshed wire is an octagon inscribed in the round wire (area factor
-  0.900), so the comparison uses that area.
-
-The inputs are in `validation/paper_data/line_contact_tube_*.yaml` and
-`line_contact_tube_stick.csv`.
-
-| Tube | FE | `"annulus"` | `"yun_stack"` (default) |
-| --- | --- | --- | --- |
-| hollow core | 0.198 | 0.207 (+4.3 %) | 0.405 (+104 %) |
-| copper core | 0.540 | 0.588 (+8.8 %) | 0.572 (+5.9 %) |
-
-**Reading the table.**
-
-- **Hollow core.** The default takes the 20 mm core wall as a thin strip over a
-  rigid support. The hollow core instead shears as a beam: the mode-1 antiplane
-  compliance of the free-bore annulus, R(1+ρ²)/(G(1−ρ²)), is 3.3 times the
-  strip's t/G.
-- **Copper core.** The polymer is a thin layer on a stiff body, and the two
-  supports agree.
-- **Why the option stays opt-in.** It does not change any measured row's status
-  (G8 above). The default is unchanged.
 
 ## Sævik (2011) FBG armour stresses (SV11-PLANE, SV11-GJ)
 

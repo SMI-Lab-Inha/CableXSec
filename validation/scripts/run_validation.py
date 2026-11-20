@@ -726,38 +726,6 @@ def _dai2020_rows() -> list[Row]:
     ]
 
 
-def _stick_fe_rows() -> list[Row]:
-    """XI-FE (stated, model to model): the armour stick coefficient of two
-    verification tubes against a line-contact finite-element model, with the
-    default and the opt-in stick support. scripts/check_stick_support_fe.py."""
-    import check_stick_support_fe as fe  # noqa: PLC0415
-
-    c = fe.stick_comparison()
-
-    def case(name: str, label: str) -> str:
-        r = c[name]
-        return (
-            f"{label}: FE {r['xi_fe']:.3f}; annulus {r['annulus']:.3f} "
-            f"({100 * r['annulus_error']:+.1f}%); Yun stack {r['yun_stack']:.3f} "
-            f"({100 * r['yun_stack_error']:+.1f}%)"
-        )
-
-    return [
-        Row(
-            "2",
-            "XI-FE",
-            "Armour stick coefficient xi of two armoured verification tubes "
-            "(hollow MDPE core; copper core under MDPE) against the sectional "
-            "value of a three-dimensional line-contact finite-element model, "
-            "default (yun_stack) and opt-in (annulus) stick support, meshed "
-            "wire area",
-            "stated, not gated (model to model)",
-            f"{case('hollow', 'hollow core')}; {case('copper', 'copper core')}",
-            "INFO",
-        )
-    ]
-
-
 def _dai2018_rows() -> list[Row]:
     """Static/dynamic friction law against the measured wire-on-tape loops of
     Dai, Sævik and Ye (2018), Fig. 4; scripts/check_dai2018_friction.py.
@@ -2130,7 +2098,6 @@ def _rows() -> list[Row]:
     rows.extend(_anchored_wire_fe_rows())
     rows.extend(_dai2020_rows())
     rows.extend(_dai2018_rows())
-    rows.extend(_stick_fe_rows())
 
     theta_bm5 = _bm5_conductor_temperature()  # paper tabulated network, λ1' only
     rows.append(

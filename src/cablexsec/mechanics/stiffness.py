@@ -684,10 +684,9 @@ def xi_for_layer(
     spacing, plus the concentration of the load on the wire's own width. For a
     thin layer on a rigid support it agrees with the default to within the
     ratio of the wire width to the spacing. For a soft or hollow core it is
-    much softer, because the core shears as a beam. On a hollow-core armoured
-    tube it reproduces the sectional stick coefficient of a line-contact
-    finite-element model within 4 %, where the default is about twice too
-    stiff (doc/benchmarks.md, row XI-FE).
+    much softer, because the core shears as a beam: a free bore of radius
+    ratio rho gives `R (1 + rho^2) / (G (1 - rho^2))` against the strip's
+    `t / G`.
     """
     require_stick_support(stick_support)
     layer = cable.get_layer(layer_name)

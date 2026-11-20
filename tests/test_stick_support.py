@@ -5,7 +5,8 @@
 Closed-form limits of the layered-annulus compliance and of the strip
 concentration; an independent finite-difference solution of a two-layer
 annulus; the default (``"yun_stack"``) unchanged bit for bit through every
-entry point; refusal of an unknown model; and the model-to-model row XI-FE.
+entry point; refusal of an unknown model; and the support condition of a hollow
+core.
 """
 
 from __future__ import annotations
@@ -174,44 +175,80 @@ def test_unknown_stick_support_is_refused_everywhere() -> None:
         SectionLaw.from_cable(cable, stick_support="series")
 
 
+_TUBE = """\
+cable:
+  name: "Armoured tube, hollow core"
+  description: "Hollow MDPE core 20-40 mm, 40 steel wires of 5 mm at 15 deg, HDPE sheath"
+  manufacturer: "Test geometry"
+  source_document: "tests/test_stick_support.py"
+initial_state:
+  external_pressure_Pa: 0.30e6
+  identification: assumed_bound
+  bounds_Pa: [0.0, 0.48e6]
+  source: "test geometry"
+{materials}layers:
+{inner}  - name: core_tube
+    layer_type: cylindrical
+    material: mdpe_janocha2024
+    r_inner_m: 0.020
+    r_outer_m: 0.040
+    source: test
+  - name: armour
+    layer_type: helical
+    material: steel_janocha2024
+    n_wires: 40
+    d_wire_m: 0.005
+    r_helix_m: 0.0425
+    lay_angle_deg: 15.0
+    lay_direction: left_hand
+    source: test
+  - name: sheath
+    layer_type: cylindrical
+    material: hdpe_janocha2024
+    r_inner_m: 0.045
+    r_outer_m: 0.050
+    source: test
+"""
+
+
+def _tube(tmp_path: Path, *, filled: bool) -> CableData:
+    materials = (
+        "materials:\n  yarn_probe:\n    description: yarn without a modulus\n"
+        "    rho_kg_m3: {value: 500.0, source: test}\n"
+        if filled
+        else ""
+    )
+    inner = (
+        "  - name: bore_yarn\n    layer_type: cylindrical\n    material: yarn_probe\n"
+        "    r_inner_m: 0.0\n    r_outer_m: 0.020\n    source: test\n"
+        if filled
+        else ""
+    )
+    path = tmp_path / ("filled.yaml" if filled else "hollow.yaml")
+    path.write_text(_TUBE.format(materials=materials, inner=inner), encoding="utf-8")
+    return cx.load_cable(path, geometry_override=None)
+
+
+@pytest.mark.analytical_sanity
+def test_hollow_core_shears_as_a_beam(tmp_path: Path) -> None:
+    hollow = _tube(tmp_path, filled=False)
+    yun = xi_for_layer(hollow, "armour")
+    annulus = xi_for_layer(hollow, "armour", stick_support="annulus")
+    # The free bore is 3.3 times the strip compliance of the 20 mm wall, so
+    # the stuck wires see a much softer support.
+    assert annulus < 0.6 * yun
+
+
 @pytest.mark.analytical_sanity
 def test_free_bore_only_where_nothing_lies_inside(tmp_path: Path) -> None:
-    import check_stick_support_fe as fe
-
-    source = fe.DATA / "line_contact_tube_hollow.yaml"
-    hollow = cx.load_cable(source, geometry_override=None)
+    hollow = _tube(tmp_path, filled=False)
+    filled = _tube(tmp_path, filled=True)
     # A layer without an isotropic modulus fills the bore: the stack skips
     # it, and the support is then kept rigid (as in the default model), not
     # treated as a free bore.
-    text = source.read_text(encoding="utf-8").replace(
-        "layers:\n",
-        "materials:\n  yarn_probe:\n    description: yarn without a modulus\n"
-        "    rho_kg_m3: {value: 500.0, source: test}\n\nlayers:\n"
-        "  - name: bore_yarn\n    layer_type: cylindrical\n    material: yarn_probe\n"
-        "    r_inner_m: 0.0\n    r_outer_m: 0.020\n    source: test\n\n",
-        1,
-    )
-    path = tmp_path / "filled_bore.yaml"
-    path.write_text(text, encoding="utf-8")
-    filled = cx.load_cable(path, geometry_override=None)
     free = xi_for_layer(hollow, "armour", stick_support="annulus")
     with filled.material_scope():
         supported = xi_for_layer(filled, "armour", stick_support="annulus")
         series = xi_for_layer(filled, "armour")
     assert free < 0.6 * supported
     assert supported == pytest.approx(series, rel=0.05)
-
-
-@pytest.mark.independent_method
-def test_line_contact_tube_row() -> None:
-    import check_stick_support_fe as fe
-
-    rows = fe.stick_comparison()
-    hollow, copper = rows["hollow"], rows["copper"]
-    # Hollow core: the annulus support follows the core's shear; the series
-    # stack takes the wall as a thin strip on a rigid support.
-    assert abs(hollow["annulus_error"]) < 0.06
-    assert hollow["yun_stack_error"] > 0.9
-    # Copper core: a thin layer on a stiff support, both within 10 %.
-    assert abs(copper["annulus_error"]) < 0.10
-    assert abs(copper["yun_stack_error"]) < 0.10

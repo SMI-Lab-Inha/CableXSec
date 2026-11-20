@@ -867,9 +867,9 @@ for state in response.states:
   - On thin layers over a stiff support the two agree within a few per cent.
     On a soft or hollow core, `"annulus"` is much softer, because the core
     shears as a beam.
-  - On a hollow-core verification tube, `"annulus"` gives the sectional ξ of a
-    line-contact finite-element model within 4 %, where the default is about
-    twice too stiff (row XI-FE).
+  - It is the exact elastic solution of that annulus: a thin layer on a rigid
+    support gives t/G, a solid core R/G, and a hollow core with a free bore
+    R(1+ρ²)/(G(1−ρ²)), several times the thin-strip value.
   - The option changes the stick branch, `EI_max` and the slip onset, not
     `EI_min`. It does not close gap G8.
   - Other entry points, such as the fatigue path and the thermal section,

@@ -19,11 +19,8 @@ All notable changes to CableXSec are recorded in this file. The format follows
     with its actual inner boundary (rigid support, free bore or axis), plus
     the concentration of the load on each wire's width.
   - On thin layers over a stiff support it agrees with the default within a
-    few per cent. On a hollow-core verification tube it gives the sectional ξ
-    of a line-contact finite-element model within 4 %, where the default is
-    about twice too stiff.
-  - New stated row XI-FE (`validation/scripts/check_stick_support_fe.py`,
-    `validation/paper_data/line_contact_tube_*`).
+    few per cent. A soft or hollow core shears as a beam and gives a much
+    smaller ξ (free bore: `R(1+ρ²)/(G(1−ρ²))` against the strip's `t/G`).
   - Closed-form limits and an independent finite-difference solution in
     `tests/test_stick_support.py`.
 - Gap G8 documented as a known limitation for 0.2.0 (doc/benchmarks.md,

@@ -36,12 +36,6 @@ published cable of Ménard and Cartraud (2023), bundled as
 | `zeidan2026_fig18_deflection.csv` | Zeidan et al., IJSS 338 (2026) 114089, Fig. 18: deflection along the half span at the four amplitudes, read from the native raster | which displacement the 30–60 mm denote; central curvature (doc/benchmarks.md) |
 | `revision2_digitisation_bounds.json` | Half-widths of the digitisation of the Ménard ranges | sensitivity of the bending comparison to digitisation |
 
-## Model-to-model references
-
-| Files | Source | Used by |
-|---|---|---|
-| `line_contact_tube_hollow.yaml`, `line_contact_tube_copper.yaml`, `line_contact_tube_stick.csv` | Two armoured verification tubes (not real cables). The CSV gives the sectional stick coefficient of a three-dimensional line-contact finite-element model of each tube; its header states the model, the loading and how the value is extracted. | XI-FE row; `validation/scripts/check_stick_support_fe.py`; `tests/test_stick_support.py` |
-
 ## Calculations on the published cable
 
 | Files | Content |
