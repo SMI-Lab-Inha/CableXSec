@@ -540,6 +540,14 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Fixed
 
+- The documented residual of the exported Iwan bending law against `compute_mkappa` holds for
+  cycles of one amplitude near full slip, about 0.1 % of the moment range. On nested irregular
+  histories it is larger, and the documentation now says so. It peaks on reloading branches in
+  the doubled (Masing) transition zone and grows with the capstan factor λ = μ |sin α|: about
+  0.1 % of the moment range at λ ≈ 0.03, 0.3–0.4 % at λ ≈ 0.07 and 0.4–0.6 % at λ ≈ 0.09
+  (0.9–1.2 % of the full-slip friction moment). These are the largest values over random
+  turning-point histories on three cables. Outside that zone the residual returns to 0.01 %, so
+  the wipe-out of closed cycles is unaffected. The law itself is unchanged.
 - A constant curvature cycles nothing in the distributed helix model. A sample that repeats the
   last one under the Coulomb bound now keeps the state in both kernels: its outputs equal the
   last sample's bit for bit and it takes no substep. Before, the compiled kernel started such a
