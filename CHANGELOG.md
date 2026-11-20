@@ -540,6 +540,16 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Fixed
 
+- `read_cabledyn_sections` reads a section placed on a deck node from that node's channels
+  alone: `CurvX`/`CurvY` on the components route, and `Ten`, `Twist` and `Torq` on every route.
+  Before, every section needed the channels of both nodes of its element, so a station written
+  at one node (the usual OUTPUTS request) could not be read without the next node's channels;
+  where both are written, the values are unchanged. A section just off a node (a
+  rounded arc length a few micrometres away) still needs both, and the error now names the
+  node and its arc length. On the components route the twist and torque histories are kept
+  at every section whose nodes write them; before, one section without `Twist` channels (a
+  hang-off node, say) dropped the twist of all of them, and `checks["torsion"]` called the
+  read twist-free although CableDyn's axes carry the twist.
 - The documented residual of the exported Iwan bending law against `compute_mkappa` holds for
   cycles of one amplitude near full slip, about 0.1 % of the moment range. On nested irregular
   histories it is larger, and the documentation now says so. It peaks on reloading branches in

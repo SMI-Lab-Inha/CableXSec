@@ -136,7 +136,12 @@ it along the line and turns it by the twist, so the components equal
 cannot carry them and is refused on such a line.
 ``curvature_source="components"`` reads CableDyn's ``CurvX``/``CurvY`` at the
 deck nodes bracketing a section instead (linear between them, as the
-tension), exact on CableDyn's axes and needing no node positions or angles. A line
+tension), exact on CableDyn's axes and needing no node positions or angles.
+A section on a deck node (its arc length equal to the node's, as
+:meth:`CableDynLine.node_arc_lengths` gives it) reads that node's channels
+alone, with no channel at the neighbouring nodes; the twist and torque of
+this route are recorded at every section whose nodes write them, since the
+axes carry the twist already. A line
 restrained in torsion at both ends without these channels is rejected, and so
 is a dynamic run of a line restrained at one end whose torsion CableDyn solves
 (:attr:`CableDynLine.torsion_solved`): the polar inertia carries torsional
@@ -2404,12 +2409,60 @@ class _Plan:
     window: list[int]  # 0-based nodes of the curvature spline (its grid)
     probe: bool = False
     node: int = -1  # 0-based deck node of a curvature probe
+    # 0-based deck nodes of the node channels, with their linear weights
+    deck_nodes: tuple[tuple[int, float], ...] = ()
     data: dict[str, list[FloatArray]] = field(default_factory=dict)
 
 
 def _element_of(arcs: FloatArray, arc: float) -> int:
     index = int(np.searchsorted(arcs, arc, side="right")) - 1
     return min(max(index, 0), int(arcs.size) - 2)
+
+
+def _deck_weights(
+    arcs: FloatArray, element: int, arc: float
+) -> tuple[tuple[int, float], ...]:
+    """Deck nodes whose channels give a section's node values, with weights.
+
+    A section on a deck node reads that node alone; any other section is
+    linear between the two nodes of its element.
+    """
+    if arc == arcs[element]:
+        return ((element, 1.0),)
+    if arc == arcs[element + 1]:
+        return ((element + 1, 1.0),)
+    weight = float((arc - arcs[element]) / (arcs[element + 1] - arcs[element]))
+    return ((element, 1.0 - weight), (element + 1, weight))
+
+
+def _at_deck_nodes(
+    values: FloatArray,
+    slot: Mapping[tuple[str, int], int],
+    kind: str,
+    nodes: tuple[tuple[int, float], ...],
+) -> FloatArray:
+    """A node channel at a section: the node's own column, or linear between two."""
+    if len(nodes) == 1:
+        return np.array(values[:, slot[(kind, nodes[0][0])]])
+    (lower, w_lower), (upper, w_upper) = nodes
+    return np.asarray(
+        w_lower * values[:, slot[(kind, lower)]]
+        + w_upper * values[:, slot[(kind, upper)]]
+    )
+
+
+def _nearest_node_hint(arcs: FloatArray, element: int, arc: float) -> str:
+    """A note for a section that lies just off a deck node."""
+    length = float(arcs[element + 1] - arcs[element])
+    for node in (element, element + 1):
+        gap = abs(arc - float(arcs[node]))
+        if 0.0 < gap <= 1e-3 * length:
+            return (
+                f"; it lies {gap:.3g} m from deck node {node + 1} "
+                f"(s = {float(arcs[node])!r} m): a section at that arc length reads "
+                "that node's channels alone"
+            )
+    return ""
 
 
 def _window(element: int, n_nodes: int, half: int) -> list[int]:
@@ -3056,7 +3109,8 @@ def read_cabledyn_sections(
         ``"auto"`` uses the tangent channels when every section has them and
         positions otherwise; the choice is recorded. ``"components"`` takes
         CableDyn's ``CurvX<L>N<J>``/``CurvY<L>N<J>`` (finite-EI lines) on
-        CableDyn's section axes (module notes).
+        CableDyn's section axes (module notes); a section on a deck node
+        needs that node's channels only.
     tangent_placement : {"auto", "chord"}
         Where the ``Dec``/``Azi`` values sit along the line. ``"auto"``
         (CableDyn 0.4.2 and later): at the node on a finite-EI line, at the
@@ -3394,10 +3448,11 @@ def read_cabledyn_sections(
     )
     plans: list[_Plan] = []
     for name, arc_deck, arc_pos, elem_deck, elem_pos, node in specs:
+        deck_nodes = _deck_weights(deck_arcs, elem_deck, arc_deck)
         window = (
             _window(elem_deck, n_deck, window_nodes)
             if source == "tangent"
-            else [elem_deck, elem_deck + 1]
+            else [j for j, _ in deck_nodes]
             if source == "components"
             else _window(elem_pos, n_pos, window_nodes)
         )
@@ -3414,6 +3469,11 @@ def read_cabledyn_sections(
             raise CableSchemaError(
                 f"section {name!r}: curvature from {source} needs {what} "
                 f"at nodes {missing}"
+                + (
+                    _nearest_node_hint(deck_arcs, elem_deck, arc_deck)
+                    if source == "components"
+                    else ""
+                )
             )
         if missing:
             continue  # a probe without its window is not checked
@@ -3426,6 +3486,7 @@ def read_cabledyn_sections(
                 window,
                 probe=node >= 0,
                 node=node,
+                deck_nodes=deck_nodes,
             )
         )
     sections_plans = [plan for plan in plans if not plan.probe]
@@ -3442,13 +3503,24 @@ def read_cabledyn_sections(
         else:
             checks["tangent_placement"] = "chord mid-arc (EI = 0 line)"
 
-    torsion_nodes = [(plan.elem_deck, plan.elem_deck + 1) for plan in sections_plans]
-    twist_available = all(
-        ("twist", line_id, n + 1) in channels for pair in torsion_nodes for n in pair
-    )
-    torque_available = all(
-        ("torq", line_id, n + 1) in channels for pair in torsion_nodes for n in pair
-    )
+    # Twist and torque channels at each section's nodes. The reconstructed
+    # frame needs the twist at every section; CableDyn's components carry it
+    # in their axes, so that route records them where they are written.
+    twist_at = {
+        plan.name: all(
+            ("twist", line_id, n + 1) in channels for n, _ in plan.deck_nodes
+        )
+        for plan in sections_plans
+    }
+    torque_at = {
+        plan.name: all(("torq", line_id, n + 1) in channels for n, _ in plan.deck_nodes)
+        for plan in sections_plans
+    }
+    twist_available = all(twist_at.values())
+    torque_available = all(torque_at.values())
+    if source != "components":
+        twist_at = dict.fromkeys(twist_at, twist_available)
+        torque_at = dict.fromkeys(torque_at, torque_available)
     if line.torsion_restrained and not twist_available and source != "components":
         raise CableSchemaError(
             f"line {line_id} is restrained in torsion; the material frame needs "
@@ -3494,7 +3566,18 @@ def read_cabledyn_sections(
         "restrained_ends": sorted(line.torsion_restrained_ends),
         "solved": line.torsion_solved,
         "not_solved_because": line.torsion_note,
-        "material_twist": "Twist channels" if twist_available else "none (twist-free)",
+        "material_twist": (
+            "Twist channels"
+            if twist_available
+            else "in CableDyn's section axes (CurvX/CurvY); Twist channels at "
+            + (
+                ", ".join(repr(name) for name, ok in twist_at.items() if ok)
+                if any(twist_at.values())
+                else "no section"
+            )
+            if source == "components" and line.torsion_solved
+            else "none (twist-free)"
+        ),
     }
 
     # How End A's material frame turns in time (module notes, hang-off).
@@ -3562,11 +3645,12 @@ def read_cabledyn_sections(
     )
     if not use_segments:
         for plan in sections_plans:
-            for node in (plan.elem_deck, plan.elem_deck + 1):
+            for node, _ in plan.deck_nodes:
                 if ("ten", line_id, node + 1) not in channels:
                     raise CableSchemaError(
                         f"section {plan.name!r}: tension needs .Line{line_id}.t.out "
                         f"or Ten{line_id}N{node + 1} in the main output"
+                        + _nearest_node_hint(deck_arcs, plan.elem_deck, plan.arc)
                     )
     # Main-table column plan.
     main_cols: list[int] = [0]
@@ -3590,18 +3674,15 @@ def read_cabledyn_sections(
         for node in pos_order:
             for kind in ("px", "py", "pz"):
                 want(kind, node)
-    if not use_segments:
-        for plan in sections_plans:
-            want("ten", plan.elem_deck)
-            want("ten", plan.elem_deck + 1)
-    if twist_available:
-        for plan in sections_plans:
-            want("twist", plan.elem_deck)
-            want("twist", plan.elem_deck + 1)
-    if torque_available:
-        for plan in sections_plans:
-            want("torq", plan.elem_deck)
-            want("torq", plan.elem_deck + 1)
+    for plan in sections_plans:
+        for kind, wanted in (
+            ("ten", not use_segments),
+            ("twist", twist_at[plan.name]),
+            ("torq", torque_at[plan.name]),
+        ):
+            if wanted:
+                for node, _ in plan.deck_nodes:
+                    want(kind, node)
     probe_nodes = [plan.node for plan in plans if plan.probe]
     for node in probe_nodes:
         want("curv", node)
@@ -3668,7 +3749,6 @@ def read_cabledyn_sections(
             _chunks(tensions_table, [0] + [1 + e for e in elements], chunk_rows)
         )
 
-    deck_l0 = np.diff(deck_arcs)
     # Arc length of each Dec/Azi value: the node's own tangent of a finite-EI
     # line (CableDyn 0.4.2+) at the node; a chord (central, one-sided at the
     # ends) at its mid-arc, the point of a smooth arc whose tangent it is. On a
@@ -3870,11 +3950,9 @@ def read_cabledyn_sections(
                     e1 = _transport(e1, chords[:, k - 1], chords[:, k])
                     arc_e1[k] = e1
             for plan in plans:
-                # Linear weights between the bracketing deck nodes (node
-                # channels) and position-grid nodes (positions).
-                weight = (plan.arc - deck_arcs[plan.elem_deck]) / deck_l0[
-                    plan.elem_deck
-                ]
+                # Linear weights between the bracketing position-grid nodes;
+                # the node channels take plan.deck_nodes (the node alone for
+                # a section on a deck node).
                 weight_pos = (plan.arc - pos_arcs[plan.elem_pos]) / pos_l0[
                     plan.elem_pos
                 ]
@@ -3883,28 +3961,23 @@ def read_cabledyn_sections(
                     # curvature) on its section axes (x, y): the rotation
                     # curvature on the same axes is (-CurvY, CurvX).
                     curv_x, curv_y = (
-                        (1 - weight) * values[:, slot[(kind, plan.elem_deck)]]
-                        + weight * values[:, slot[(kind, plan.elem_deck + 1)]]
+                        _at_deck_nodes(values, slot, kind, plan.deck_nodes)
                         for kind in ("curvx", "curvy")
                     )
                     append(plan, "norm", np.hypot(curv_x, curv_y))
-                    if twist_available:
+                    if twist_at[plan.name]:
                         append(
                             plan,
                             "twist",
                             np.radians(
-                                (1 - weight)
-                                * values[:, slot[("twist", plan.elem_deck)]]
-                                + weight
-                                * values[:, slot[("twist", plan.elem_deck + 1)]]
+                                _at_deck_nodes(values, slot, "twist", plan.deck_nodes)
                             ),
                         )
-                    if torque_available:
+                    if torque_at[plan.name]:
                         append(
                             plan,
                             "torque",
-                            (1 - weight) * values[:, slot[("torq", plan.elem_deck)]]
-                            + weight * values[:, slot[("torq", plan.elem_deck + 1)]],
+                            _at_deck_nodes(values, slot, "torq", plan.deck_nodes),
                         )
                     append(plan, "kx", -curv_y)
                     append(plan, "ky", curv_x)
@@ -3964,8 +4037,7 @@ def read_cabledyn_sections(
                     axis2 = np.cross(tangent, axis1)
                     if twist_available:
                         twist = np.radians(
-                            (1 - weight) * values[:, slot[("twist", plan.elem_deck)]]
-                            + weight * values[:, slot[("twist", plan.elem_deck + 1)]]
+                            _at_deck_nodes(values, slot, "twist", plan.deck_nodes)
                         )
                         cos, sin = np.cos(twist)[:, None], np.sin(twist)[:, None]
                         axis1, axis2 = (
@@ -3977,8 +4049,7 @@ def read_cabledyn_sections(
                         append(
                             plan,
                             "torque",
-                            (1 - weight) * values[:, slot[("torq", plan.elem_deck)]]
-                            + weight * values[:, slot[("torq", plan.elem_deck + 1)]],
+                            _at_deck_nodes(values, slot, "torq", plan.deck_nodes),
                         )
                     append(plan, "kx", np.sum(kappa * axis1, axis=-1))
                     append(plan, "ky", np.sum(kappa * axis2, axis=-1))
@@ -4010,9 +4081,7 @@ def read_cabledyn_sections(
                             :, ten_slot[lower + 1]
                         ]
                 else:
-                    ten = (1 - weight) * values[
-                        :, slot[("ten", plan.elem_deck)]
-                    ] + weight * values[:, slot[("ten", plan.elem_deck + 1)]]
+                    ten = _at_deck_nodes(values, slot, "ten", plan.deck_nodes)
                 append(plan, "tension", ten)
             append(plans[0], "time", time)
             n_rows += nt
@@ -4243,7 +4312,10 @@ def read_cabledyn_sections(
                         "in time by minimal rotation)"
                     ),
                     "material twist from Twist channels"
-                    if twist_available
+                    if twist_at[plan.name]
+                    else "material twist in CableDyn's section axes (no Twist "
+                    "channels at the section)"
+                    if source == "components" and line.torsion_solved
                     else "no material twist (line not restrained in torsion)",
                     "hydrostatic external pressure only (no wave dynamic pressure)"
                     if pressure == "hydrostatic"
