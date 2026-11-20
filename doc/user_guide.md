@@ -105,7 +105,10 @@ for screening.
   `cx.fatigue_from_series`): the damage of every armour wire at fixed fibres
   round the wire, and of the conductors and metallic sheaths with fatigue data
   (`cx.compute_conductor_fatigue`, `cx.compute_shell_fatigue`), with the
-  {term}`critical wire and fibre`.
+  {term}`critical wire and fibre`. A twist-rate history (`twist_rate_per_m`,
+  rad/m, positive tightening a right-hand lay) adds the torsional stress of
+  the armour and conductor wires; a CableDyn section history carries it as
+  `twist_rate_per_m` ([global–local guide](global_local_guide.md), Section 2.2).
 - **{term}`Long-term fatigue <long-term fatigue>`** (`cx.compute_long_term_fatigue`): the damage over a
   {term}`scatter diagram`, one `FatigueLoadCase` per {term}`sea state` with its probability.
 - **Armour fretting**, **core screen fatigue** and **tape fatigue** of a load

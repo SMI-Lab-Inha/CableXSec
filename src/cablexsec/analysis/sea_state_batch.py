@@ -107,6 +107,7 @@ from cablexsec.io.cabledyn import (
     read_cabledyn_deck,
     read_cabledyn_sections,
 )
+from cablexsec.provenance import TorsionalStressWarning
 
 FloatArray = NDArray[np.float64]
 TensionBasis = Literal["auto", "true", "effective"]
@@ -239,6 +240,14 @@ class SeaStateBatchOptions:
     ``K_tt`` leaves out the components' own torsion and the radial relaxation
     of the layers, which move a section's torsional stiffness by tens of
     percent either way, hence the wider default.
+
+    ``twist_stress=True`` passes each section's twist rate
+    (:attr:`~cablexsec.io.cabledyn.CableDynSectionHistory.twist_rate_per_m`)
+    to :func:`cablexsec.compute_fatigue`, the torsional wire stress; on a
+    line CableDyn solves in torsion a section without it is refused. With the
+    default ``False`` a section whose history has a twist rate warns
+    (:class:`~cablexsec.provenance.TorsionalStressWarning`) that its
+    torsional stress is omitted, and the result is that of earlier releases.
     """
 
     n_fibres: int = 32
@@ -266,6 +275,8 @@ class SeaStateBatchOptions:
     property_rtol: float = 0.05
     torsion_rtol: float = 0.25
     allow_property_mismatch: bool = False
+    #: Apply the torsional wire stress from the sections' twist rates.
+    twist_stress: bool = False
     workers: int = 1
     chunk_rows: int = 4096
 
@@ -804,6 +815,24 @@ def _evaluate(task: _Task) -> dict[str, Any]:
                 f"(tension basis {task.basis}); compute_fatigue needs a tensile "
                 "force history"
             )
+        twist = None
+        if history.twist_rate_per_m is not None:
+            if opts.twist_stress:
+                twist = history.twist_rate_per_m
+            else:
+                warnings.warn(
+                    f"run {run.name!r}, section {section.name!r}: the history has "
+                    "a twist rate, but twist_stress is False, so its fatigue omits "
+                    "the torsional wire stress",
+                    TorsionalStressWarning,
+                    stacklevel=2,
+                )
+        elif opts.twist_stress and read.checks["torsion"]["solved"]:
+            raise CableSchemaError(
+                f"run {run.name!r}, section {section.name!r}: twist_stress needs "
+                "the twist rate, which needs Twist channels at the section's "
+                "element(s) and, for a section on a deck node, at both neighbours"
+            )
         fatigue: FatigueResult = compute_fatigue(
             task.cable,
             kx,
@@ -822,6 +851,7 @@ def _evaluate(task: _Task) -> dict[str, Any]:
             sn_curves=section.sn_curves,
             mean_stress=section.mean_stress,
             scf=section.scf,
+            twist_rate_per_m=twist,
         )
         fretting = None
         if section.fretting:
@@ -1291,6 +1321,9 @@ def run_sea_state_batch(
     if opts.wire_positions is None:
         # Absent when unset, so that the digests of existing assessments stay.
         option_record.pop("wire_positions")
+    if not opts.twist_stress:
+        # Absent when unset, so that the digests of existing assessments stay.
+        option_record.pop("twist_stress")
     results: dict[str, SectionBatchResult] = {}
     histories: dict[str, dict[str, CableDynSectionHistory]] = {}
     for section in sections:

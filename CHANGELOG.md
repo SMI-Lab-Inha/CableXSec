@@ -10,6 +10,22 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Added
 
+- Torsional wire stress in the fatigue path. `compute_fatigue` and `compute_conductor_fatigue`
+  take `twist_rate_per_m`, the material twist rate of the cable [rad/m], positive in the sense
+  that tightens a right-hand (Z) lay. Every armour wire gains the axial stress of its helix strain
+  `s r sin(a) cos(a) tau` (Knapp 1981, Eqs. 2 and 11, fixed radii). With a tension history the
+  tension is held, so the strain also changes by `-K_et tau / K_ee`. Every conductor ring wire
+  gains the strain of the laid core and of the ring twisting with the cable. The reader forms the
+  rate from CableDyn's `Twist<L>N<J>` channels: `CableDynSectionHistory.twist_rate_per_m` is the
+  element rate inside an element and the mean of the two element rates on a deck node, the
+  definition CableDyn uses for `Torq<L>N<J>`. `twist_stress_coefficient` gives the stress per unit
+  rate. The sea-state batch applies it with `SeaStateBatchOptions(twist_stress=True)`.
+  `TorsionalStressWarning` is issued in two cases: CableDyn writes twist or torque at a section
+  but not the `Twist` channels its rate needs (the warning names them), or a batch omits a
+  history's twist rate. `section_channels` lists the extra node. Without the input, every result
+  is unchanged, bit for bit. Verification row TQ-FT; no measured wire strain under torsion is in
+  the validation set yet.
+
 - `validation/scripts/benchmark_throughput.py`: one-core throughput of sea-state fatigue on
   the 66 kV template (direction-tied and distributed models, every wire or 12 positions, 4 or
   32 fibres), the damage differences from an earlier build, and the sea-state batch time

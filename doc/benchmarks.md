@@ -2584,7 +2584,7 @@ and 0.092 against 0.035/0.044 and 0.054/0.063.
   over-prediction comes from what the one-way anchored chain does with it
   (SV11-SPLIT), not from the profile.
 
-## Torque balance and twist under tension (gap 3.5: TQ, TQ-KL, TQ-UJ)
+## Torque balance and twist under tension (gap 3.5: TQ, TQ-KL, TQ-UJ, TQ-FT)
 
 Script `validation/scripts/check_torque_balance.py`, tests `tests/test_torque_balance.py`, rows TQ,
 TQ-KL and TQ-UJ of the scorecard. `torque_balance` solves the coupled radial
@@ -2604,6 +2604,18 @@ moments (Costello 1997, Example 3.1: −5% torque for a seven-wire strand).
 | TQ5 | A | Mirror lay: every lay direction reversed (armour and laid cores) on the 1×37 rope and the 66 kV template | < 1e-9 relative | torque and twist reverse, wire stresses and balance ratio unchanged (0 and below 1e-9) | PASS |
 | TQ6 | I | `fixed_radius` against `xsec_stiffness` (`EA_N`, `EA_torsion_coupling`, `GJ_Nm2`); solved 66 kV template against the fixed-radius torque coefficient | identical; < 1% | identical; 1.5026 against 1.5251 mm (−1.5%); EA 607 against 638 MN | FAIL (since the insulation screens carry load in both models; −0.5% when the fixed-radius model left them out) |
 | TQ7 | I | Design round trip on the 66 kV template: zero torque coefficient at the returned lay angle; free twist and stress redistribution then vanish | < 1e-9 m; < 1e-12; < 1e-3 Pa | 1.3e-13 m; below 1e-12; below 1e-3 Pa | PASS |
+| TQ8 (TQ-FT) | A, I | Twist-rate wire stress of the fatigue path, `eps cos^2(a) + s R tau sin(a) cos(a)` (Knapp 1981, Eq. 11 with a radially rigid core, the twist strain of Eq. 2), tension held, `eps = (T - K_et tau)/K_ee`: (a) 66 kV template armour, 60 kN and a twist history without bending, recovered stress and per-wire damage against the closed form from the schema data; (b) Feyrer 1×37 rope, whose helical layers alone carry `K_et` and `K_tt`: torque `sum s n A sigma R sin(a)` and tension of the fatigue wire stresses at (10 kN, 2e-3 rad/m) against `K_et eps + K_tt tau` and `T`; (c) every lay reversed and the twist negated, with biaxial bending; (d) zero twist against no twist input, armour fibres and conductor azimuths | < 1e-12; < 1e-12; < 1e-12; 0 | (a) 3.6e-16 and 4.5e-15; (b) 2.2e-16 and 0; (c) 0; (d) 0 | PASS |
+
+TQ8 was registered before the implementation was run. It checks the
+arithmetic and the consistency with the stiffness matrix, not a measurement:
+no TQ row measures wire strain under torsion. Utting and Jones (1987, Part II,
+Figs 5 and 6) give mean helical-wire surface strains against the torsional end
+restraint, in figures only and including the wire bending, which the fatigue
+term leaves out. They are a candidate row for later. Against the solved radial
+section of the 66 kV template (`solve_cable_radial_state`, 1e-3 rad/m
+prescribed at 0 and 50 kN, tension held), the fixed-radius twist stress is
+within 6 % on the inner armour (−3.88 against −3.66 and −3.89 MPa) and within
+1 % on the outer armour (+2.62 against +2.64 and +2.61 MPa).
 
 The excess over the Machida–Durelli theory is the omitted bending and
 twisting moments of the wires, which scale with `(d / 2r)²` (0.23 for these

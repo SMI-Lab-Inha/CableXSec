@@ -37,6 +37,7 @@ afterwards: a comparison that misses its target is reported as failed.
 | **CF** | Laid-core friction limits | closed forms, rotation equivariance | ≤1.0e-4 | per check | Pass |
 | **FR** | Fretting regime: Mindlin energy, Fouvry transition, Cattaneo strip | closed forms, numerical Masing loop | ≤7.8e-12 | <1e-9 to <1e-12 | Pass |
 | **TQ** | Torque constant of a strand; coupled section; mirror lay | Feyrer, Example 2.8; Knapp (1981) | −0.11 %; −1.3e-6; 0 | ±0.2 %; <1e-4; <1e-9 | Pass |
+| **TQ-FT** | Twist-rate wire stress of the fatigue path: stress and damage, torque and tension carried by the wires, mirror lay, zero twist | Knapp (1981), Eqs. 2, 11; `K_et`, `K_tt` | 4.5e-15; 2.2e-16; 0; 0 | <1e-12; <1e-12; <1e-12; 0 | Pass |
 | **A11** | Moment–curvature energy closure | loop area against closed form | 0.082 % | <0.1 % | Pass |
 | **σ_B** | Radial-fibre bending stress | Ménard and Cartraud (2023), Eq. 14 | 0 | <1e-6 % | Pass |
 | **M-rec, M-rec-3core** | Assembled per-wire moment against the section engine | cross-engine | 0.000 % | <2 % | Pass |
