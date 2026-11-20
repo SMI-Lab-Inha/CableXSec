@@ -544,6 +544,24 @@ All notable changes to CableXSec are recorded in this file. The format follows
   `warnings.simplefilter("ignore")`, dropping a wire-yield or clamping warning about the
   caller's own curvature; each distinct warning is now relayed once
   (`provenance.relayed_warnings`).
+- Adversarial inputs of the public API (`tests/test_robustness_inputs.py`): a friction
+  coefficient so large that the capstan factor overflows (`mu = 1e6`) stopped the reference
+  return map ("wire history exceeds floating-point range") while the compiled kernels held the
+  wires stuck; both paths now give the stuck answer, and so does `compute_mkappa`, which raised
+  on both (on the 33 kV template its loop at `mu = 1e6` equals the one at `mu = 100`). The
+  critical fibre, wire and layer of `compute_fatigue` are the first of the values within 1e-12
+  of the largest, so a round-off difference between the kernel paths no longer moves them (63
+  deg on one, 243 deg on the other, at equal damage). `compute_thermal` refuses a negative
+  current, temperatures below absolute zero and a core count that is not a positive integer
+  (`n_cores = 0` divided by zero), and so does `thermal_network` (a NaN ambient built a network
+  of NaN temperatures) with its steady, transient and matrix states (negative currents, ambients
+  below absolute zero); `export_bending_law` refuses a non-integer `n_points` (was numpy's
+  `TypeError`). A layer's schema error names the layer, its index and the file instead of the
+  union of layer kinds. `read_series_csv` refuses a file that is not UTF-8 with
+  `CableSchemaError` (was `UnicodeDecodeError`) and skips rows of spaces or separators only;
+  both CSV readers refuse a cell that is not a decimal number (`float` alone took `1_0` as 10).
+  `SeaStateBatchOptions` checks `n_fibres`, `chunk_rows`, `mu`, `exposure_years` and
+  `design_fatigue_factor` before any run is read, and `SeaStateRun` its `line_id`.
 - The series shear stack of the armour stick coefficient ξ (`xi_for_layer`, Yun et al. 2020)
   stops at the layer's support. Walking inward, it adds each concentric cylindrical layer with
   a modulus (interstitial fillers still skipped) and stops at the first helical layer inside and

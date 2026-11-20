@@ -353,6 +353,20 @@ def _warn_default_direction_tied(out_of_plane: float, stacklevel: int) -> None:
     )
 
 
+#: Values within this relative distance of the largest are a tie: the
+#: critical fibre, wire and layer are the first of them, so a round-off
+#: difference (compiled against reference kernels, or symmetric wires) does
+#: not move the reported location.
+_TIE_RTOL = 1e-12
+
+
+def _first_maximum(values: FloatArray) -> NDArray[np.intp]:
+    """Index of the first value of each row within ``_TIE_RTOL`` of its maximum."""
+    peak = np.max(values, axis=1, keepdims=True)
+    near = values >= peak - _TIE_RTOL * np.abs(peak)
+    return np.asarray(np.argmax(near, axis=1))
+
+
 def _check_distributed_bound(bound: str) -> None:
     if bound not in BOUND_FORMS:
         raise CableInputError(
@@ -1900,11 +1914,11 @@ def compute_fatigue(
                 if layer.termination and layer.SCF != 1.0
                 else fibre_damage[:, j]
             )
-        critical_indices = np.argmax(fibre_damage, axis=1)
+        critical_indices = _first_maximum(fibre_damage)
         db = fibre_damage[np.arange(n_eval), critical_indices]
         d_fibre[name] = fibre_damage
         critical_fibre[name] = np.degrees(fibre_angles[critical_indices])
-        adjusted_indices = np.argmax(amplified_damage, axis=1)
+        adjusted_indices = _first_maximum(amplified_damage)
         adjusted_db = amplified_damage[np.arange(n_eval), adjusted_indices]
         d_adjusted_fibre[name] = amplified_damage
         critical_adjusted_fibre[name] = np.degrees(fibre_angles[adjusted_indices])
@@ -1993,8 +2007,8 @@ def compute_fatigue(
     # Critical wire across all layers.
     crit_layer, crit_k, crit_val = "", 0, -1.0
     for name, dvec in d_total.items():
-        k = int(np.argmax(dvec))
-        if dvec[k] > crit_val:
+        k = int(_first_maximum(dvec[None, :])[0])
+        if dvec[k] > crit_val * (1.0 + _TIE_RTOL):
             crit_layer, crit_k, crit_val = name, k, float(dvec[k])
 
     if crit_layer:

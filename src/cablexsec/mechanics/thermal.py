@@ -73,6 +73,7 @@ import itertools
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
+from numbers import Integral
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -585,6 +586,10 @@ def _layer_heat_flows(
     return flows, t1, t2_scaled / float(n_conductors)
 
 
+#: Absolute zero [°C]: the floor of a temperature input.
+_ABSOLUTE_ZERO_C = -273.15
+
+
 @uses_cable_materials
 def compute_thermal(
     cable: CableData,
@@ -728,7 +733,7 @@ def compute_thermal(
             "(set them in the cable 'environment' block or pass overrides)."
         )
     checks = {
-        "current_A": (current_A, False),
+        "current_A": (current_A, None),
         "conductor_temp_C": (conductor_temp_C, False),
         "ambient_C": (t_amb, False),
         "conductor_area_m2": (conductor_area_m2, True),
@@ -745,7 +750,11 @@ def compute_thermal(
             raise CableInputError(f"compute_thermal: {name} must be positive")
         if positive is None and value < 0.0:
             raise CableInputError(f"compute_thermal: {name} must not be negative")
-
+    for name, value in (("conductor_temp_C", conductor_temp_C), ("ambient_C", t_amb)):
+        if value < _ABSOLUTE_ZERO_C:
+            raise CableInputError(
+                f"compute_thermal: {name} = {value:g} °C is below absolute zero"
+            )
     geo = _ladder_geometry(cable, n_cores)
     path, in_t1, n = geo.path, geo.in_t1, geo.n
     multi_core, geometry_notes = geo.multi_core, list(geo.geometry_notes)
@@ -995,6 +1004,12 @@ def conductor_material_of(cable: CableData, given: str | None) -> tuple[str, str
 
 def _ladder_geometry(cable: CableData, n_cores: int | None) -> _LadderGeometry:
     """Concentric heat path, ``T1`` split and core counts of a cable definition."""
+    if n_cores is not None and (
+        isinstance(n_cores, bool) or not isinstance(n_cores, Integral) or n_cores < 1
+    ):
+        raise CableInputError(
+            f"n_cores must be a positive integer (at least 1): {n_cores!r}"
+        )
     n_geo = (
         max((getattr(layer, "n_cores", 0) for layer in cable.layers), default=0) or 1
     )

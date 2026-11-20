@@ -262,8 +262,8 @@ class ThermalNetwork:
         exists (thermal runaway of the coupled resistance).
         """
         amb = self.ambient_C if ambient_C is None else float(ambient_C)
-        _check_finite(current_A, "current_A")
-        _check_finite(amb, "ambient_C")
+        _check_current(current_A)
+        _check_temperature(amb, "ambient_C")
         k, s = self._system(current_A, amb, resistance_temperature_C)
         if resistance_temperature_C is None:
             _check_stable(k, self.capacitance_J_mK)
@@ -312,6 +312,8 @@ class ThermalNetwork:
         amb = _as_series(
             self.ambient_C if ambient_C is None else ambient_C, t, "ambient_C"
         )
+        _check_current(cur)
+        _check_temperature(amb, "ambient_C")
         if scheme not in _SCHEMES:
             raise CableInputError(f"scheme must be one of {_SCHEMES}")
         _check_finite(max_step_s, "max_step_s")
@@ -443,8 +445,8 @@ class ThermalNetwork:
         ``K``). Copies, so callers may add their own sources.
         """
         amb = self.ambient_C if ambient_C is None else float(ambient_C)
-        _check_finite(current_A, "current_A")
-        _check_finite(amb, "ambient_C")
+        _check_current(current_A)
+        _check_temperature(amb, "ambient_C")
         k, s = self._system(current_A, amb, resistance_temperature_C)
         return k.copy(), s.copy()
 
@@ -506,6 +508,28 @@ class ThermalNetwork:
 def _check_finite(value: float, name: str) -> None:
     if not math.isfinite(float(value)):
         raise CableInputError(f"{name} must be finite")
+
+
+#: Absolute zero [deg C]: the floor of a temperature input.
+_ABSOLUTE_ZERO_C = -273.15
+
+
+def _check_temperature(value: float | FloatArray, name: str) -> None:
+    """Finite temperatures [deg C] at or above absolute zero."""
+    values = np.asarray(value, dtype=np.float64)
+    if not np.isfinite(values).all():
+        raise CableInputError(f"{name} must be finite")
+    if np.any(values < _ABSOLUTE_ZERO_C):
+        raise CableInputError(f"{name} must not lie below absolute zero (-273.15 °C)")
+
+
+def _check_current(value: float | FloatArray) -> None:
+    """Finite, non-negative (RMS) conductor currents [A]."""
+    values = np.asarray(value, dtype=np.float64)
+    if not np.isfinite(values).all():
+        raise CableInputError("current_A must be finite")
+    if np.any(values < 0.0):
+        raise CableInputError("current_A must not be negative (an RMS current)")
 
 
 def _as_series(
@@ -574,6 +598,7 @@ def thermal_network(
         )
     if not (math.isfinite(t4) and t4 > 0):
         raise CableInputError("T4_external_Km_W must be positive and finite")
+    _check_temperature(t_amb, "ambient_C")
     if (
         isinstance(n_per_layer, bool)
         or int(n_per_layer) != n_per_layer

@@ -11,6 +11,8 @@ equilibrium are separate operations, not inferred from an unlabelled column.
 from __future__ import annotations
 
 import csv
+import io
+import re
 from dataclasses import dataclass, fields, replace
 from pathlib import Path
 from typing import Literal
@@ -230,6 +232,21 @@ def write_series_csv(series: LoadCaseSeries, path: str | Path) -> Path:
     return p
 
 
+#: A decimal number as a CSV cell spells one (``float`` alone also takes
+#: ``1_000``); ``nan`` and ``inf`` pass, for the finite check to name them.
+_NUMBER = re.compile(
+    r"\s*[+-]?(?:(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?|nan|inf|infinity)\s*",
+    re.IGNORECASE,
+)
+
+
+def parse_number(cell: str) -> float:
+    """One numeric CSV cell; ``ValueError`` for anything but a decimal number."""
+    if not isinstance(cell, str) or not _NUMBER.fullmatch(cell):
+        raise ValueError(f"not a decimal number: {cell!r}")
+    return float(cell)
+
+
 def read_series_csv(path: str | Path) -> LoadCaseSeries:
     """Read the canonical exchange CSV written by :func:`write_series_csv`."""
     p = Path(path)
@@ -239,76 +256,89 @@ def read_series_csv(path: str | Path) -> LoadCaseSeries:
     strains = []
     any_strain = False
     any_temp = False
-    with p.open("r", newline="", encoding="utf-8-sig") as fh:
-        reader = csv.DictReader(fh)
-        fields = set(reader.fieldnames or [])
-        if len(fields) != len(reader.fieldnames or []):
-            raise CableSchemaError(
-                f"series CSV {p.name} repeats a column name: {reader.fieldnames}"
-            )
-        tension_columns = fields & {
-            "effective_tension_N",
-            "true_tension_N",
-            "axial_tension_N",
-        }
-        if len(tension_columns) != 1:
-            raise CableSchemaError(
-                "series CSV must contain exactly one named tension column"
-            )
-        tension_column = tension_columns.pop()
-        strain_columns = fields & {
-            "direct_axial_strain",
-            "total_axial_strain",
-            "axial_strain",
-        }
-        if len(strain_columns) > 1:
-            raise CableSchemaError(
-                "series CSV must contain at most one named axial-strain column"
-            )
-        strain_column = next(iter(strain_columns), "axial_strain")
-        strain_kind: Literal["direct", "total", "unspecified"] = (
-            "direct"
-            if strain_column == "direct_axial_strain"
-            else "total"
-            if strain_column == "total_axial_strain"
-            else "unspecified"
+    try:
+        text = p.read_bytes().decode("utf-8-sig")
+    except UnicodeDecodeError:
+        raise CableSchemaError(
+            f"series CSV {p.name} is not UTF-8 text (write_series_csv writes UTF-8)"
+        ) from None
+    # A newline-preserving stream: a quoted cell keeps an embedded newline
+    # (and is refused), where split lines would join its parts.
+    reader = csv.DictReader(io.StringIO(text, newline=""))
+    fields = set(reader.fieldnames or [])
+    if len(fields) != len(reader.fieldnames or []):
+        raise CableSchemaError(
+            f"series CSV {p.name} repeats a column name: {reader.fieldnames}"
         )
-        kind: Literal["effective", "true", "unspecified"]
-        kind = (
-            "true"
-            if tension_column == "true_tension_N"
-            else (
-                "effective"
-                if tension_column == "effective_tension_N"
-                else "unspecified"
-            )
+    tension_columns = fields & {
+        "effective_tension_N",
+        "true_tension_N",
+        "axial_tension_N",
+    }
+    if len(tension_columns) != 1:
+        raise CableSchemaError(
+            "series CSV must contain exactly one named tension column"
         )
-        missing = set(_CSV_COLUMNS[:3]) - fields
-        if missing:
+    tension_column = tension_columns.pop()
+    strain_columns = fields & {
+        "direct_axial_strain",
+        "total_axial_strain",
+        "axial_strain",
+    }
+    if len(strain_columns) > 1:
+        raise CableSchemaError(
+            "series CSV must contain at most one named axial-strain column"
+        )
+    strain_column = next(iter(strain_columns), "axial_strain")
+    strain_kind: Literal["direct", "total", "unspecified"] = (
+        "direct"
+        if strain_column == "direct_axial_strain"
+        else "total"
+        if strain_column == "total_axial_strain"
+        else "unspecified"
+    )
+    kind: Literal["effective", "true", "unspecified"]
+    kind = (
+        "true"
+        if tension_column == "true_tension_N"
+        else ("effective" if tension_column == "effective_tension_N" else "unspecified")
+    )
+    missing = set(_CSV_COLUMNS[:3]) - fields
+    if missing:
+        raise CableSchemaError(
+            f"series CSV {p.name} missing columns {sorted(missing)}; "
+            f"found {reader.fieldnames}."
+        )
+    for row in reader:
+        # DictReader keeps the cells beyond the header as a list under None.
+        surplus = row.pop(None, None) or []
+        cells = [*row.values(), *surplus]
+        if not any((value or "").strip() for value in cells):
+            continue  # a blank row (spaces or separators only)
+        if any(value.strip() for value in surplus):
             raise CableSchemaError(
-                f"series CSV {p.name} missing columns {sorted(missing)}; "
-                f"found {reader.fieldnames}."
+                f"series CSV {p.name}, line {reader.line_num}: more cells than the "
+                f"{len(reader.fieldnames or [])} columns of the header"
             )
-        for row in reader:
-            try:
-                times.append(float(row["time_s"]))
-                kx.append(float(row["curvature_x_1_m"]))
-                ky.append(float(row["curvature_y_1_m"]))
-                ten.append(float(row[tension_column]))
-                strain_cell = (row.get(strain_column) or "").strip()
-                any_strain |= bool(strain_cell)
-                strains.append(float(strain_cell) if strain_cell else np.nan)
-                t_cell = (row.get("temperature_C") or "").strip()
-                if t_cell:
-                    any_temp = True
-                    temp.append(float(t_cell))
-                else:
-                    temp.append(np.nan)
-            except (TypeError, ValueError) as error:
-                raise CableSchemaError(
-                    f"series CSV {p.name}, line {reader.line_num}: "
-                    "expected numeric history values"
-                ) from error
+        try:
+            times.append(parse_number(row["time_s"]))
+            kx.append(parse_number(row["curvature_x_1_m"]))
+            ky.append(parse_number(row["curvature_y_1_m"]))
+            ten.append(parse_number(row[tension_column]))
+            strain_cell = (row.get(strain_column) or "").strip()
+            any_strain |= bool(strain_cell)
+            strains.append(parse_number(strain_cell) if strain_cell else np.nan)
+            t_cell = (row.get("temperature_C") or "").strip()
+            if t_cell:
+                any_temp = True
+                temp.append(parse_number(t_cell))
+            else:
+                temp.append(np.nan)
+        except (TypeError, ValueError) as error:
+            raise CableSchemaError(
+                f"series CSV {p.name}, line {reader.line_num}: "
+                "expected numeric history values"
+            ) from error
     return LoadCaseSeries(
         time_s=np.asarray(times, dtype=np.float64),
         curvature_x_1_m=np.asarray(kx, dtype=np.float64),

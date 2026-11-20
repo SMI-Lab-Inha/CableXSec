@@ -409,9 +409,20 @@ def wire_slip_stress_bounds(
     )
     cphi = np.cos(layer.phi_wires - phi_bend)
     psi = np.arcsin(np.clip(np.abs(cphi), 0.0, 1.0))
-    upper = sigma0 * g * np.expm1(layer.mu * sin_a * psi)
+    # A capstan factor beyond the floating-point range is a bound no wire
+    # stress reaches (the compiled bounds of fast_slip give it as inf): held
+    # at _UNREACHABLE_CAP_PA, not an overflow error of this reference path.
+    with np.errstate(over="ignore"):
+        upper = np.minimum(
+            sigma0 * g * np.expm1(layer.mu * sin_a * psi), _UNREACHABLE_CAP_PA
+        )
     lower = -sigma0 * g * np.expm1(-layer.mu * sin_a * psi)
     return np.asarray(upper), np.asarray(lower)
+
+
+#: The tension friction bound of a wire whose capstan factor overflows [Pa]:
+#: finite, far above any wire stress, so the wire never slips.
+_UNREACHABLE_CAP_PA = 1.0e300
 
 
 def slip_onset_curvature(
