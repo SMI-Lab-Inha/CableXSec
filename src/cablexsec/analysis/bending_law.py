@@ -9,8 +9,12 @@ section law is an Iwan parallel model, which obeys Masing's rules exactly
 ([Iwan1966]). The signed capstan bound of [Papailiou1997] makes the interval
 of a wire asymmetric (its falling bound is the rising one times
 ``exp(-lam psi)``), so an Iwan law fitted to the virgin backbone misses the
-section law's loops by a residual (about 0.1 % of the moment range on
-bending cycles near full slip; global--local guide, Section 8). A piecewise-linear
+section law's loops by a residual: about 0.1 % of the moment range on
+bending cycles of one amplitude near full slip. On nested irregular
+histories it is larger: it peaks on reloading branches in the doubled
+transition zone and grows with the capstan factor, to 0.4-0.6 % of the
+moment range at ``lam`` about 0.09 (global--local guide, Section 8). The
+memory of earlier reversals is unaffected. A piecewise-linear
 virgin backbone ``M(kappa)`` with non-increasing tangent decomposes uniquely
 into parallel elastic, perfectly plastic elements:
 

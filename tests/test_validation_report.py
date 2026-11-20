@@ -35,20 +35,20 @@ def test_changed_wire_bending_fails_reported_comparison(monkeypatch):
 
 @needs_numba
 def test_bending_work_report_compares_identical_measured_paths_and_units():
-    row = next(r for r in run_validation._rows() if r.ident == "BM1-loop")
+    rows = {r.ident: r for r in run_validation._rows()}
+    row = rows["BM1-loop"]
     assert "matched experimental" in row.target
-    # Support-cut shear stack (xi 0.686 / 0.888): 69.7 J/m (+11.8 %), as
-    # registered before the run; the former stack gave 67.8 J/m (+8.8 %) and
-    # the former symmetric cap 70.4 J/m (+12.9 %). The 10 % threshold is
-    # unchanged.
-    assert "69.7 J/m vs measured 62.3 J/m" in row.value
-    assert "difference 11.8%" in row.value
+    # The clamping is identified on the measured work of range (a), not taken
+    # from the 0.3 MPa of the source FE (a tuning parameter of that model);
+    # range (b) is predicted: 44.4 J/m (-28.8 %). With the 0.3 MPa it was
+    # 69.7 J/m (+11.8 %). The 10 % threshold is unchanged and the row is gated.
+    assert "P0 190.1 kPa" in row.value
+    assert "44.4 J/m vs measured 62.3 J/m" in row.value
+    assert "difference -28.8%" in row.value
     assert "within 10%" in row.target
-    # The Menard test is an unreliable reference (doc/benchmarks.md): the
-    # row is stated, not gated, and keeps its verdict against the target.
-    assert row.status == (
-        "INFO (unreliable reference, stated not gated; registered target FAIL)"
-    )
+    assert row.status == "FAIL"
+    assert rows["BM1-ID"].status == "FAIL"
+    assert "BM1-loop-uniform" not in rows and "CH-GJ" not in rows
 
 
 _XSEC = run_validation.Row(

@@ -14,10 +14,12 @@ Targets were registered (doc/template_66kv.md Section 4.1, doc/benchmarks.md
    source's Table 2 (MDPE 0.46; copper 0.30 has no resolved conductor here).
    Pass criteria: half-height and knee moments within 30 % (figure reading),
    slopes within 15 %.
-2. Menard and Cartraud (2023), six measured ranges (Fig. 16), transferred
-   inputs (mu 0.2, P 0.3 MPa, bounded chain), core friction mu 0.2 for every
-   core contact as in the source FE (Section 5), no recalibration. Gate
-   BM1-loop: range (b) ordered RMSE < 5 % and matched cycle work within 10 %.
+2. Menard and Cartraud (2023), six measured ranges (Fig. 16), the inputs of
+   the source FE (mu 0.2, P 0.3 MPa, bounded chain), core friction mu 0.2 for
+   every core contact as in the source FE (Section 5), no recalibration
+   (reported). The gated rows identify the clamping instead (run_validation:
+   BM1-loop on range (a), BM1-ID on range (b)); the 0.3 MPa is a tuning
+   parameter of the source's own FE model.
 3. Su et al. (2026) 35 kV: no bending loop is published (axial and torsional
    results only; the analytical model omits friction), so no comparison.
 
@@ -337,7 +339,7 @@ def _menard_range(tag: str) -> tuple[np.ndarray, np.ndarray, float | None]:
 
 
 def _with_initial_pressure(
-    cable: cx.CableData, pressure: float, scope: str = "all_contacts"
+    cable: cx.CableData, pressure: float, scope: str = "all_contacts", tag: str = "b"
 ) -> cx.CableData:
     from cablexsec.cables.schema import InitialStateProperties  # noqa: PLC0415
 
@@ -346,7 +348,7 @@ def _with_initial_pressure(
             "initial_state": InitialStateProperties(
                 external_pressure_Pa=pressure,
                 identification="identified",
-                source="identified on Menard (2023) Fig. 16b cycle work",
+                source=f"identified on Menard (2023) Fig. 16{tag} cycle work",
                 calibration_scope=scope,
             )
         }
@@ -373,25 +375,16 @@ def _range_metrics(
 MENARD_FULL = CoreFrictionSpec(filler_profiles=True)
 
 
-def identify_then_predict(
-    spec: CoreFrictionSpec | None = MENARD_FULL,
-) -> dict[str, object]:
-    """Identify P0 on range (b) cycle work, then predict the other ranges.
-
-    Registered targets (doc/benchmarks.md, gap R1b): (b) ordered RMSE < 5 %;
-    (a), (c)-(f) matched cycle work within 20 % and ordered RMSE < 10 %.
-    Model: ``menard2023_filled.yaml``, bounded chain, mu 0.2 everywhere.
-    """
-    path = Path(cx.menard2023_yaml_path()).with_name("menard2023_filled.yaml")
-    base = cx.load_cable(path, geometry_override=None)
-    scope = "armour_only" if spec is None else "all_contacts"
-    target = _range_metrics(base, "b", spec)[0]
+def identify_initial_pressure(
+    base: cx.CableData, tag: str, spec: CoreFrictionSpec | None, scope: str
+) -> float:
+    """The initial clamping pressure [Pa] whose cycle work on range ``tag``
+    equals the measured one (bisection on the monotone work)."""
+    target = _range_metrics(base, tag, spec)[0]
 
     def excess(pressure: float) -> float:
-        return (
-            _range_metrics(_with_initial_pressure(base, pressure, scope), "b", spec)[1]
-            - target
-        )
+        cable = _with_initial_pressure(base, pressure, scope, tag)
+        return _range_metrics(cable, tag, spec)[1] - target
 
     low, high = 1.0e3, 3.0e5
     while excess(high) < 0.0:
@@ -404,7 +397,22 @@ def identify_then_predict(
             low = mid
         if high - low < 1e-4 * high:
             break
-    pressure = 0.5 * (low + high)
+    return 0.5 * (low + high)
+
+
+def identify_then_predict(
+    spec: CoreFrictionSpec | None = MENARD_FULL,
+) -> dict[str, object]:
+    """Identify P0 on range (b) cycle work, then predict the other ranges.
+
+    Registered targets (doc/benchmarks.md, gap R1b): (b) ordered RMSE < 5 %;
+    (a), (c)-(f) matched cycle work within 20 % and ordered RMSE < 10 %.
+    Model: ``menard2023_filled.yaml``, bounded chain, mu 0.2 everywhere.
+    """
+    path = Path(cx.menard2023_yaml_path()).with_name("menard2023_filled.yaml")
+    base = cx.load_cable(path, geometry_override=None)
+    scope = "armour_only" if spec is None else "all_contacts"
+    pressure = identify_initial_pressure(base, "b", spec, scope)
     cable = _with_initial_pressure(base, pressure, scope)
     rows = {}
     for tag in MENARD_RANGES:
