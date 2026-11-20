@@ -297,8 +297,10 @@ def test_fast_kernel_fall_backs(monkeypatch, lam):
     (out, _h, _s, stats, _f), _ = _run(
         dfm._distributed_kernel_fast, ax, ay, lam=lam, nodes=16, max_increment=math.inf
     )
-    assert stats[0] == -4  # samples 0-2 advanced, sample 3 not, after 12 halvings
-    np.testing.assert_allclose(out[:, :3], ref[0][0][:, :3], rtol=0, atol=1e-12)
+    # Sample 0 repeats the stress-free start (zero curvature) and needs no
+    # solve; samples 1-3 take the three calls, sample 4 fails after 12 halvings.
+    assert stats[0] == -5
+    np.testing.assert_allclose(out[:, :4], ref[0][0][:, :4], rtol=0, atol=1e-12)
 
 
 @python_kernels
