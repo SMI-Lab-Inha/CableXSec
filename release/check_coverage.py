@@ -30,6 +30,7 @@ KERNEL_TESTS = (
     "tests/test_fast_rainflow.py",
     "tests/test_fast_slip.py",
     "tests/test_compiled_counter.py",
+    "tests/test_fast_fatigue_path.py",
     "tests/test_progressive_friction.py",
     "tests/test_fretting_regime.py",
     "tests/test_strand_slip.py",

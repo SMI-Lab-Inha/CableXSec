@@ -151,6 +151,7 @@ Functional kernels operating on arrays; most are not called directly by users.
 | `sn_assessment.py` | `ComponentSCF` (axial, friction, normal and lateral bending factors, mean and dynamic) and the corrected Miner sum (`corrected_damage`, `corrected_damage_rows`): stress factor, mean-stress correction and thickness factor per rainflow cycle; used by the armour, conductor, sheath and tape routes |
 | `termination.py` | `TerminationSpec` and `termination_friction_increment`: anchored-wire clamp increment of the friction stress for a section near an end fitting or clamped stiffener root (`clamp_layer` solver along the principal, optionally also the minor, curvature direction, or `solver="along_wire"` with `stick`, `capstan` and `lateral_relief`; `curvature_field=` for a non-proportional field; far-field reference from the same discrete solver, so the sectional result is recovered away from the anchor) |
 | `fast_rainflow.py` | Compiled rainflow counting and Miner damage for many histories (see below) |
+| `fast_field.py` | Compiled one-pass assembly of the fixed-fibre wire stress field of `wire_stress_field` (see below) |
 | `long_term.py` | `compute_long_term_fatigue`: probability- and duration-weighted damage at fixed fibres before hotspot selection |
 | `sea_state_batch.py` | `run_sea_state_batch`: CableDyn runs with probabilities to weighted annual damage and life per section (reader, `compute_fatigue` with optional clamp, thermal, fretting and user S-N options, `compute_long_term_fatigue`), optional capacity check of every section and run (`CapacityBatchCheck`); spawned workers with one thread each, JSON specification, manifest with input digests; console command `cablexsec-batch` ([doc/global_local_guide.md](doc/global_local_guide.md), stage 1) |
 | `critical_plane.py` | `compute_swt_cycle`: sampled SWT critical planes for one closed cycle at one point |
@@ -303,8 +304,17 @@ kernels of their own, each with a reference path:
   `miner_rows` applies the same counter to the bulk Miner sums of
   `compute_fatigue` (including a termination stress-range factor) when
   `numba` is active; rows where the reference `miner_damage` would raise are
-  rerun on the reference path. `rainflow_counter="reference"` keeps the
+  rerun on the reference path. `fibre_miner_damage`, which `compute_fatigue`
+  uses, gives the same sums at every fixed fibre of a wire stress field
+  without forming the fibre histories: each history is reduced to its turning
+  points while it is formed (without branches), the reversal scan feeds the
+  three-point stack directly, and one count serves the unit and the
+  termination stress-range factor. `rainflow_counter="reference"` keeps the
   reference counter available.
+- `analysis/fast_field.py` (`assemble_wire_field`) forms the mean, radial and
+  edge components of the wire stress field in one pass, with the operations
+  of the NumPy expressions it replaces in the same order (the trigonometric
+  factors are evaluated by NumPy and passed in), so the field is unchanged.
 
 `fast_rainflow.rainflow_table` returns the same cycles with their sample
 indices (range, mean, count, start, end) for the fretting module, which also

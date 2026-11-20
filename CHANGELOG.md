@@ -10,6 +10,11 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Added
 
+- `validation/scripts/benchmark_throughput.py`: one-core throughput of sea-state fatigue on
+  the 66 kV template (direction-tied and distributed models, every wire or 12 positions, 4 or
+  32 fibres), the damage differences from an earlier build, and the sea-state batch time
+  against the worker count. `tests/test_fast_fatigue_path.py` checks the fused counting and
+  field assembly against the arithmetic they replace (no wall-clock assertion).
 - CableDyn range graphs and VIV lift files are read: `read_cabledyn_range_graph`
   (`<root>.Line<L>.range.out`, OpenFAST `<root>.CD.Line<L>.range.out`) and
   `read_cabledyn_lift` (`<root>.Line<L>.V.out`), each checked column by column
@@ -388,6 +393,26 @@ All notable changes to CableXSec are recorded in this file. The format follows
   paths; pass `friction_model` explicitly to keep the current behaviour.
 
 ### Changed
+
+- `compute_fatigue` is 2.5–2.8 times faster on the direction-tied model, with every damage
+  value bit for bit unchanged. One-hour sea state on the 66 kV template (20 000 samples, both
+  armour layers, numba, one thread, `validation/scripts/benchmark_throughput.py`): all 284
+  wires 0.73 s → 0.27 s (4 fibres) and 2.34 s → 0.84 s (32 fibres, 12.9 → 4.6 ns per fibre
+  sample); 12 positions per layer 0.068 s → 0.027 s. The fixed fibres of a layer are counted in
+  one compiled pass (`fast_rainflow.fibre_miner_damage`): each fibre history is reduced to its
+  turning points while it is formed, the reversal scan feeds the three-point stack directly,
+  and one count serves the unit and the termination stress-range factor; entries where the
+  reference sum would raise are recomputed on the reference path in the former order. The
+  stress field is assembled in one compiled pass (`fast_field.assemble_wire_field`, the NumPy
+  operations in the same order); without numba the NumPy path forms the local bending stress
+  once instead of twice. The distributed model is limited by its increment solver, as before
+  (29.2 s → 27.5 s on all wires with 4 fibres).
+- `SeaStateBatchOptions(workers=...)` and `cablexsec-batch --workers` have no upper limit
+  (`MAX_WORKERS` is removed); the pool starts at most one worker per run, and the 16
+  persistent numba cache slots of the workers stay as they were (a worker beyond them gets a
+  temporary cache). On 48 one-hour runs the batch takes 42.6 s with 1 worker and 26.9 s with
+  2 (107.6 s and 61.1 s before); the rest of the time at many workers is the start-up of each
+  worker (about 2 s: imports and loading the compiled kernels).
 
 - The laid-core and filler-profile contact loads follow the tension history by default:
   `compute_neutral_axes(..., core_loads="follow")` with `tension_N` or `contact_tension_N`, and

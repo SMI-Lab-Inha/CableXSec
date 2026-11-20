@@ -65,14 +65,38 @@ def _cap(
     mu: float,
     g: FloatArray,
 ) -> FloatArray:
+    """Bounds of every wire, rows (tension, compression); see :func:`_cap_into`."""
+    out = np.zeros((2, phi.size))
+    _cap_into(phi, angle, pressure, r_helix, n_wires, area, lay_angle, mu, g, out)
+    return out
+
+
+@njit(cache=True)
+def _cap_into(
+    phi: FloatArray,
+    angle: float,
+    pressure: float,
+    r_helix: float,
+    n_wires: int,
+    area: float,
+    lay_angle: float,
+    mu: float,
+    g: FloatArray,
+    out: FloatArray,
+) -> None:
     # Row 0: tension bound sigma0 g expm1(lam psi); row 1: compression bound
     # sigma0 g (1 - exp(-lam psi)) (capstan on the wire's own force).
-    out = np.zeros((2, phi.size))
     if pressure <= 0.0:
-        return out
+        for w in range(phi.size):
+            out[0, w] = 0.0
+            out[1, w] = 0.0
+        return
     sin_a = abs(math.sin(lay_angle))
     if sin_a < 1.0e-12:
-        return out
+        for w in range(phi.size):
+            out[0, w] = 0.0
+            out[1, w] = 0.0
+        return
     width = 2.0 * math.pi * r_helix / n_wires
     sigma0 = r_helix * pressure * width * math.cos(lay_angle) / (area * sin_a**2)
     for w in range(phi.size):
@@ -82,7 +106,6 @@ def _cap(
         psi = math.asin(c)
         out[0, w] = sigma0 * g[w] * math.expm1(mu * sin_a * psi)
         out[1, w] = -sigma0 * g[w] * math.expm1(-mu * sin_a * psi)
-    return out
 
 
 @njit(cache=True)
@@ -102,7 +125,9 @@ def _stress_kernel(
     n_total: int,
 ) -> FloatArray:
     # phi and g hold the evaluated wires; n_total is the layer's wire count,
-    # which sets the tributary width of each wire.
+    # which sets the tributary width of each wire. The bounds are kept in
+    # place and recomputed only when the bending direction or the pressure
+    # changes.
     n_w = phi.size
     n_t = kx.size
     stress = np.empty((n_w, n_t))
@@ -118,7 +143,6 @@ def _stress_kernel(
     cur_angle = math.nan
     cur_pressure = math.nan
     cur_cap = np.zeros((2, n_w))
-    cap = np.zeros((2, n_w))
     for i in range(n_t):
         x = kx[i]
         y = ky[i]
@@ -133,35 +157,43 @@ def _stress_kernel(
         else:
             blend = magnitude / threshold
         if not (held == held_angle and p == held_pressure):
-            held_cap = _cap(phi, held, p, r_helix, n_total, area, lay_angle, mu, g)
+            _cap_into(phi, held, p, r_helix, n_total, area, lay_angle, mu, g, held_cap)
             held_angle = held
             held_pressure = p
         if blend > 0.0:
             if not (current == cur_angle and p == cur_pressure):
-                cur_cap = _cap(
-                    phi, current, p, r_helix, n_total, area, lay_angle, mu, g
+                _cap_into(
+                    phi, current, p, r_helix, n_total, area, lay_angle, mu, g, cur_cap
                 )
                 cur_angle = current
                 cur_pressure = p
-            for s in range(2):
-                for w in range(n_w):
-                    cap[s, w] = (1.0 - blend) * held_cap[s, w] + blend * cur_cap[s, w]
+            for w in range(n_w):
+                upper = (1.0 - blend) * held_cap[0, w] + blend * cur_cap[0, w]
+                lower = (1.0 - blend) * held_cap[1, w] + blend * cur_cap[1, w]
+                drive = dm0[w] * x + dm1[w] * y
+                trial = force[w] + k * (drive - old_drive[w])
+                if trial > upper:
+                    force[w] = upper
+                elif trial < -lower:
+                    force[w] = -lower
+                else:
+                    force[w] = trial
+                old_drive[w] = drive
+                stress[w, i] = force[w]
         else:
-            for s in range(2):
-                for w in range(n_w):
-                    cap[s, w] = held_cap[s, w]
-        for w in range(n_w):
-            drive = dm0[w] * x + dm1[w] * y
-            inc = drive - old_drive[w]
-            trial = force[w] + k * inc
-            if trial > cap[0, w]:
-                force[w] = cap[0, w]
-            elif trial < -cap[1, w]:
-                force[w] = -cap[1, w]
-            else:
-                force[w] = trial
-            old_drive[w] = drive
-            stress[w, i] = force[w]
+            for w in range(n_w):
+                upper = held_cap[0, w]
+                lower = held_cap[1, w]
+                drive = dm0[w] * x + dm1[w] * y
+                trial = force[w] + k * (drive - old_drive[w])
+                if trial > upper:
+                    force[w] = upper
+                elif trial < -lower:
+                    force[w] = -lower
+                else:
+                    force[w] = trial
+                old_drive[w] = drive
+                stress[w, i] = force[w]
     return stress
 
 

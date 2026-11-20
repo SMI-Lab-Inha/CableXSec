@@ -289,9 +289,16 @@ def test_compressive_material_force_is_named(tmp_path, cable, stiffness):
         run_sea_state_batch(cable, runs, [SectionRequest("a", 2.0)], options=options)
 
 
-def test_worker_cap(cable):
+@pytest.mark.parametrize("workers", [0, -1, True, 2.0])
+def test_worker_count_must_be_a_positive_integer(workers):
     with pytest.raises(CableInputError, match="workers"):
-        SeaStateBatchOptions(workers=99)
+        SeaStateBatchOptions(workers=workers)
+
+
+def test_worker_count_has_no_library_cap():
+    # The machine sets the useful count; the pool starts one worker per run
+    # at most.
+    assert SeaStateBatchOptions(workers=99).workers == 99
 
 
 def test_tangent_placement_reaches_the_reader(tmp_path, cable):

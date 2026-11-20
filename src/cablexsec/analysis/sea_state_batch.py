@@ -38,17 +38,18 @@ and section named.
 
 Parallel execution
 ------------------
-Runs are processed in worker processes (``workers``, at most
-:data:`MAX_WORKERS`), each limited to one numerical thread. Each worker keeps
-its compiled kernels in a numba cache of its own: a slot directory
-``slot-<i>`` under ``cablexsec/numba-batch`` in the user cache directory, or
-under ``CABLEXSEC_BATCH_CACHE_DIR`` when that is set, which later batches
-reuse. Each worker locks its slot itself for as long as it runs, so no two
-processes write one cache; a batch beside another takes the next free slots,
-and a worker without one gets a temporary cache. Results do not depend on the
-worker count. The output directory, if given, must not exist: results are
-written once, with a manifest of SHA-256 digests of every input file, the
-cable definition and the options.
+Runs are processed in worker processes (``workers``; the pool holds at most
+one worker per run), each limited to one numerical thread. The worker count
+has no upper limit here: choose it for the machine. Each worker keeps its
+compiled kernels in a numba cache of its own: a slot directory ``slot-<i>``
+under ``cablexsec/numba-batch`` in the user cache directory, or under
+``CABLEXSEC_BATCH_CACHE_DIR`` when that is set, which later batches reuse.
+Each worker locks its slot itself for as long as it runs, so no two processes
+write one cache; a batch beside another takes the next free slots, and a
+worker without one (there are 16) gets a temporary cache. Results do not
+depend on the worker count. The output directory, if given, must not exist:
+results are written once, with a manifest of SHA-256 digests of every input
+file, the cable definition and the options.
 """
 
 from __future__ import annotations
@@ -110,8 +111,6 @@ from cablexsec.io.cabledyn import (
 FloatArray = NDArray[np.float64]
 TensionBasis = Literal["auto", "true", "effective"]
 
-#: Hard cap on worker processes of one batch.
-MAX_WORKERS = 8
 _THREAD_VARIABLES = (
     "OMP_NUM_THREADS",
     "OPENBLAS_NUM_THREADS",
@@ -123,10 +122,9 @@ _NUMBA_CACHE_VARIABLE = "NUMBA_CACHE_DIR"
 #: Overrides the folder of the persistent worker caches (_batch_cache_directory).
 _BATCH_CACHE_VARIABLE = "CABLEXSEC_BATCH_CACHE_DIR"
 #: Persistent worker cache slots; a worker beyond them gets a temporary cache.
-_CACHE_SLOTS = 2 * MAX_WORKERS
+_CACHE_SLOTS = 16
 
 __all__ = [
-    "MAX_WORKERS",
     "CapacityBatchCheck",
     "SeaStateBatchOptions",
     "SeaStateBatchResult",
@@ -275,9 +273,9 @@ class SeaStateBatchOptions:
         if (
             isinstance(self.workers, bool)
             or not isinstance(self.workers, int)
-            or not 1 <= self.workers <= MAX_WORKERS
+            or self.workers < 1
         ):
-            raise CableInputError(f"workers must be an integer in [1, {MAX_WORKERS}]")
+            raise CableInputError("workers must be a positive integer")
         # The fatigue and long-term options are checked here, before any run is
         # read, as compute_fatigue and compute_long_term_fatigue check them.
         for name, count, low in (
