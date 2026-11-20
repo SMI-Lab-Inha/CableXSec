@@ -556,6 +556,8 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Fixed
 
+- The provenance of `compute_coiling` lists CH-CR as its only gate. It also named CH-EI, CH-P
+  and CH-D, rows that were removed before 0.1.0 and no longer exist in the validation report.
 - `read_cabledyn_sections` reads a section placed on a deck node from that node's channels
   alone: `CurvX`/`CurvY` on the components route, and `Ten`, `Twist` and `Torq` on every route.
   Before, every section needed the channels of both nodes of its element, so a station written

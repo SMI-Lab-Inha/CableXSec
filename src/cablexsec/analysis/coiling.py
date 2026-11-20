@@ -137,7 +137,7 @@ _PROVENANCE = Provenance(
         "[LiVaz2021b]",
         "[DNVGL-RP-0360]",
     ),
-    gates=("CH-EI", "CH-P", "CH-D", "CH-CR"),
+    gates=("CH-CR",),
     limitations=(
         "uniform curvature and twist; no transition into the coil, no tank-floor "
         "or coil-on-coil contact, no weight of the coils above",

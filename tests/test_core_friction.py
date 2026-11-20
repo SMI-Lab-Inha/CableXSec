@@ -485,7 +485,17 @@ def test_coupling_and_provenance(cable):
     plain = xsec_stiffness(cable, 0.002, tension_N=T)
     cored = xsec_stiffness(cable, 0.002, tension_N=T, core_friction=SPEC)
     assert cored.EI_max_Nm2 > plain.EI_max_Nm2
-    assert cored.EI_tangent_Nm2 >= plain.EI_tangent_Nm2
+    # At 0.002 1/m the section is in full slip with and without the cores:
+    # both tangents are EI_min, to round-off. They differ by 39 ulps
+    # (6.5e-15 relative), with a sign that changes with the NumPy build
+    # (+39 with 2.4.6, -39 with 2.5.4); the largest distance of a tangent
+    # from EI_min is 54 ulps (cored, 2.4.6). "The cores do not lower the
+    # tangent" therefore holds to round-off, not bit for bit: 128 ulps of
+    # EI_min (2.8e-14 relative).
+    noise = 128 * np.spacing(plain.EI_min_Nm2)
+    assert abs(plain.EI_tangent_Nm2 - plain.EI_min_Nm2) <= noise
+    assert abs(cored.EI_tangent_Nm2 - cored.EI_min_Nm2) <= noise
+    assert cored.EI_tangent_Nm2 >= plain.EI_tangent_Nm2 - noise
     res = cx.compute_mkappa(cable, _loop(0.1), tension_N=T, core_friction=SPEC)
     assert "laid-core stick-slip" in res.provenance.method
     assert "[KarlsenHusoy2026]" in res.provenance.citations
