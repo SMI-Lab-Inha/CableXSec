@@ -64,11 +64,14 @@ point on the bound. Both converge to the same equations (tolerance
 ``1e-12 h`` times the largest force term). Sample increments larger than
 ``max_increment`` (in units of ``kappa_on``) are subdivided by linear
 interpolation of curvature and pressure; an increment that fails to converge is
-repeated with twice as many substeps. With numba the increments are solved by
+repeated with twice as many substeps. A sample that repeats the last one
+(curvature and pressure unchanged) keeps the state under the Coulomb bound,
+without a solve; under a friction law it is solved, since a node can heal
+while it sticks. With numba the increments are solved by
 a faster kernel with the same equations, tests and fall-backs: Newton starts
-from the increment of the last substep and the factorisation of its Jacobian
-is kept between solves (section "Fast compiled kernel"); the results agree
-with the reference kernel to round-off.
+from the increment of the last substep (from zero on a repeated sample) and
+the factorisation of its Jacobian is kept between solves (section "Fast
+compiled kernel"); the results agree with the reference kernel to round-off.
 
 Full slip: when every node of an increment is on its bound, the equations fix
 the forces, the tractions and ``u - p``, but not a slide ``c`` common to the
@@ -1034,8 +1037,15 @@ def _distributed_kernel(
             smfac[j] = mfac[j]
             slstate[0, j] = lstate[0, j]
             slstate[1, j] = lstate[1, j]
-        ok = False
-        for _attempt in range(_MAX_HALVINGS + 1):
+        # A sample that repeats the last one under the Coulomb bound (no
+        # friction law) leaves the state as it is: its increment is zero.
+        # Solving it would only move the segment forces by round-off, and
+        # those moves are counted as stress cycles at a constant curvature.
+        still = law is None and ax1 == ax0 and ay1 == ay0 and rho1 == rho0
+        if still:
+            nsub = 0
+        ok = still
+        for _attempt in range(0 if still else _MAX_HALVINGS + 1):
             ok = True
             if dt_path is not None:
                 lparams[4] = dt_path[i] / nsub
@@ -1921,9 +1931,21 @@ def _distributed_kernel_fast(
             smfac[j] = mfac[j]
             slstate[0, j] = lstate[0, j]
             slstate[1, j] = lstate[1, j]
-        ok = False
-        for _attempt in range(_MAX_HALVINGS + 1):
+        # As in the reference kernel, a repeated sample under the Coulomb bound
+        # keeps the state. Under a friction law it is solved, its increment
+        # started from zero as in the reference (its exact increment absent a
+        # change of the law state), not from the increment of the last
+        # substep, which converges to a drift of the Newton tolerance.
+        repeat = ax1 == ax0 and ay1 == ay0 and rho1 == rho0
+        still = repeat and law is None
+        if still:
+            nsub = 0
+        ok = still
+        for _attempt in range(0 if still else _MAX_HALVINGS + 1):
             ok = True
+            if repeat:
+                for j in range(n):
+                    vlast[j] = 0.0
             if dt_path is not None:
                 lparams[4] = dt_path[i] / nsub
             for s in range(1, nsub + 1):

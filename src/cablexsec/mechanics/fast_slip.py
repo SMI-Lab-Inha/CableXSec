@@ -32,6 +32,7 @@ from cablexsec._numba import HAVE_NUMBA, njit
 from cablexsec.exceptions import CableInputError
 from cablexsec.mechanics.friction_law import (
     FrictionLaw,
+    _expm1_or_inf,
     _pressure_factor,
     _return_stress,
     _slip_magnitude,
@@ -104,7 +105,7 @@ def _cap_into(
         if c > 1.0:
             c = 1.0
         psi = math.asin(c)
-        out[0, w] = sigma0 * g[w] * math.expm1(mu * sin_a * psi)
+        out[0, w] = sigma0 * g[w] * _expm1_or_inf(mu * sin_a * psi)
         out[1, w] = -sigma0 * g[w] * math.expm1(-mu * sin_a * psi)
 
 
@@ -335,7 +336,7 @@ def _stress_kernel_law(
             drive = dm0[w] * x + dm1[w] * y
             trial = force[w] + k * (drive - old_drive[w])
             m = ms if healed[w] else md
-            upper = c0 * math.expm1(m * xh) + c1 * math.expm1(m * xc)
+            upper = c0 * _expm1_or_inf(m * xh) + c1 * _expm1_or_inf(m * xc)
             lower = -(c0 * math.expm1(-m * xh) + c1 * math.expm1(-m * xc))
             if trial > upper or trial < -lower:
                 side = 1.0 if trial > 0.0 else -1.0
