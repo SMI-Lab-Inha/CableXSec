@@ -1567,7 +1567,7 @@ held-out rows chosen in advance. No band, target or source input was changed.
 | Z-ID (Zeidan 2025, four-point, reading R2) | slip tangent (ascending branch, 0 to 0.8 of the amplitude) 8.65–9.70 kN·m²; stick secant 113–143 kN·m² (plotted curvature) | slip tangent 2.50–2.59 kN·m²; stick secant 215 kN·m²; moment range −33 to −46 % at the identified initial pressure of 760 kPa |
 | WITZ-ID, G8-W1, G8-W3 (Witz 1996, 300 bar) | width 1990–2164 N·m; energy/width 1.44–1.57 1/m | width 1356 N·m; energy/width 2.01 1/m (energy −12.8 %, inside its band) |
 | HU-3PB (Hu et al. 2022, conductor) | loop area 3.185 N·m/m | +36.7 % (Papailiou cap), +64.4 % (Karlsen–Husøy amplitude) |
-| BM1-loop, BM1-ID (Ménard and Cartraud 2023) | loops at one clamping | work +11.8 % at ±0.10 1/m after the published calibration; with the initial pressure identified on range (b), ranges (a) and (c) +28.5 % and +26.2 % |
+| BM1-loop, BM1-ID (Ménard and Cartraud 2023) | loops at one clamping | BM1-loop: clamping identified on range (a), range (b) work −28.8 % and ordered RMSE 5.45 %; BM1-ID: clamping identified on range (b), ranges (a) and (c) work +28.5 % and +26.2 %. No single clamping fits both the small and the large ranges. |
 
 **Mechanisms tested, and why each was ruled out.**
 
