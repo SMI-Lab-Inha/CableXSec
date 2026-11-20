@@ -10,6 +10,30 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Added
 
+- `stick_support` keyword on `compute_mkappa`, `compute_stiffness`,
+  `SectionLaw.from_cable`, `cable_to_mkappa_specs` and `xi_for_layer`.
+  - It selects the model of the armour stick coefficient ξ. The default,
+    `"yun_stack"`, is unchanged, bit for bit.
+  - The opt-in `"annulus"` (`cablexsec.mechanics.stick_support`) solves the
+    mode-1 antiplane shear of the layered polymer annulus under the armour,
+    with its actual inner boundary (rigid support, free bore or axis), plus
+    the concentration of the load on each wire's width.
+  - On thin layers over a stiff support it agrees with the default within a
+    few per cent. On a hollow-core verification tube it gives the sectional ξ
+    of a line-contact finite-element model within 4 %, where the default is
+    about twice too stiff.
+  - New stated row XI-FE (`validation/scripts/check_stick_support_fe.py`,
+    `validation/paper_data/line_contact_tube_*`).
+  - Closed-form limits and an independent finite-difference solution in
+    `tests/test_stick_support.py`.
+- Gap G8 documented as a known limitation for 0.2.0 (doc/benchmarks.md,
+  VALIDATION.md, local analysis guide).
+  - It covers what fails and by how much, and the eight mechanisms tested with
+    source inputs and why each was ruled out.
+  - It states where the model is reliable (rope-filler bundles) and where it
+    under-predicts the slip stiffness (compact solid-filler bundles), the
+    direction of the error, and the data that would settle it.
+
 - `validation/scripts/benchmark_throughput.py`: one-core throughput of sea-state fatigue on
   the 66 kV template (direction-tied and distributed models, every wire or 12 positions, 4 or
   32 fibres), the damage differences from an earlier build, and the sea-state batch time

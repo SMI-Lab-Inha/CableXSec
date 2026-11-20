@@ -208,6 +208,7 @@ from cablexsec.mechanics.shell_bending import (
     shell_wall_stress,
 )
 from cablexsec.mechanics.stiffness import (
+    STICK_SUPPORTS,
     axial_torsional_matrix,
     bending_stiffness_by_layer,
     ea_fixed,
@@ -382,7 +383,9 @@ class StiffnessResult:
         return self.ei_max_Nm2
 
 
-def compute_stiffness(cable: CableData) -> StiffnessResult:
+def compute_stiffness(
+    cable: CableData, *, stick_support: str = "yun_stack"
+) -> StiffnessResult:
     r"""Cross-section axial/torsional/bending stiffness bounds for a cable.
 
     Assembles the axial-twist 2x2 reduction, individual bending, and
@@ -396,6 +399,10 @@ def compute_stiffness(cable: CableData) -> StiffnessResult:
     ----------
     cable : CableData
         A fully-specified cable.
+    stick_support : {"yun_stack", "annulus"}, optional
+        Stick-support model of ξ and so of `ei_max_Nm2`
+        (:func:~cablexsec.mechanics.stiffness.xi_for_layer); the default
+        is the series stack of [Yun2020], `"annulus"` is opt-in.
 
     Returns
     -------
@@ -419,8 +426,15 @@ def compute_stiffness(cable: CableData) -> StiffnessResult:
     True
     """
     require_fully_specified(cable, "compute_stiffness")
+    if not isinstance(stick_support, str) or stick_support not in STICK_SUPPORTS:
+        raise CableSchemaError(
+            f"stick_support must be one of {STICK_SUPPORTS}, got {stick_support!r}"
+        )
     at = axial_torsional_matrix(cable)
-    xi_map = {lyr.name: xi_for_layer(cable, lyr.name) for lyr in cable.helical_layers}
+    xi_map = {
+        lyr.name: xi_for_layer(cable, lyr.name, stick_support=stick_support)
+        for lyr in cable.helical_layers
+    }
     bending = bending_stiffness_by_layer(cable, xi_map)
     return StiffnessResult(
         cable_name=cable.cable.name,
@@ -634,6 +648,7 @@ def _prepare_mkappa_law(
     radial_state: CableRadialState | None,
     core_spec: CoreFrictionSpec | None,
     progressive: ProgressiveFriction | None,
+    stick_support: str = "yun_stack",
 ) -> _MkappaLaw:
     """Layer specifications, full-slip stiffness and core model of the law."""
     if core_spec is not None and contact_model == "solved" and radial_state is None:
@@ -646,6 +661,7 @@ def _prepare_mkappa_law(
         contact_model=contact_model,
         section_state=section_state,
         radial_state=radial_state,
+        stick_support=stick_support,
     )
     ei_min = ei_min_slip(
         cable,
@@ -686,6 +702,7 @@ def compute_mkappa(
     friction_law: FrictionLaw | None = None,
     time_s: FloatArray | None = None,
     core_loads: CoreLoadMode = "follow",
+    stick_support: str = "yun_stack",
 ) -> MkappaResult:
     r"""Moment-curvature hysteresis of a cable over a curvature history.
 
@@ -816,6 +833,15 @@ def compute_mkappa(
         slip scale of an exported law assumes; ``"reference"`` holds them at
         the first sample (the earlier behaviour). Without a tension history
         the loads are those of the reference state either way.
+    stick_support : {"yun_stack", "annulus"}, optional
+        Stick-support model of the armour stick coefficient ξ
+        (:func:`~cablexsec.mechanics.stiffness.xi_for_layer`). The default,
+        ``"yun_stack"``, is the series thin-layer stack of [Yun2020].
+        ``"annulus"`` (opt-in) solves the shear of the layered polymer annulus
+        under the armour with its actual inner boundary. It matters for soft
+        or hollow cores, and moves ξ by a few per cent on thin layers over a
+        stiff support. It changes the stick branch, ``EI_max`` and the
+        slip-onset curvature, not ``EI_min``.
 
     Returns
     -------
@@ -855,6 +881,10 @@ def compute_mkappa(
     if core_loads not in CORE_LOAD_MODES:
         raise CableSchemaError(
             f"core_loads must be one of {CORE_LOAD_MODES}, got {core_loads!r}"
+        )
+    if not isinstance(stick_support, str) or stick_support not in STICK_SUPPORTS:
+        raise CableSchemaError(
+            f"stick_support must be one of {STICK_SUPPORTS}, got {stick_support!r}"
         )
     if mu is not None:
         require_finite(mu, "mu")
@@ -962,6 +992,7 @@ def compute_mkappa(
         radial_state=radial_state,
         core_spec=resolve_core_friction(core_friction),
         progressive=progressive_settings,
+        stick_support=stick_support,
     )
     if tension_history is not None:
         # pressure only: the crossing loads (unused here) refuse some layer stacks

@@ -1,0 +1,11 @@
+# Sectional stick coefficient of the verification tubes in a three-dimensional line-contact finite-element model
+# (row XI-FE, model to model). 8-node hexahedra with incompatible modes; each wire's generators facing the core
+# and the sheath are node-based contact surfaces on the polymer (zero clearance); Coulomb 5 on the core face
+# (full stick at the applied curvature), frictionless sheath face; tension 40 kN, external pressure 0.30 MPa;
+# rigid end plates; one quarter cycle to 0.015 1/m. The value is the in-phase wire-tension amplitude at the
+# middle element layer divided by E A_w R cos^2(alpha) kappa, with kappa the local curvature from the core
+# section rotations and A_w the meshed wire section, an octagon inscribed in the round wire (area_factor of
+# pi d^2 / 4). Mesh: 100 element layers per pitch, 80 elements around the core.
+case,yaml,pitches,xi_fe,area_factor,fit_rms_over_amplitude
+hollow,line_contact_tube_hollow.yaml,3,0.19819,0.90032,0.00017
+copper,line_contact_tube_copper.yaml,2,0.54042,0.90032,0.0041

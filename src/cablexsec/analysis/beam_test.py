@@ -93,6 +93,7 @@ from cablexsec.mechanics.distributed_friction import distributed_friction_histor
 from cablexsec.mechanics.progressive_friction import ProgressiveFriction
 from cablexsec.mechanics.radial_cable import CableRadialState
 from cablexsec.mechanics.section_state import SectionState
+from cablexsec.mechanics.stiffness import require_stick_support
 from cablexsec.mechanics.strand_slip import (
     CAP_SHAPES,
     CapShape,
@@ -235,6 +236,7 @@ class SectionLaw:
         progressive: ProgressiveFriction | None = None,
         distributed_nodes_per_pitch: int | None = None,
         distributed_max_increment: float = SECTION_LAW_MAX_INCREMENT,
+        stick_support: str = "yun_stack",
     ) -> SectionLaw:
         """The :func:`~cablexsec.api.compute_mkappa` law of a cable.
 
@@ -264,8 +266,13 @@ class SectionLaw:
         The law reads the cable's own materials (its ``materials:`` block)
         when it is built and every time it is evaluated, also outside a call
         of :func:`simulate_bending_test`.
+
+        ``stick_support`` selects the armour stick-support model, as in
+        :func:`~cablexsec.api.compute_mkappa`: ``"yun_stack"`` by default,
+        ``"annulus"`` opt-in.
         """
         require_fully_specified(cable, "SectionLaw.from_cable")
+        require_stick_support(stick_support)
         require_finite(tension_N, "tension_N")
         require_finite(phi_bend, "phi_bend")
         if friction_model not in ("direction_tied", "progressive", "distributed"):
@@ -301,6 +308,7 @@ class SectionLaw:
             radial_state=radial_state,
             core_spec=resolve_core_friction(core_friction),
             progressive=settings,
+            stick_support=stick_support,
         )
         ei_stick = sum(layer.EI_stick for layer in law.layers) + law.ei_min
         if law.core_model is not None:

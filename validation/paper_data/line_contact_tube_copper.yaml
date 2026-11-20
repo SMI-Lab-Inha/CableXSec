@@ -1,0 +1,48 @@
+---
+# SPDX-License-Identifier: Apache-2.0
+# Armoured tube of the model-to-model stick-coefficient row XI-FE with an axially stiff core: a copper tube
+# under an MDPE layer, armour and sheath as line_contact_tube_hollow.yaml. A verification geometry, not a
+# real cable.
+cable:
+  name: "Line-contact verification tube, copper core"
+  description: "Copper tube 10-30 mm, MDPE 30-40 mm, 40 steel wires of 5 mm at 15 deg, HDPE sheath 45-50 mm"
+  manufacturer: "Verification geometry"
+  source_document: "CableXSec row XI-FE (model to model)"
+
+initial_state:
+  external_pressure_Pa: 0.30e6
+  identification: assumed_bound
+  bounds_Pa: [0.0, 0.48e6]
+  source: "Verification geometry; the stick coefficient does not depend on the clamping"
+
+layers:
+  - name: copper_tube
+    layer_type: cylindrical
+    material: copper_janocha2024
+    r_inner_m: 0.010
+    r_outer_m: 0.030
+    source: "verification geometry"
+
+  - name: core_tube
+    layer_type: cylindrical
+    material: mdpe_janocha2024
+    r_inner_m: 0.030
+    r_outer_m: 0.040
+    source: "verification geometry"
+
+  - name: armour
+    layer_type: helical
+    material: steel_janocha2024
+    n_wires: 40
+    d_wire_m: 0.005
+    r_helix_m: 0.0425
+    lay_angle_deg: 15.0
+    lay_direction: left_hand
+    source: "verification geometry"
+
+  - name: sheath
+    layer_type: cylindrical
+    material: hdpe_janocha2024
+    r_inner_m: 0.045
+    r_outer_m: 0.050
+    source: "verification geometry"

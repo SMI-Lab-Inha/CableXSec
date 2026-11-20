@@ -81,6 +81,7 @@ afterwards: a comparison that misses its target is reported as failed.
 | **DAI18-RS** | Re-stick peak at every reversal, seven loops; spring-slider with `stick_time_s = 0` against the default `inf` | Dai, Sævik and Ye (2018), Figs 4a, 4c | measured 14 of 14 strokes; `0`: 14 of 14; `inf`: 0 of 14 | all; all; none | Pass |
 | **DAI18-T1** | Test 1 loops (8, 4, 1 MPa) against the spring-slider with the printed coefficients | Dai, Sævik and Ye (2018), Fig. 4a | peak −1.8 to +1.0 %; level −3.3 to +12.3 %; work −1.9 to −2.6 %; no gradual decay after the peak | stated, not gated | Info |
 | **DAI18-T3** | Test 3 loops (0.01–0.2 Hz) against the rate-independent spring-slider | Dai, Sævik and Ye (2018), Fig. 4c | dynamic level −3.5 to +0.3 %; static peak +10.6 % at 0.2 Hz not represented | stated, not gated | Info |
+| **XI-FE** | Armour stick coefficient of two verification tubes (hollow core; copper core), default and opt-in stick support | three-dimensional line-contact finite-element model (model to model) | hollow: `annulus` +4.3 %, default +104 %; copper: +8.8 %, +5.9 % | stated, not gated | Info |
 | **BM5** | Conductor temperature of the CIGRE TB 880 export cable, from the source's tabulated network inputs (`compute_thermal` on the cable itself is not yet comparable) | Poradowski tabulated thermal network; FEM 89.62 °C | 84.4 °C | ≤90 °C, about 5 K low | Partial |
 | **BM4** | Axial stiffness of a population of umbilicals | Sævik and Bruaseth (2005) | mean ratio about 1.45 | <1.25 | Not validated |
 
@@ -105,6 +106,16 @@ quantities are those of the passing rows. In particular:
   no-slip bound since the armour shear stack stops at its support (Z-EI, diagnosed on), but the
   identified loops miss the moment range by a third or more (Z-ID); absolute dissipation
   predictions therefore carry the uncertainty shown by WITZ-ID and Z-ID.
+- **Known limitation (gap G8, closed for 0.2.0).**
+  - On a compact, solid-filler three-core cable (Zeidan 2025), the slip-branch tangent is
+    about 3.5 times softer than measured (Z-ID: 2.5–2.6 against 8.65–9.70 kN·m²).
+  - With rope fillers (Ménard and Cartraud 2023), the full-slip stiffness is right (BM1).
+  - Eight mechanisms, each registered and tested with source inputs, were ruled out:
+    stick-support compliance, residual pressure, neighbour-wire contact, a compacted bundle,
+    end anchorage, conductor compaction, the metric, and the insulation modulus
+    (doc/benchmarks.md, "Known limitation: slip-branch stiffness of compact sections").
+  - Direction of the error: conservative for curvature-driven quantities, not conservative
+    for the section moment and the interface loads.
 - The termination-corrected (anchored-wire) armour stress is an upper estimate that the
   published near-termination measurements do not support (SV11-PLANE, SV11-GJ); the sectional
   result is the one closest to them (median 1.19, 12 of 14 in band, against the 1.18 bound). At

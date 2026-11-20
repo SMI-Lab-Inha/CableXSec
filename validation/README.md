@@ -38,6 +38,7 @@ registered measured comparisons listed in [`VALIDATION.md`](../VALIDATION.md#sum
 | `check_saevik2011.py` | Sævik (2011) and Gjøsteen et al. (2027) FBG armour-stress comparison (SV11 rows) |
 | `check_core_friction.py` | Laid-core friction checks and published comparisons |
 | `check_g8_gradual_reversal.py` | Gradual stick-to-slip transition against Witz, Hu et al. and Ménard |
+| `check_stick_support_fe.py` | Armour stick coefficient of two verification tubes against a line-contact finite-element model, default and opt-in stick support (XI-FE) |
 | `check_t1_test_arrangement.py` | Benchmarks in their published test arrangements (three-point, four-point) |
 | `check_out_von_morgen.py` | Frictionless slip bounds of Out and von Morgen (1997) and Out (1989) |
 | `check_conductor_strand_slip.py` | Conductor strand slip and the Hu et al. (2022) conductor loop |

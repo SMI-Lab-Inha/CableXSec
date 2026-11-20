@@ -97,6 +97,17 @@ verification gates and active limitations. Read it.
   validated.
 - The IEC three-core mutual-heating factor. (Transient heat transfer through
   the IEC 60287 ladder is available, Section 7.3.)
+- The slip-branch bending stiffness of a compact, solid-filler three-core
+  cable (known limitation, gap G8; [benchmarks.md](benchmarks.md), "Known
+  limitation: slip-branch stiffness of compact sections").
+  - On the one such measured cable, the model's slip tangent is about 3.5
+    times softer than measured.
+  - On a cable with rope fillers, EI_min matches the measurement.
+  - A slip branch that is too soft over-predicts the curvature for a given
+    moment, which is conservative for curvature-driven quantities. It
+    under-predicts the section moment and the loads it puts on interfaces (bend
+    stiffener, hang-off, the contacts inside the section), which is not
+    conservative.
 
 ## 3. Installation
 
@@ -844,6 +855,25 @@ for state in response.states:
 - `W_diss_J_per_m` is friction work over the whole supplied history, including
   conditioning cycles. For closed-cycle loss use `loop.work` and
   `cablexsec.analysis.curve_comparison.insert_cycle_crossings`.
+- `stick_support` selects the model of the armour stick coefficient ξ. It is
+  accepted by `compute_mkappa`, `compute_stiffness`, `SectionLaw.from_cable`
+  and `xi_for_layer`.
+  - The default, `"yun_stack"`, is the series thin-layer stack of Yun et al.
+    (2020).
+  - `"annulus"` (opt-in) solves the shear of the layered polymer annulus
+    under the armour with its actual inner boundary: rigid at a helical layer
+    or laid cores, free at an empty bore, regular at the axis. It adds the
+    concentration of the load on each wire's width.
+  - On thin layers over a stiff support the two agree within a few per cent.
+    On a soft or hollow core, `"annulus"` is much softer, because the core
+    shears as a beam.
+  - On a hollow-core verification tube, `"annulus"` gives the sectional ξ of a
+    line-contact finite-element model within 4 %, where the default is about
+    twice too stiff (row XI-FE).
+  - The option changes the stick branch, `EI_max` and the slip onset, not
+    `EI_min`. It does not close gap G8.
+  - Other entry points, such as the fatigue path and the thermal section,
+    use the default.
 - The contact pressure is that of one contact state unless a history is
   given. `contact_tension_history_N` (one tension per curvature sample) sets
   the armour `P1+P2` of every sample through the contact model, the same
