@@ -182,6 +182,7 @@ from cablexsec.mechanics.core_friction import (
     resolve_core_friction,
 )
 from cablexsec.mechanics.core_kinematics import CoreSlipState
+from cablexsec.mechanics.core_lay import core_angle
 from cablexsec.mechanics.distributed_friction import DEFAULT_MAX_INCREMENT
 from cablexsec.mechanics.friction_law import (
     FrictionLaw,
@@ -1803,6 +1804,7 @@ def compute_conductor_fatigue(
     sn_curve: str | SNcurve | None = None,
     mean_stress: MeanStressOption | None = "swt",
     scf: ComponentSCF | None = None,
+    twist_rate_per_m: FloatArray | None = None,
 ) -> ConductorFatigueResult:
     r"""Strand-slip fatigue of a resolved stranded conductor.
 
@@ -1893,6 +1895,17 @@ def compute_conductor_fatigue(
     scf : ComponentSCF, optional
         Factors on the axial part (axial factors) and on the stick-slip
         bending strain of the operator (friction factors), mean and dynamic.
+    twist_rate_per_m : numpy.ndarray or None, optional
+        Material twist rate of the cable [rad/m], positive in the sense that
+        tightens a right-hand lay (as in :func:`compute_fatigue`). The plane
+        cable section turns as a whole, so the conductor axis strain gains
+        ``(r_c tan(b) - K_et/K_ee) tau`` (the laid core at the radius
+        ``r_c`` and assembly angle ``b``, the core's term of the fixed-radius
+        coupling ``K_et``; tension held) and every ring wire the helix strain
+        ``cos^2(a) (...) + s r sin(a) cos(a) tau`` of the core twisting with
+        the cable (Knapp 1981, Eqs. 2 and 11). The twist does not change the
+        contact of the rings. ``None`` (default) gives the earlier result,
+        bit for bit.
 
     Returns
     -------
@@ -1926,6 +1939,14 @@ def compute_conductor_fatigue(
         if tension.shape != kx.shape:
             raise CableSchemaError("tension_N must match the curvature histories")
         require_finite(tension, "tension_N")
+    twist = None
+    if twist_rate_per_m is not None:
+        twist = real_array(twist_rate_per_m, "twist_rate_per_m")
+        if twist.shape != kx.shape:
+            raise CableSchemaError(
+                "twist_rate_per_m must match the curvature histories"
+            )
+        require_finite(twist, "twist_rate_per_m")
     candidates = [
         layer
         for layer in cable.layers
@@ -2043,6 +2064,13 @@ def compute_conductor_fatigue(
         mean_stress=conductor_spec,
         scf=scf,
         critical_distance=cd_spec,
+        twist_rate_per_m=twist,
+        axis_strain_per_twist_m=(
+            None
+            if twist is None
+            else (layer.r_offset_m or 0.0) * math.tan(core_angle(cable, layer))
+            - axial_torsional_matrix(cable).K_et / ea_fixed(cable)
+        ),
     )
     if unevaluated:
         result = replace(
@@ -2089,6 +2117,7 @@ def compute_fatigue(
     count_from_sample: int = 0,
     friction_law: FrictionLaw | None = None,
     wire_positions: WirePositions | None = None,
+    twist_rate_per_m: FloatArray | None = None,
 ) -> FatigueResult:
     r"""Per-wire fatigue of a cable over a biaxial curvature (and tension) history.
 
@@ -2280,6 +2309,22 @@ def compute_fatigue(
         of every sample (both models). The crossing contact-life branches keep
         their rate-independent coefficient. ``None`` (default) or a neutral
         law gives the earlier result, bit for bit.
+    twist_rate_per_m : numpy.ndarray or None, optional
+        Material twist rate of the cable [rad/m], positive in the sense that
+        tightens a right-hand (Z) lay: CableDyn's right-handed twist about
+        the End A -> End B tangent per unit arc length, as
+        :class:`~cablexsec.io.cabledyn.CableDynSectionHistory` forms it
+        (``twist_rate_per_m``). Every armour wire gains the axial stress of
+        its helix strain ``s r sin(a) cos(a) tau`` (Knapp 1981, Eqs. 2 and 11,
+        fixed radii). With ``tension_N`` (or no axial input, zero tension)
+        the tension is held, so the strain also changes by ``-K_et tau /
+        K_ee`` with the fixed-radius coupling ``K_et`` and ``EA_fixed`` of
+        :func:`compute_stiffness`; with ``axial_strain`` the strain is held.
+        The twist does not change the interlayer contact pressure (the
+        friction caps follow the tension), and it is refused with
+        ``section_states`` and ``contact_model="qp"``, whose solved states
+        carry their own (zero) twist. ``None`` (default) gives the earlier
+        result, bit for bit.
 
     Returns
     -------
@@ -2288,7 +2333,7 @@ def compute_fatigue(
     References
     ----------
     [ASTM E1049]; [Miner1945]; [DNVGL-RP-C203]; [Perier2009]; [Poon2022];
-    [Poon2023].
+    [Poon2023]; [Knapp1981] (twist-rate stress).
 
     Examples
     --------
@@ -2411,6 +2456,20 @@ def compute_fatigue(
             raise CableSchemaError("contact_tension_history_N must be >= 0.")
     for name, history in (thermal_stress_Pa or {}).items():
         require_finite(history, f"thermal_stress_Pa[{name!r}]")
+    twist = None
+    if twist_rate_per_m is not None:
+        twist = real_array(twist_rate_per_m, "twist_rate_per_m")
+        require_finite(twist, "twist_rate_per_m")
+        if twist.shape != kx.shape:
+            raise CableSchemaError(
+                "twist_rate_per_m must match the curvature-history shape"
+            )
+        if section_states is not None or contact_model == "qp":
+            raise CableSchemaError(
+                "twist_rate_per_m is not combined with section states or the qp "
+                "contact model: their solved normal states carry their own twist; "
+                "use the bounded or solved contact model with tension_N"
+            )
 
     if section_states is not None:
         if any(
@@ -2562,6 +2621,12 @@ def compute_fatigue(
         friction_law=law,
         time_s=law_time_s,
         wire_positions=wire_positions,
+        twist_rate_per_m=twist,
+        axial_twist_coupling_Nm=(
+            None
+            if twist is None or strain is not None
+            else axial_torsional_matrix(cable).K_et
+        ),
     )
     if thermal_notes and result.provenance is not None:
         result = replace(

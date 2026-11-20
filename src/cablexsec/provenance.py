@@ -56,6 +56,7 @@ __all__ = [
     "UnevaluatedFatigueCurveWarning",
     "UnmodelledPolymerSofteningWarning",
     "UnvalidatedModelWarning",
+    "TorsionalStressWarning",
     "ValidatedRange",
     "check_range",
     "relayed_warnings",
@@ -151,6 +152,18 @@ class ClampingCalibrationWarning(UserWarning):
     friction of the other contacts, which the law then adds a second time.
     Re-identify the value with the friction model in use
     (:mod:`cablexsec.clamping`).
+    """
+
+
+class TorsionalStressWarning(UserWarning):
+    """The cable twists, but the torsional wire stress cannot be formed or is omitted.
+
+    Emitted by :func:`cablexsec.io.cabledyn.read_cabledyn_sections` when
+    CableDyn writes ``Twist<L>N<J>`` or ``Torq<L>N<J>`` at a section but not
+    the ``Twist`` channels of the section's element(s) from which the twist
+    rate is formed (the message names them), and by the sea-state batch when
+    a section's history has a twist rate that is not applied. A fatigue result
+    of such a history then has no torsional wire stress.
     """
 
 
