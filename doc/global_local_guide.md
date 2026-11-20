@@ -535,7 +535,7 @@ Paths are relative to the JSON file; unknown keys are rejected.
 | Worker count 1 against 2 | bitwise equal damage and equal input digests |
 | Failure cases: missing channels or files, mesh or run mismatch, reversed segment order, curvature channel disagreement, step against `dtM`, OpenFAST units | each raises, naming the item |
 
-Genuine CableDyn output (v0.1.0 driver, `build-rel`; deck from CableDyn's
+Genuine CableDyn output (CableDyn 0.1.0 driver, `build-rel`; deck from CableDyn's
 `examples/lazy_wave_vessel_rao.dat`: Lozon et al. 80 m lazy-wave cable,
 1024 elements, clamped hang-off on a vessel moving with illustrative RAOs,
 `dtM = 0.05 s`, 120 s; JONSWAP seas Hs 2 m/Tp 8 s/0°, Hs 4 m/Tp 10 s/0° and
@@ -570,7 +570,7 @@ Hs 4 m/Tp 10 s/30°, 20 s): the curvature from the node tangents agrees with
 2.5e-4 of each node's largest value. Read with `tangent_placement="chord"`,
 nodes 2 and 3 depart by 52 % and 15 %, the largest hang-off curvature at
 0.25 m is 14.5 % higher (9.59e-3 against 8.37e-3 1/m), and the read fails
-the curvature check. The v0.1.0 run of the same deck (`lw128_v010`) read
+the curvature check. The CableDyn 0.1.0 run of the same deck (`lw128_v010`) read
 with `tangent_placement="chord"` agrees to 1.5 % at nodes 2 and 3.
 
 The IEA Task 49 66 kV template stood in for the local section; its `EA` and

@@ -320,7 +320,7 @@ from cablexsec.provenance import (
     UnmodelledPolymerSofteningWarning,
 )
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 from cablexsec.project import (  # noqa: E402
     PROJECT_FORMAT_VERSION,

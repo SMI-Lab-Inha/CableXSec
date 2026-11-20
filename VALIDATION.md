@@ -28,25 +28,27 @@ afterwards: a comparison that misses its target is reported as failed.
 
 | ID | Case | Reference | Result | Acceptance | Status |
 |---|---|---|---|---|---|
-| **STATE-NQ** | Annulus extension and Saint-Venant twist | closed form | 6.7e-16; 0 | <1e-10 | Pass |
-| **STATE-P** | Closed-end thick tube, von Mises stress | Lamé solution | 7.3e-15 | <1e-10 | Pass |
-| **STATE-T** | Uniform free thermal expansion | closed form | strain 3.1e-15; stress 1.3e-6 Pa | <1e-10; <1e-5 Pa | Pass |
+| **STATE-NQ** | Annulus extension and Saint-Venant twist | closed form | 1.0e-15; 0 | <1e-10 | Pass |
+| **STATE-P** | Closed-end thick tube, von Mises stress | Lamé solution | 1.9e-15 | <1e-10 | Pass |
+| **STATE-T** | Uniform free thermal expansion | closed form | strain 2.0e-15; stress 3.1e-15 of E α ΔT | <1e-10; <1e-10 of E α ΔT | Pass |
 | **A10, A10b** | Vector-slip rotation equivariance; vector and loxodromic contrast | identity | 3.8e-16; 1.2e-16 | <1e-12 | Pass |
-| **OvM, OvM-g** | Frictionless contact slip and geodesic transverse map | Out and von Morgen (1997), Eqs. 26–28 | ≤2.7e-15; exact geodesic 2.6e-4 to 3.8e-4 | <1e-12; <1e-3 at k = 1e-4 | Pass |
+| **OvM, OvM-g** | Frictionless contact slip and geodesic transverse map | Out and von Morgen (1997), Eqs. 26–28 | ≤2.9e-15; exact geodesic 2.6e-4 to 3.8e-4 | <1e-12; <1e-3 at k = 1e-4 | Pass |
 | **Out89** | Contact plastic slip and damage ratios | Out (1989), Eqs. 1, A8, A11 | 9.6e-16; 5.0e-7 | <1e-12; <1e-4 | Pass |
 | **CF** | Laid-core friction limits | closed forms, rotation equivariance | ≤1.0e-4 | per check | Pass |
+| **CFW** | Laid-core contact statics (wedged trefoil, central filler) and laid filler profiles | closed forms, armour-only limit | ≤1.0e-4 | per check | Pass |
 | **FR** | Fretting regime: Mindlin energy, Fouvry transition, Cattaneo strip | closed forms, numerical Masing loop | ≤7.8e-12 | <1e-9 to <1e-12 | Pass |
 | **TQ** | Torque constant of a strand; coupled section; mirror lay | Feyrer, Example 2.8; Knapp (1981) | −0.11 %; −1.3e-6; 0 | ±0.2 %; <1e-4; <1e-9 | Pass |
+| **TQ-SV** | Saint-Venant twist rigidity with free warping: rectangle; bonded annulus as a mirrored 60° sector | series solution; polar moment | 1.0e-4; −1.5e-8 | <3e-4; <1e-6 | Pass |
 | **TQ-FT** | Twist-rate wire stress of the fatigue path: stress and damage, torque and tension carried by the wires, mirror lay, zero twist | Knapp (1981), Eqs. 2, 11; `K_et`, `K_tt` | 4.5e-15; 2.2e-16; 0; 0 | <1e-12; <1e-12; <1e-12; 0 | Pass |
 | **A11** | Moment–curvature energy closure | loop area against closed form | 0.082 % | <0.1 % | Pass |
 | **σ_B** | Radial-fibre bending stress | Ménard and Cartraud (2023), Eq. 14 | 0 | <1e-6 % | Pass |
 | **M-rec, M-rec-3core** | Assembled per-wire moment against the section engine | cross-engine | 0.000 % | <2 % | Pass |
-| **MK-Tcyc** | Moment–curvature law with tension cycling inside the bending cycles; work balance under the changing friction bound | fatigue-path friction stress, same kernels | 3.4e-16; 1.1e-15 | <1e-12 | Pass |
-| **MX-scale** | Exported bending law with a slip scaling variable: bound homogeneity, scaled group yield curvatures, tension cycle inside the bending cycles | `compute_mkappa` at another tension; contact-tension history | 6.9e-16; 1.2e-13; ratio 1.21 | <1e-12; <1e-9; ≤1.25 | Pass |
+| **MK-Tcyc** | Moment–curvature law with tension cycling inside the bending cycles; work balance under the changing friction bound | fatigue-path friction stress, same kernels | 3.4e-16; 8.9e-16 | <1e-12 | Pass |
+| **MX-scale** | Exported bending law with a slip scaling variable: bound homogeneity, scaled group yield curvatures, tension cycle inside the bending cycles | `compute_mkappa` at another tension; contact-tension history | 5.5e-16; 1.2e-13; ratio 1.21 | <1e-12; <1e-9; ≤1.25 | Pass |
 | **FL-P** | Pressure-dependent friction coefficient: spring-slider under pressure steps; compiled against NumPy kernel under a pressure history; work balance | closed form; NumPy reference | 3.0e-16; 8.7e-16; 2.5e-15 | <1e-9 | Pass |
 | **slip-onset** | First wire to slip lies at the neutral axis (compression side, ψ ≈ 3λ/2) | Raoof; Papailiou | \|cos\| = 0.156 | \|cos\| < 0.2 | Pass |
-| **xsec-K** | Coupling tangent bounds | EI_max, EI_min limits | ≤6.3e-13 % | <0.01 % | Pass |
-| **QP-KKT, QP-Lamé** | Concentric contact complementarity; shrink-fit compliances | KKT conditions; compound cylinder | 1.9e-13 N; 1.3e-16 | <1e-8 N; <1e-6 | Pass |
+| **xsec-K** | Coupling tangent bounds | EI_max, EI_min limits | ≤6.0e-13 % | <0.01 % | Pass |
+| **QP-KKT, QP-Lamé** | Concentric contact complementarity; shrink-fit compliances | KKT conditions; compound cylinder | 1.1e-13 N; 1.3e-16 | <1e-8 N; <1e-6 | Pass |
 | **COMP-T, COMP-N, COMP-O, SH-AX** | Component thermal expansion, axial equilibrium, zero-offset bounds, sheath axial stress | closed forms | 0 | <1e-6 Pa; <1e-12 | Pass |
 | **io-known, io-global** | Reader to fatigue known answer; global time-domain history against its recorded run summary | closed-form Miner damage; recorded summary | 0 | <1e-10 | Pass |
 | **σ_c1** | Bird-caging stress cross-check | Chae et al., Eq. 17 | 0 | <1e-9 % | Pass |
@@ -64,7 +66,7 @@ afterwards: a comparison that misses its target is reported as failed.
 | **BM1-loop** | ±0.10 m⁻¹ moment–curvature loop predicted with the clamping identified on the measured ±0.05 cycle work (190 kPa), four-point arrangement | Ménard and Cartraud (2023), Fig. 16 | ordered RMSE 5.45 %; cycle work 44.4 vs 62.3 J/m (−28.8 %) | RMSE <5 %; work within 10 % | Fail |
 | **BM1-ID** | Laid cores, wedged trefoil and filler profiles: initial pressure identified on range (b), five ranges predicted | Ménard and Cartraud (2023), Fig. 16 | (a) +28.5 %, (c) +26.2 %, (d)–(f) within 16 % | work ±20 %, RMSE <10 % | Fail |
 | **Z-EI** | Measured stick secant against the no-slip EI_max; slip slope against EI_min, 112 mm three-core cable, zero tension | Zeidan (2025), thesis Figs 5.5–5.6 | stick 141–240 kN·m² vs EI_max 311.1 kN·m² (plane-section 335); diagnosed on for the shear-stack rule | stick ≤ EI_max; slip ≥ EI_min | Pass |
-| **Z-ID** | Four-point loops at 30–60 mm in the test arrangement: pressure identified on 40 mm, three amplitudes predicted | Zeidan (2025), Fig. 5.6 | P0 760 kPa; work +10.4 to −9.6 %, RMSE 14.2–15.4 %, moment range −33 to −46 % | work ±20 %, RMSE <10 %, range ±10 % | **Fail** |
+| **Z-ID** | Four-point loops at 30–60 mm in the test arrangement: pressure identified on 40 mm, three amplitudes predicted | Zeidan (2025), Fig. 5.6 | P0 760 kPa; work +10.4 to −9.6 %, RMSE 13.7–15.4 %, moment range −33 to −46 % | work ±20 %, RMSE <10 %, range ±10 % | **Fail** |
 | **HU-3PB** | Conductor loop, third cycle, three-point arrangement | Hu et al. (2022) | loop area +36.7 % (Papailiou), +64.4 % (KH); transition share 32.8 % / 39.4 % | area ±15 %; share 34 ± 10 points | **Fail** |
 | **HU-uniform** | Same loop at uniform curvature | Hu et al. (2022) | area +4.9 % (Papailiou) | — | Not comparable |
 | **WITZ-EI** | Full-slip EI_min of a 2.5-inch flexible pipe, 0 bar, parameter-free | Witz (1996), measured gradients 1190 / 1014 N·m² | 1007 N·m² | 913–1309 N·m² | Pass |
@@ -73,6 +75,7 @@ afterwards: a comparison that misses its target is reported as failed.
 | **SV11-GJ** | Absolute stress ranges near the termination, load case 14 | Gjøsteen et al. (2027), Figs 27–35 | mean ratio 2.07 (sectional 1.27) | 0.72–1.38 | **Fail** |
 | **SV11-SPLIT** | Origin of the termination increment: end-fitting anchor alone (uniform curvature from the face); end fitting removed (anchor 20 m upstream) | Sævik (2011); Gjøsteen et al. (2027) | end fitting alone 1.23 / 1.36 (sectional 1.19 / 1.27); without end fitting unchanged (2.09, 2.07) | stated, not gated | Info |
 | **SV11-REACH** | Small-angle slip demand and the cases outside the band whatever the correction does | Sævik (2011) | a_max below 1 at 0.5° and 1°; sectional outside: LC 4, 6 | stated, not gated | Info |
+| **SV11-EQ88** | Bellmouth curvature law at the two published bellmouth ends (1.72 m; 1.79 m): radius and slope | Sævik (2011), Eq. 88 and text (3.9 m, 16°) | 3.90 m, 15.9°; 3.79 m, 17.0° | stated, not gated | Info |
 | **AW-DONG25** | Armour wire anchored at both ends of one pitch at uniform curvature: stress at the anchor and peak, code-to-code | Dong et al. (2025), FE, Figs 14 and 25 | anchor 156.4 vs 156.9 MPa (source theory 147.8); peak 207.8 vs 204.5 MPa | stated, not gated | Info |
 | **AW-ZT14** | Same at a = 4.92: normalised anchor and peak stress, code-to-code | Zhu and Tan (2014), FE, Figs 4–8 | 1.19 / 1.70 vs 2.22 (the FE far field is not in slip) | stated, not gated | Info |
 | **DAI20-KAPPA** | Curvature at two stations inside a bellmouth against the rocking angle, steel-tube umbilical at 200 kN: contact angles predicted after identifying the bending stiffness on one curvature value | Dai, Sævik and Ye (2020), Fig. 9 | −0.87° (S2), −0.89° (S3); 59.1 kN m² identified | both within ±1.0° | Pass |

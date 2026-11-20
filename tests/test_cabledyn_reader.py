@@ -8,8 +8,8 @@ written as node positions, node or chord tangents (``Dec``/``Azi``), element
 tensions and curvature magnitudes. ``tests/data/cabledyn`` holds compact runs
 on the ``lazy_wave_vessel_rao`` example cable (JONSWAP Hs 4 m, Tp 10 s,
 30 deg; RAO-driven hang-off): ``lw128`` of the CableDyn 0.4.2 driver (node
-tangents; development build 4b94321), ``lw128_v010`` of the v0.1.0 driver
-on the same deck (chord tangents), ``lw24`` of the v0.1.0 driver (no
+tangents; development build 4b94321), ``lw128_v010`` of the CableDyn 0.1.0 driver
+on the same deck (chord tangents), ``lw24`` of the CableDyn 0.1.0 driver (no
 tangent channels) and ``lw24r`` of the CableDyn 0.4.2 driver (development
 build 4b94321) on the ``lw24`` deck (1 s, tangent channels), whose static
 solve (``tensile_safety True``) now refines the 24 deck elements to 43, and
@@ -831,7 +831,7 @@ def test_real_cabledyn_run_from_channels():
 
 @pytest.mark.full_scale
 def test_real_cabledyn_v010_run_with_chord_tangents():
-    """The same deck run by CableDyn v0.1.0, whose tangents are chords.
+    """The same deck run by CableDyn 0.1.0, whose tangents are chords.
 
     ``tangent_placement="chord"`` reads it: the near-end nodes N2 and N3 agree
     with CableDyn's curvature to 1.5 %; the node placement of 0.4.2
@@ -896,7 +896,7 @@ def test_real_cabledyn_run_on_a_refined_mesh():
     44 mesh nodes, the node channels name the 25 deck nodes (``# DeckNode``
     of ``.p.out`` and the ``DeckNode`` column of ``.static.out``). From the
     refined positions the curvature meets every ``Curv`` channel within the
-    default 5 % (the 24-element ``lw24`` run of v0.1.0 needs 50 %); from the
+    default 5 % (the 24-element ``lw24`` run of CableDyn 0.1.0 needs 50 %); from the
     deck-node tangents alone within 10 %.
     """
     root, deck = DATA / "lw24r", DATA / "lw24r.dat"

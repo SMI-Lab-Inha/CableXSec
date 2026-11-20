@@ -6,7 +6,15 @@ All notable changes to CableXSec are recorded in this file. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] - 2026-11-21
+
+The Python interfaces are versioned but may change before `1.0.0`. The evidence for
+every item below is in
+[VALIDATION.md](https://github.com/SMI-Lab-Inha/CableXSec/blob/main/VALIDATION.md); its
+generated table is reproduced by `python validation/scripts/run_validation.py`. Entries
+under Changed and Fixed can change the results of 0.1.0 inputs. Some entries record a
+validation value that a later change in this release moved; each says so, and
+VALIDATION.md holds the values of the release.
 
 ### Added
 
@@ -115,7 +123,9 @@ All notable changes to CableXSec are recorded in this file. The format follows
   1.62 to 1.25 when the rocker turns about the end-fitting face, the sectional one by 9 %; with
   the Yun shear stack cut at the nearest helical layer below (ξ 0.52 → 0.88) the small-angle
   sectional ratios reach the band. No registered row, input or default is changed; the SV11
-  harness beam takes its rig as a `Rig` value (the registered rig by default).
+  harness beam takes its rig as a `Rig` value (the registered rig by default). These values
+  precede the shear-stack fix under Fixed; in this release the end-fitting anchor alone gives
+  1.23 and 1.36 against the registered 2.17 and 2.07 (SV11-SPLIT).
 
 - Validation rows DAI20-KAPPA and DAI20-COULOMB (Dai, Sævik and Ye 2020, steel-tube umbilical
   in a bellmouth; targets registered before the run). The SV11 rig beam in the measured
@@ -140,7 +150,9 @@ All notable changes to CableXSec are recorded in this file. The format follows
   measured 40 mm work (largest 41.9 against 445.1 J/m). In a diagnostic with the armour ξ from
   the bedding alone the work of all four amplitudes is within ±11 %, the moment range 33–48 %
   short (slipping slope near EI_min), and the laid cores change the work by less than 0.2 %.
-  The laid-core law stays off by default (registered rule not met).
+  The laid-core law stays off by default (registered rule not met). After the shear-stack fix
+  under Fixed, Z-EI passes (EI_max 311.1 kN m²) and Z-ID still fails (P0 760 kPa, moment
+  range −33 to −46 %).
 - Scorecard rows AW-DONG25 and AW-ZT14 (code-to-code, stated, not gated): the anchored-wire
   clamp solver against the published FE of Dong et al. (2025) (anchor 156.4 against 156.9 MPa,
   peak 207.8 against 204.5 MPa) and Zhu and Tan (2014) (1.19 / 1.70 against 2.22, an FE whose
@@ -174,7 +186,8 @@ All notable changes to CableXSec are recorded in this file. The format follows
   cores laid S as in the source at an assumed pitch of 2.5 m 61.1 / 35.0 and of 3.0 m
   64.4 / 37.3 kN m² (tools 59.6–83.2 / 34.3–44.7). The packaged file and the benchmark page state
   that its straight cores raise the free torsional stiffness by 1.3–1.4 times, and why the
-  source's closed form (Eq. 14 as printed) is not a reference.
+  source's closed form (Eq. 14 as printed) is not a reference. The row was removed again
+  before this release (see Changed).
 
 - Validation row BM1-ID (gap R1b), targets registered before the run: on the Ménard and
   Cartraud (2023) cable with the laid cores, the trefoil wedge and the filler profiles (μ 0.2 on
@@ -182,7 +195,9 @@ All notable changes to CableXSec are recorded in this file. The format follows
   (the source's calibration: 300 kPa). Range (b) ordered RMSE 2.99 % (target < 5 %); predicted
   work of ranges (a), (c), (d), (e), (f) +26.0, +23.7, +12.9, −6.5, −11.7 % against a target of
   ±20 %: FAIL on the two smallest ranges. The armour law identified the same way predicts +35.8,
-  +33.5, +21.7, −6.1 and −11.4 %. The laid-core law stays off by default.
+  +33.5, +21.7, −6.1 and −11.4 %. The laid-core law stays off by default. Later changes in
+  this release move these values: P0 is 215.9 kPa, and ranges (a) and (c) miss by +28.5 and
+  +26.2 % (still FAIL).
 
 - Frozen extrusion shrinkage of a concentric layer: `extrusion_shrinkage` (`hoop_strain`,
   `basis`, `source`; `cx.ExtrusionShrinkage`) declares the part of an extruded sheath's or
@@ -421,7 +436,7 @@ All notable changes to CableXSec are recorded in this file. The format follows
 ### Deprecated
 
 - Planned change: the default `friction_model` of `compute_fatigue` (public and
-  `cablexsec.analysis.fatigue`) changes from `"direction_tied"` to `"auto"` in the next release.
+  `cablexsec.analysis.fatigue`) changes from `"direction_tied"` to `"auto"` in a later release.
   On a planar curvature path the two are the same, bit for bit; on a non-planar path the
   default will solve the distributed helix model: higher friction-stress ranges than the
   direction-tied cap under near-circular rotation, equal or lower ones on flat paths (see Added).
@@ -1019,9 +1034,41 @@ All notable changes to CableXSec are recorded in this file. The format follows
   SV11-PLANE and SV11-GJ move closer to the measurements and still fail; WITZ-ID moves
   slightly further (300-bar energy −12.6 % to −14.2 %, width still failing), with the
   initial pressure of `witz1996.yaml` re-identified (1.037 to 1.071 MPa); the
-  laid-core closed form of row CF is the signed one.
+  laid-core closed form of row CF is the signed one. Later changes in this release supersede
+  the BM1 and WITZ values: BM1-loop now identifies its clamping on the measured cycle work and
+  fails, BM1-loop-uniform is removed (see Changed), and the WITZ-ID 300-bar energy is −12.8 %
+  (see the shear-stack entry).
 - `full_slip_curvature` takes the bound of each wire's side; the station slip fraction of
   the Papailiou diagnostic uses the same signed intervals as the moment.
+
+### Known limitations
+
+- Compact, solid-filler three-core sections (gap G8, Z-ID): the stick branch is too stiff
+  and the slip branch about 3.5 times too soft against the Zeidan (2025) loops. With rope
+  fillers (Ménard and Cartraud 2023) the full-slip stiffness is right (BM1). The error is
+  conservative for curvature-driven quantities (armour stress ranges, fatigue from
+  curvature) and not conservative for the section moment and the loads on interfaces
+  (bend stiffeners, hang-offs, contact and friction forces inside the section). Eight
+  mechanisms tested with source inputs did not close it (doc/benchmarks.md, "Known
+  limitation: slip-branch stiffness of compact sections").
+- The termination-corrected (anchored-wire) armour stress is an upper estimate that the
+  near-termination measurements do not support (SV11-PLANE median ratio 2.17, SV11-GJ
+  2.07); the sectional result is closer to them (median 1.19 with 12 of 14 load cases in
+  band; 1.27 for SV11-GJ). Both rows fail.
+- The other measured comparisons that miss their registered targets are BM1-loop, BM1-ID,
+  Z-ID, HU-3PB and WITZ-ID; they are reported as failed in
+  [VALIDATION.md](https://github.com/SMI-Lab-Inha/CableXSec/blob/main/VALIDATION.md)
+  and their targets are not relaxed. BM5 is partial, HU-uniform not comparable and BM4 not
+  validated.
+- The default armour friction law of `compute_fatigue` stays `"direction_tied"`. On a
+  non-planar curvature path its friction-stress ranges can fall below those of the
+  distributed helix model (`friction_model="auto"`), and the default warns there
+  (`DirectionTiedFrictionWarning`).
+- The supported model does not solve the cyclic redistribution of three-core contact.
+  Fretting is excluded from the long-term fatigue projections, and contact stress functions
+  use prescribed tractions.
+- A passing test does not establish that the model predicts every physical cable
+  construction or a validated service life.
 
 ## [0.1.0] - 2026-11-14
 
@@ -1128,4 +1175,5 @@ generated table is reproduced by `python validation/scripts/run_validation.py`.
 - A passing test does not establish that the model predicts every physical cable
   construction or a validated service life.
 
+[0.2.0]: https://github.com/SMI-Lab-Inha/CableXSec/releases/tag/v0.2.0
 [0.1.0]: https://github.com/SMI-Lab-Inha/CableXSec/releases/tag/v0.1.0

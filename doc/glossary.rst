@@ -1329,7 +1329,7 @@ Terms and abbreviations
       ``UnvalidatedModelWarning``, ``TransverseMapWarning`` and ``FrictionModelFallbackWarning``
       (``friction_model="auto"`` kept the direction-tied law on a non-planar path); and the
       ``FutureWarning``
-      ``DirectionTiedFrictionWarning`` of a default that changes in the next release.
+      ``DirectionTiedFrictionWarning`` of a default that changes in a later release.
 
    wear
       Loss of material from a contact by sliding. :func:`~cablexsec.compute_fretting` computes the

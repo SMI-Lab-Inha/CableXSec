@@ -6,7 +6,7 @@
 Run with the interpreter of a clean environment into which only the wheel was
 installed::
 
-    python release/smoke_test_wheel.py --version 0.1.0
+    python release/smoke_test_wheel.py --version 0.2.0
 
 The check imports the installed package (and fails if it resolves into this
 checkout), loads a bundled cable, computes its stiffness and a bending loop,

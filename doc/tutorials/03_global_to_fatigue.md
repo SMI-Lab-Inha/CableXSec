@@ -215,7 +215,7 @@ armour friction then comes from the tension alone, so the friction stresses
 and damages sit at their low end (Section 4.4 of the local analysis guide).
 
 `DirectionTiedFrictionWarning` announces a change of default: the record
-bends the cable in more than one plane, and the next release will solve such
+bends the cable in more than one plane, and a later release will solve such
 records with `friction_model="auto"`, the distributed helix friction model,
 instead of the direction-tied law used here (Section 9 of the local analysis
 guide). Pass `friction_model` explicitly to choose the law and silence it.

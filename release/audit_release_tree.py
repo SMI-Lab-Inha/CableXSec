@@ -62,6 +62,7 @@ REQUIRED_PATHS = {
     "pyproject.toml",
     "validation/README.md",
     "validation/RELEASE_0_1_0.md",
+    "validation/RELEASE_0_2_0.md",
 }
 # The only e-mail address a release may carry is the maintainer's.
 MAINTAINER_EMAIL = b"jaehoon.seo@inha.ac.kr"

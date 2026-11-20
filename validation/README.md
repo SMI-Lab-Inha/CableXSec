@@ -12,7 +12,8 @@ global simulation files are not redistributed.
 | Path | Contents |
 | --- | --- |
 | [`validation_report.md`](validation_report.md) | The generated table of every analytical gate and benchmark, with targets, values and status |
-| [`RELEASE_0_1_0.md`](RELEASE_0_1_0.md) | Environment, test results, gate results and distribution hashes for v0.1.0 |
+| [`RELEASE_0_2_0.md`](RELEASE_0_2_0.md) | Environment, test results, gate results and distribution hashes for v0.2.0 |
+| [`RELEASE_0_1_0.md`](RELEASE_0_1_0.md) | The same record for the 0.1.0 release |
 | [`paper_data/`](paper_data/README.md) | Digitised published measurements and the results of the companion article's calculations |
 | `scripts/` | The report generator, benchmark harnesses and reproduction scripts listed below |
 
@@ -27,7 +28,7 @@ python validation/scripts/run_validation.py --check   # compare with the committ
 
 The script recomputes every row from the live code and the data in `paper_data/`, and
 runs the three test-marker groups for the taxonomy counts (about an hour on one core). It
-exits with status 1 while any row is `FAIL` or `REVIEW`; in 0.1.0 the failed rows are the
+exits with status 1 while any row is `FAIL` or `REVIEW`; the failed rows are the
 registered measured comparisons listed in [`VALIDATION.md`](../VALIDATION.md#summary).
 
 ## Scripts

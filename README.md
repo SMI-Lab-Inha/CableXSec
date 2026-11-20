@@ -17,7 +17,7 @@ damage of the armour, the conductor and the metallic sheaths.
 It reads the results of global analyses (CableDyn, RIFLEX, and time-history CSV exports such as
 those of OrcaFlex) and turns them into local stresses and damage, and it exports a hysteretic
 bending law for use in global analysis. The
-current release is `v0.1.0`; interfaces are versioned and may change before `1.0.0`.
+current release is `v0.2.0`; interfaces are versioned and may change before `1.0.0`.
 
 ## What CableXSec does
 
@@ -74,7 +74,7 @@ Install the release wheel from the
 3.12), or install straight from the repository:
 
 ```powershell
-python -m pip install "cablexsec[fast] @ git+https://github.com/SMI-Lab-Inha/CableXSec.git@v0.1.0"
+python -m pip install "cablexsec[fast] @ git+https://github.com/SMI-Lab-Inha/CableXSec.git@v0.2.0"
 ```
 
 The `fast` extra adds `numba` for the compiled slip-stress and rainflow kernels; without it the
@@ -154,7 +154,7 @@ in [`validation/`](validation/README.md), including the data of the companion jo
 
 ## Citation
 
-If you use CableXSec in academic work, please cite the software release (CableXSec 0.1.0);
+If you use CableXSec in academic work, please cite the software release (CableXSec 0.2.0);
 [CITATION.cff](CITATION.cff) contains the entry (GitHub **Cite this repository**) and the
 manual's [How to cite](https://cablexsec.readthedocs.io/en/latest/citing.html) page gives
 BibTeX. The journal article that describes the method is under review; its reference will be

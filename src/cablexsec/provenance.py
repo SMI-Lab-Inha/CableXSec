@@ -80,7 +80,7 @@ class DirectionTiedFrictionWarning(FutureWarning):
     is left at its default and the curvature path is not planar
     (:func:`cablexsec.analysis.fatigue.curvature_path_out_of_plane_ratio`
     above :data:`cablexsec.analysis.fatigue.PLANAR_PATH_TOLERANCE`). The
-    default changes from ``"direction_tied"`` to ``"auto"`` in the next
+    default changes from ``"direction_tied"`` to ``"auto"`` in a later
     release; on a planar path the two are the same, bit for bit, so only
     non-planar paths warn. The direction-tied cap turns with the bending
     direction, and under rotating curvature its friction-stress ranges fall

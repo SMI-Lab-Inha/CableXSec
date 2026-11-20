@@ -816,7 +816,7 @@ def wire_slip_history(
     to about 0.3) they are at or above the distributed ranges instead.
     :func:`~cablexsec.analysis.fatigue.compute_fatigue` therefore offers
     ``friction_model="auto"``, which takes the distributed model for every
-    such path and becomes its default in the next release; until then its
+    such path and becomes its default in a later release; until then its
     default (this law) warns on a non-planar path
     (:class:`~cablexsec.provenance.DirectionTiedFrictionWarning`).
     Frictional heat uses the distributed dissipation

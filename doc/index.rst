@@ -14,7 +14,7 @@ turns them into the fatigue damage of the armour, the conductor and the metallic
 .. admonition:: Release status
    :class: note
 
-   CableXSec ``v0.1.0`` is the first public release. It is distributed as a source
+   CableXSec ``v0.2.0`` is the current release. It is distributed as a source
    repository and a pure-Python wheel on the
    `GitHub release page <https://github.com/SMI-Lab-Inha/CableXSec/releases>`_. Every
    comparison with published data, including the comparisons that do not meet their

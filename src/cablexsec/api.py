@@ -2228,7 +2228,7 @@ def compute_fatigue(
         it applies: the direction-tied cap turns with the bending direction
         and under rotating curvature gives friction-stress ranges below those
         of the distributed model. The model of every layer is recorded in
-        ``provenance``. The default changes to ``"auto"`` in the next
+        ``provenance``. The default changes to ``"auto"`` in a later
         release: left at its default on a non-planar path (the only case in
         which the two differ), the direction-tied model warns once per call
         (:class:`~cablexsec.provenance.DirectionTiedFrictionWarning`, a

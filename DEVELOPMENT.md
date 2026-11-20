@@ -68,7 +68,7 @@ report are those of the serial run.
 
 The script recomputes every row from the live code, runs the three marker groups for
 the test taxonomy, and exits non-zero while any row is `FAIL` or `REVIEW`; the failed
-rows of the 0.1.0 report are registered, unresolved discrepancies (see
+rows of the report are registered, unresolved discrepancies (see
 [VALIDATION.md](https://github.com/SMI-Lab-Inha/CableXSec/blob/main/VALIDATION.md)).
 
 ## Formatting, lint and types
@@ -100,8 +100,8 @@ with absolute `https://github.com/SMI-Lab-Inha/CableXSec/blob/main/...` URLs.
 python -m build --outdir dist
 python -m twine check dist/*
 python -m venv wheel-test
-wheel-test\Scripts\python -m pip install dist\cablexsec-0.1.0-py3-none-any.whl
-wheel-test\Scripts\python release\smoke_test_wheel.py --version 0.1.0
+wheel-test\Scripts\python -m pip install dist\cablexsec-0.2.0-py3-none-any.whl
+wheel-test\Scripts\python release\smoke_test_wheel.py --version 0.2.0
 ```
 
 The wheel contains only the `cablexsec` package (with its bundled cable definitions)

@@ -1609,7 +1609,7 @@ run uncompiled.
   `m = 1 − 3λ²/8`, `λ = μ |sin α|`).
 
   **Planned change of the default.** The default of `compute_fatigue` becomes
-  `"auto"` (below) in the next release. The two are the same, bit for bit, on
+  `"auto"` (below) in a later release. The two are the same, bit for bit, on
   a planar curvature path, so only non-planar paths change. Until then, left
   at the default on a non-planar path (out-of-plane ratio above
   `PLANAR_PATH_TOLERANCE`), `compute_fatigue` warns once per call

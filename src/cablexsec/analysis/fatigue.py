@@ -345,7 +345,7 @@ def _warn_default_direction_tied(out_of_plane: float, stacklevel: int) -> None:
         return
     warnings.warn(
         "the default friction_model will change from 'direction_tied' to 'auto' "
-        "in the next release; pass friction_model explicitly to keep the current "
+        "in a later release; pass friction_model explicitly to keep the current "
         "behaviour. This curvature path is not planar (out-of-plane ratio "
         f"{out_of_plane:.3g} > {PLANAR_PATH_TOLERANCE:g}), so 'auto' would "
         "solve the distributed helix model on every layer it covers. The "
@@ -1788,7 +1788,7 @@ def compute_fatigue(
         under a steadily rotating curvature its stress ranges fall below those
         of the distributed model (to 0.86 of them at twice the slip onset on a
         near-rigid interface), while on planar and flat elliptical paths they
-        are at or above them. The default changes to ``"auto"`` in the next
+        are at or above them. The default changes to ``"auto"`` in a later
         release: left at its default on a non-planar path (the only case in
         which the two differ), the model warns once per call
         (:class:`~cablexsec.provenance.DirectionTiedFrictionWarning`, a

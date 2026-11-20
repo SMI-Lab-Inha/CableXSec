@@ -24,8 +24,8 @@ def capture(relative_path: str, pattern: str, label: str) -> str:
     return match.group(1)
 
 
-# Spellings that name a CableXSec release: "CableXSec 0.1.0", "CableXSec v0.1.0",
-# "v0.1.0", "cablexsec-0.1.0-py3-none-any.whl" and ".../releases/tag/v0.1.0".
+# Spellings that name a CableXSec release: "CableXSec 1.2.3", "CableXSec v1.2.3",
+# "v1.2.3", "cablexsec-1.2.3-py3-none-any.whl" and ".../releases/tag/v1.2.3".
 VERSION_REFERENCE = re.compile(
     r"(?i)(?:cablexsec[ _-]+v?|cablexsec-|releases/tag/v|(?<![\w.])v)"
     r"(\d+\.\d+\.\d+)(?![\w.]*\d)"
