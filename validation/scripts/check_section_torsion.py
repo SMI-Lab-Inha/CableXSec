@@ -91,12 +91,10 @@ def verification_checks() -> dict[str, float]:
     return {"rectangle": rectangle_error(), "annulus": annulus_error()}
 
 
-# Chae, Nam and Shim (2023), Table 5: torsional stiffness [N m^2] of the three
-# cross-section tools of the source, by armour pitch [m]. No measurement.
-CHAE_TABLE5_GJ = {
-    1.8: (83170.0, 59566.0, 69244.0),
-    3.0: (44683.0, 34311.0, 44533.0),
-}
+# Armour pitches [m] of the Chae, Nam and Shim (2023) cable studied in its
+# Table 5. No torsional stiffness of the cable is measured; the stiffness is
+# reported here only as the sensitivity to the core lay (doc/benchmarks.md).
+CHAE_PITCHES = (1.8, 3.0)
 CHAE_TWIST = 0.125  # [rad/m], Table 4 (global twist)
 CHAE_HELIX_RADIUS = 0.081  # [m], packaged YAML (assumed there)
 
@@ -143,10 +141,12 @@ def chae_free_torsion(pitch_m: float, core_pitch_m: float | None = None) -> floa
 
 
 def chae_checks() -> dict[str, dict[float, float]]:
-    """CH-GJ: straight cores (packaged) and S-lay cores at 2.5 and 3.0 m."""
+    """Core-lay sensitivity of the free torsional stiffness [N m^2]: straight
+    cores (packaged) and S-lay cores at 2.5 and 3.0 m (the source gives no core
+    pitch), at each armour pitch."""
     out: dict[str, dict[float, float]] = {}
     for label, core in (("straight", None), ("S 2.5 m", 2.5), ("S 3.0 m", 3.0)):
-        out[label] = {p: chae_free_torsion(p, core) for p in CHAE_TABLE5_GJ}
+        out[label] = {p: chae_free_torsion(p, core) for p in CHAE_PITCHES}
     return out
 
 

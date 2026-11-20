@@ -405,7 +405,8 @@ result.sections["sag"].long_term.annual_damage, result.sections["sag"].life_year
   the free-twist axial stiffness is `EA (1 − c²)`), both within
   `torsion_rtol` (default 25 %). `K_tt` leaves out the components' own
   torsion and the radial relaxation of the layers, which move a section's
-  torsional stiffness by tens of percent either way (benchmark CH-GJ), hence
+  torsional stiffness by tens of percent either way (the core-lay sensitivity
+  of the coiling cable in the benchmark register), hence
   the wider tolerance; a 10-column row gives no `GJ` and is not compared. A
   mismatch stops the batch unless `allow_property_mismatch=True` is
   declared, and the comparison is written to the manifest either way.
@@ -574,9 +575,25 @@ bending at fixed contact pressure the default and the progressive armour laws ar
 spring–sliders, so the Iwan law follows Masing's rules and reproduces `compute_mkappa` on planar histories,
 including the memory of earlier reversals. It is exact when every wire's slip interval is symmetric. The signed
 capstan bound (Papailiou 1997) makes it asymmetric: the falling bound of a wire is its rising bound times
-`exp(-λψ)`, which no Masing element carries. The residual is about 0.1 % of the moment range on bending cycles
-near full slip (Ménard ±0.03 1/m: 0.14 % at 10 kN, 0.16 % at 70 kN; 66 kV template 0.08–0.11 %; 33 kV
-three-core 0.26 %) and falls with the friction coefficient (66 kV at μ = 0.02: 0.02 %).
+`exp(-λψ)`, which no Masing element carries. On bending cycles of one amplitude near full slip the residual
+is about 0.1 % of the moment range (Ménard ±0.03 1/m: 0.14 % at 10 kN, 0.16 % at 70 kN; 66 kV template
+0.08–0.11 %; 33 kV three-core 0.26 %) and falls with the friction coefficient (66 kV at μ = 0.02: 0.02 %).
+
+On nested irregular histories it is larger. It peaks on reloading branches inside the doubled (Masing)
+transition zone, where a reversal of less than twice the full-slip curvature leaves the wires partly
+slipping, and it grows with the capstan factor λ = μ |sin α|. Random turning-point histories up to three
+times the full-slip curvature were run on the Ménard cable (10 kN), the 66 kV template and the 33 kV
+three-core cable (50 kN), each at μ = 0.085, 0.2 and 0.25. The largest residuals were:
+
+| λ | Moment range | Full-slip friction moment |
+| --- | --- | --- |
+| about 0.03 | 0.1 % | 0.2 % |
+| about 0.07 | 0.3–0.4 % | 0.6–0.8 % |
+| about 0.09 | 0.4–0.6 % | 0.9–1.2 % |
+
+The full-slip friction moment is the backbone less `EI_slip κ`. The largest values lie 0.3–1.8 full-slip
+curvatures after a reversal. Once a branch leaves that zone the residual returns to the level of a single
+cycle (0.01 % of the range), so the memory of earlier reversals, the wipe-out of closed cycles, is unaffected.
 
 ```python
 import numpy as np

@@ -438,13 +438,24 @@ All notable changes to CableXSec are recorded in this file. The format follows
   "Coverage and validation report" passes only when both pass. The tests, the 95 % threshold,
   the kernel coverage pass, the rows, the report and its staleness check are unchanged.
 
-- The rows that compare with the measured loops of Ménard and Cartraud (2023), BM1-loop,
-  BM1-loop-uniform and BM1-ID, are stated, not gated (status INFO, the verdict against the
-  registered target kept): the test is an unreliable reference. The benchmark register states the
-  evidence: the source's own limits (one specimen, end effects not investigated, achieved
-  curvature ranges off target), its table and figure disagreeing on equal-span ranges (−15 %
-  against +4 and +11 %), and an independent FE reconstruction (Kwon et al. 2026) that does not
-  match. Targets and results are unchanged.
+- The rows that compare with the measured loops of Ménard and Cartraud (2023) are gated. The
+  unreliable quantity is the source's 0.3 MPa clamping, a tuning parameter of its own FE model,
+  not the measured loops. Until now BM1-loop used that 0.3 MPa as its input. It now identifies
+  the clamping on the measured cycle work of range (a), the ±0.05 cycle the source calibrated on
+  (190 kPa with the armour law), and predicts range (b): ordered RMSE 5.45 %, work 44.4 against
+  62.3 J/m (−28.8 %), FAIL against the unchanged targets (RMSE < 5 %, work within 10 %). With the
+  0.3 MPa it gave +11.8 % (reported in the benchmark register, not gated). BM1-ID (identified on
+  range (b), five ranges predicted) is gated: FAIL on ranges (a) and (c) (+28.5, +26.2 %).
+  BM1-loop-uniform, which gave the same numbers at uniform curvature, is removed. For a short
+  time these rows were reported as INFO, "stated, not gated", on a broader reading that took
+  the measurements to be unreliable as well. The register keeps the limits of the test: one specimen, end
+  effects not investigated, table and figure disagreeing on equal-span ranges, and an
+  independent FE reconstruction (Kwon et al. 2026) that does not match.
+- CH-GJ is removed from the validation report. Its only reference values were the outputs of
+  the source's three cross-section tools (Chae, Nam and Shim 2023, Table 5); nothing is
+  measured. The benchmark register keeps the finding as a stated sensitivity: the free
+  torsional stiffness of that cable depends on the core lay. S-lay cores give 21–31 % less than
+  straight cores, so the core lay must be stated with any torsional or coiling result.
 
 - `read_cabledyn_sections` places the `Dec`/`Azi` tangents of a finite-EI line (any section
   with `EI > 0`) at their nodes, as CableDyn 0.4.2 and later write them: the node's own
@@ -539,6 +550,14 @@ All notable changes to CableXSec are recorded in this file. The format follows
   at every section whose nodes write them; before, one section without `Twist` channels (a
   hang-off node, say) dropped the twist of all of them, and `checks["torsion"]` called the
   read twist-free although CableDyn's axes carry the twist.
+- The documented residual of the exported Iwan bending law against `compute_mkappa` holds for
+  cycles of one amplitude near full slip, about 0.1 % of the moment range. On nested irregular
+  histories it is larger, and the documentation now says so. It peaks on reloading branches in
+  the doubled (Masing) transition zone and grows with the capstan factor λ = μ |sin α|: about
+  0.1 % of the moment range at λ ≈ 0.03, 0.3–0.4 % at λ ≈ 0.07 and 0.4–0.6 % at λ ≈ 0.09
+  (0.9–1.2 % of the full-slip friction moment). These are the largest values over random
+  turning-point histories on three cables. Outside that zone the residual returns to 0.01 %, so
+  the wipe-out of closed cycles is unaffected. The law itself is unchanged.
 - A constant curvature cycles nothing in the distributed helix model. A sample that repeats the
   last one under the Coulomb bound now keeps the state in both kernels: its outputs equal the
   last sample's bit for bit and it takes no substep. Before, the compiled kernel started such a
