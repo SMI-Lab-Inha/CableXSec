@@ -108,6 +108,21 @@ def test_strip_concentration_limits() -> None:
 
 
 @pytest.mark.analytical_sanity
+def test_rounding_overlap_is_a_touching_interface() -> None:
+    touching = [(0.030, 0.040, 1.0e8), (0.020, 0.030, 2.0e9)]
+    rounded = [(0.0299999999, 0.040, 1.0e8), (0.020, 0.030, 2.0e9)]
+    for support in ("rigid", "bore"):
+        exact = annulus_mode1_compliance(touching, support)  # type: ignore[arg-type]
+        assert annulus_mode1_compliance(rounded, support) == pytest.approx(  # type: ignore[arg-type]
+            exact, rel=1e-12
+        )
+    with pytest.raises(ValueError, match="overlap"):
+        annulus_mode1_compliance(
+            [(0.029, 0.040, 1.0e8), (0.020, 0.030, 2.0e9)], "rigid"
+        )
+
+
+@pytest.mark.analytical_sanity
 def test_support_inputs_are_refused() -> None:
     with pytest.raises(ValueError, match="axis"):
         annulus_mode1_compliance([(0.01, 0.02, G)], "axis")

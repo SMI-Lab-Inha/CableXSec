@@ -43,6 +43,8 @@ from typing import Literal
 
 import numpy as np
 
+from cablexsec.cables.schema import _radial_tol
+
 __all__ = [
     "SupportCondition",
     "annulus_mode1_compliance",
@@ -71,7 +73,8 @@ def annulus_mode1_compliance(
     layers : sequence of (r_inner, r_outer, G)
         Layers from the outside in: radii [m], shear modulus [Pa]. A radial
         gap between consecutive layers is rigid: it keeps the displacement
-        and the shear flow ``sigma r``.
+        and the shear flow ``sigma r``. An overlap within the cable schema's
+        radial tolerance is a touching interface; a larger one is refused.
     support : {"rigid", "bore", "axis"}
         Inner boundary: ``w = 0``; zero shear stress; or regular at ``r = 0``
         (then the innermost layer must start at the axis).
@@ -106,7 +109,12 @@ def annulus_mode1_compliance(
         raise ValueError("a rigid or bore support needs an inner radius above zero")
     for r_in, r_out, g in seq:
         if r_in < r_prev:
-            raise ValueError("layers must not overlap")
+            # Interfaces the cable schema accepts as touching (radius
+            # rounding) start at the previous outer radius; a genuine
+            # overlap is refused.
+            if r_prev - r_in > _radial_tol(r_prev):
+                raise ValueError("layers must not overlap")
+            r_in = r_prev
         if r_in > r_prev:
             sigma *= r_prev / r_in
         w, sigma = _propagate(w, sigma, r_in, r_out, g)

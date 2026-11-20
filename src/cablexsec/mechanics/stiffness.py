@@ -52,6 +52,7 @@ from cablexsec.cables.schema import (
     CylindricalOffsetLayer,
     CylindricalShellLayer,
     HelicalLayer,
+    _radial_tol,
     is_serving,
     layer_stiffness,
 )
@@ -583,7 +584,7 @@ def _stack_support(
     in_stack = {lyr.name for lyr in stack}
     if any(
         lyr.name not in in_stack
-        and (getattr(lyr, "r_outer_m", None) or 0.0) <= r_bore * (1.0 + 1e-9)
+        and (getattr(lyr, "r_outer_m", None) or 0.0) <= r_bore + _radial_tol(r_bore)
         for lyr in inside
     ):
         # A skipped body inside the stack: keep the plane-section support of
