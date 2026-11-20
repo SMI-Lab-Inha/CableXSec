@@ -540,6 +540,24 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Fixed
 
+- A constant curvature cycles nothing in the distributed helix model. A sample that repeats the
+  last one under the Coulomb bound now keeps the state in both kernels: its outputs equal the
+  last sample's bit for bit and it takes no substep. Before, the compiled kernel started such a
+  sample from the increment of the last substep and converged to a drift of the Newton
+  tolerance (2e-6 Pa per sample on the 33 kV template's inner armour at 0.01 1/m and 200 kN),
+  counted as 1e-58 damage where the reference kernel gave 0. Both kernels also moved the
+  segment forces by one ulp on a repeated sample (1e-69 damage on the outer armour), and the
+  critical angle of such a damage was arbitrary. Under a friction law a repeated sample is
+  still solved, since a node can heal while it sticks; the compiled kernel now starts it from
+  a zero increment, as the reference does. Only histories with exactly repeated samples
+  change: the repeated samples themselves, and the later ones at round-off.
+- The capstan bounds of the compiled direction-tied and progressive kernels give `inf` past
+  the floating-point range when the kernels run as Python, as they do compiled
+  (`friction_law._expm1_or_inf`). Before, `math.expm1` raised `OverflowError` there. Without
+  numba this made `compute_fatigue(..., friction_model="progressive", mu=1e6)` fail. The
+  reference progressive history holds such a sub-element cap at 1e300 Pa, as the reference
+  Papailiou bound does, so it sticks where the compiled kernel sticks: at `mu = 1e6` both
+  give the damage of `mu = 3e4` on the probe history. Compiled results are unchanged.
 - CableDyn deck reader mirrors CableDyn's record checks: a section header CableDyn
   does not know is refused with the deck line (was skipped silently), as are a
   record over 512 bytes without a comment, a NUL or non-ASCII whitespace
