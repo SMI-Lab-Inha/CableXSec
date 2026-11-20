@@ -399,7 +399,8 @@ result.sections["sag"].long_term.annual_damage, result.sections["sag"].life_year
   the free-twist axial stiffness is `EA (1 − c²)`), both within
   `torsion_rtol` (default 25 %). `K_tt` leaves out the components' own
   torsion and the radial relaxation of the layers, which move a section's
-  torsional stiffness by tens of percent either way (benchmark CH-GJ), hence
+  torsional stiffness by tens of percent either way (the core-lay sensitivity
+  of the coiling cable in the benchmark register), hence
   the wider tolerance; a 10-column row gives no `GJ` and is not compared. A
   mismatch stops the batch unless `allow_property_mismatch=True` is
   declared, and the comparison is written to the manifest either way.

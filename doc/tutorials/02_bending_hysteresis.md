@@ -63,8 +63,9 @@ zero curvature, so the work can be read exactly at the start and end of each
 cycle. `original` indexes the measured points within the augmented path.
 
 The friction coefficient 0.2 and the 0.3 MPa pressure of the cable's
-`initial_state` are the values the source fixed on range (a). Range (b) played
-no part in setting them.
+`initial_state` are the values the source fixed on range (a) with its own FE
+model; the pressure is a tuning parameter of that model. Range (b) played no
+part in setting them.
 
 ```{literalinclude} scripts/tutorial_02_bending_hysteresis.py
 :language: python
@@ -78,7 +79,7 @@ model moment -532 to 530 N m
 ordered RMSE / measured range: 2.86 %
 ```
 
-Point by point in the recorded order, the moment error is 2.71 % of the
+Point by point in the recorded order, the moment error is 2.86 % of the
 measured moment range.
 
 ## 3. The loop area is the friction work
@@ -108,11 +109,13 @@ difference of the means: +11.8 %
 The stored energy is the same at every zero crossing, so each cycle closes. It
 peaks at the curvature extremes.
 
-The calculated friction work per cycle is 11.8 % above the measured loop area,
-outside the 10 % target that the validation record registers for this
-comparison (8.8 % before the armour shear stack was cut at its support): row
-BM1-loop of the [validation record](../validation.md), stated, not gated, and
-discussed in the [benchmark register](../benchmarks.md).
+With the source's 0.3 MPa the calculated friction work per cycle is 11.8 %
+above the measured loop area (8.8 % before the armour shear stack was cut at
+its support). The gated row BM1-loop of the [validation record](../validation.md)
+does not take that pressure: it identifies the clamping on the measured work of
+range (a) and predicts range (b), whose work is then 28.8 % below the
+measurement, outside the registered 10 % target (FAIL; discussed in the
+[benchmark register](../benchmarks.md)).
 
 `loop.W_diss_J_per_m` is the friction work over the whole supplied history,
 conditioning pass included. For the loss per cycle, take differences of

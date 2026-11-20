@@ -60,9 +60,8 @@ afterwards: a comparison that misses its target is reported as failed.
 | **TQ-KL** | Torque-balance helix angle, seven strand pairs | Kim and Lee (2017), beam FE | −0.26 to −0.06 deg | ≤0.3 deg | Pass |
 | **TQ-UJ** | Fixed-end torque per tension, six strands | Utting and Jones (1987), Table 1 | theory 1.051–1.059; test 1.067–1.136 | 1.04–1.07; 1.00–1.15 | Pass |
 | **BM1** | Full-slip bending stiffness EI_min, no calibration | Ménard and Cartraud (2023), Table 3 | 0.6 % (3571 N·m²) | <15 % | Pass |
-| **BM1-loop** | ±0.10 m⁻¹ moment–curvature loop after the published ±0.05 calibration, four-point arrangement | Ménard and Cartraud (2023), Fig. 16b | ordered RMSE 2.86 %; cycle work 69.7 vs 62.3 J/m (11.8 %) | RMSE <5 %; work within 10 % | Info (unreliable reference; target not met) |
-| **BM1-loop-uniform** | Same comparison at uniform curvature | Ménard and Cartraud (2023), Fig. 16b | as BM1-loop | as BM1-loop | Info (unreliable reference; target not met) |
-| **BM1-ID** | Laid cores, wedged trefoil and filler profiles: initial pressure identified on range (b), five ranges predicted | Ménard and Cartraud (2023), Fig. 16 | (a) +28.5 %, (c) +26.2 %, (d)–(f) within 16 % | work ±20 %, RMSE <10 % | Info (unreliable reference; target not met) |
+| **BM1-loop** | ±0.10 m⁻¹ moment–curvature loop predicted with the clamping identified on the measured ±0.05 cycle work (190 kPa), four-point arrangement | Ménard and Cartraud (2023), Fig. 16 | ordered RMSE 5.45 %; cycle work 44.4 vs 62.3 J/m (−28.8 %) | RMSE <5 %; work within 10 % | Fail |
+| **BM1-ID** | Laid cores, wedged trefoil and filler profiles: initial pressure identified on range (b), five ranges predicted | Ménard and Cartraud (2023), Fig. 16 | (a) +28.5 %, (c) +26.2 %, (d)–(f) within 16 % | work ±20 %, RMSE <10 % | Fail |
 | **Z-EI** | Measured stick secant against the no-slip EI_max; slip slope against EI_min, 112 mm three-core cable, zero tension | Zeidan (2025), thesis Figs 5.5–5.6 | stick 141–240 kN·m² vs EI_max 311.1 kN·m² (plane-section 335); diagnosed on for the shear-stack rule | stick ≤ EI_max; slip ≥ EI_min | Pass |
 | **Z-ID** | Four-point loops at 30–60 mm in the test arrangement: pressure identified on 40 mm, three amplitudes predicted | Zeidan (2025), Fig. 5.6 | P0 760 kPa; work +10.4 to −9.6 %, RMSE 14.2–15.4 %, moment range −33 to −46 % | work ±20 %, RMSE <10 %, range ±10 % | **Fail** |
 | **HU-3PB** | Conductor loop, third cycle, three-point arrangement | Hu et al. (2022) | loop area +36.7 % (Papailiou), +64.4 % (KH); transition share 32.8 % / 39.4 % | area ±15 %; share 34 ± 10 points | **Fail** |
@@ -99,8 +98,11 @@ quantities are those of the passing rows. In particular:
 
 - The full-slip bending stiffness and the analytical limits of the slip model are confirmed
   against published data without calibration (BM1, WITZ-EI).
-- The Ménard and Cartraud (2023) loops are an unreliable reference (stated, not gated; the
-  benchmark register gives the evidence). The 300-bar Witz loop is too narrow after
+- On the Ménard and Cartraud (2023) loops one identified clamping does not fit the work of both
+  the small and the large cycles: identified on the ±0.05 cycle, the ±0.10 cycle is 29 % low
+  (BM1-loop); identified on it, the small cycles are up to 29 % high (BM1-ID). The source's
+  0.3 MPa is a tuning parameter of its own FE model and is not used as an input of the gated
+  rows. The 300-bar Witz loop is too narrow after
   identification at 0 bar. On the Zeidan (2025) cable the measured stick slope lies below the
   no-slip bound since the armour shear stack stops at its support (Z-EI, diagnosed on), but the
   identified loops miss the moment range by a third or more (Z-ID); absolute dissipation
@@ -165,5 +167,6 @@ python validation/scripts/run_validation.py --check  # compare with the committe
 ```
 
 The script exits with status 1 while any row is **Fail** or **Review**. The failed rows are the
-registered comparisons listed above; in 0.1.0 they included BM1-loop and BM1-loop-uniform, which
-pass since the signed capstan correction (see the changelog).
+registered comparisons listed above. BM1-loop compared the source's transferred 0.3 MPa in 0.1.0
+(Fail) and until 2026-11-20; it now identifies the clamping on the ±0.05 cycle. BM1-loop-uniform
+gave the same numbers at uniform curvature and is removed (see the changelog).
