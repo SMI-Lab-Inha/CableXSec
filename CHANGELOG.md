@@ -15,6 +15,55 @@ All notable changes to CableXSec are recorded in this file. The format follows
   32 fibres), the damage differences from an earlier build, and the sea-state batch time
   against the worker count. `tests/test_fast_fatigue_path.py` checks the fused counting and
   field assembly against the arithmetic they replace (no wall-clock assertion).
+- CableDyn range graphs and VIV lift files are read: `read_cabledyn_range_graph`
+  (`<root>.Line<L>.range.out`, OpenFAST `<root>.CD.Line<L>.range.out`) and
+  `read_cabledyn_lift` (`<root>.Line<L>.V.out`), each checked column by column
+  against CableDyn's layout. On the new `lw24v` run the range extremes equal the
+  extremes of the node channels exactly, as CableDyn documents.
+  `read_cabledyn_sections` checks either file it finds against the run (mesh,
+  range window) and records its digest.
+- The hang-off's turn about its own tangent reaches the material frame of a line
+  CableDyn solves in torsion with End A restrained: a `Body<N>` holder turns it
+  with its `Body<N>Rx/Ry/Rz` channels, a `Fixed` one holds it, and a vessel or
+  platform holder takes the new `hang_off_rotation` (attitude matrices, a roll
+  history, or `"none"`; also a `SeaStateRun` field). A line restrained at End B
+  only turns its free End A by `-Twist<L>` against End B's frame. Before, the End
+  A frame was transported in time without twist: a line turned rigidly with its
+  body by 40 deg at a 60 deg hang-off read its components turned by 35 deg.
+- `CableDynLine.end_connections` and `end_kinds`: the END CONNECTIONS rows and
+  the holders of the ends, as CableDyn reads them.
+- `read_cabledyn_sections(curvature_source="components")` takes CableDyn's
+  `CurvX`/`CurvY` at the deck nodes around each section, on CableDyn's section
+  axes: exact, with no node positions or angles.
+- `SeaStateBatchOptions` takes the reader's curvature check tolerances
+  (`curvature_check_rtol`, `curvature_check_end_rtol`, `curvature_check_atol_1_m`):
+  a coarse run that fails the check at the default could not be read by the batch.
+- Distributed form of the laid-core law: `core_friction_history(...,
+  friction_model="distributed" | "auto")` solves the cores and the filler profiles with the
+  distributed helix model of the armour (the axial force of each core as a field along its
+  pitch, slip of every helix node in the direction of its own traction, no bending direction);
+  `"auto"` keeps the direction-tied law on planar paths, as in the fatigue route, and falls back
+  with `FrictionModelFallbackWarning` on a rigid interface. `compute_neutral_axes` takes
+  `friction_model="auto"` for the armour and gives the cores the armour's model unless
+  `core_friction_model` says otherwise; `SectionLaw.from_cable(friction_model="distributed")`
+  solves the cores with it too. Checks CF-D (targets registered before the run): planar
+  reduction of `"auto"` 0, lattice rotation 5.7e-15, dissipation and balance, μ = 0 bit for bit,
+  stick tangent 2.0e-6, compiled kernel 3.4e-16; the full-slip moment misses the continuous
+  closed form by 1.02e-4 against the registered 1e-4 at the default stations (FAIL, documented:
+  station quadrature; the model reproduces the station sum to 1e-10). Under non-proportional
+  curvature the distributed core law takes 1.3 (random walk) to 2.3 (circular orbit) times the
+  friction work of the direction-tied one on the 66 kV template.
+- `core_load_history`: the core and filler-profile contact loads of the contact model over a
+  tension history (bounded estimate exact, solved model exact up to 33 tensions).
+
+- One exported bending law per friction group, each with its own scale table
+  (`BendingLawExport.slip_group_laws()`, `SlipGroupLaw`, `to_group_csv`), for a global model
+  that sums the group laws `s_g(T) B_g(κ / s_g(T))` instead of carrying one scale. Rows
+  MX-group-B and MX-group-E (targets registered before the run): on the 66 kV template with
+  laid cores, filler profiles and 0 / 20 / 40 MPa armour winding stress, 10–200 kN, the summed
+  group laws reproduce the exported backbone within 4.6e-4 (target 0.5 %) and the cycle work
+  within 0.06 % (target ±1 %); one scale for all groups misses by up to 5.5 % and 7 % with
+  clamping (MX-group-1, reported).
 
 - Reported rows SV11-SPLIT, SV11-REACH and SV11-EQ88: where the SV11 termination increment
   comes from. With the bellmouth curvature imposed uniformly from the end-fitting face the
@@ -363,6 +412,30 @@ All notable changes to CableXSec are recorded in this file. The format follows
   the batch takes 43.3, 23.5, 13.0 and 7.8 s with 1, 2, 4 and 8 workers; the remainder is the
   start-up of each worker (about 2 s: imports and loading the compiled kernels).
 
+- The laid-core and filler-profile contact loads follow the tension history by default:
+  `compute_neutral_axes(..., core_loads="follow")` with `tension_N` or `contact_tension_N`, and
+  `compute_mkappa(..., core_loads="follow")` with `contact_tension_history_N`; before, they were
+  held at the first sample, which stays available as `core_loads="reference"`. Check CF-T
+  (registered before the run): a tension cycle of 10–70 kN inside bending cycles now meets the
+  slip-scaled exported law within 0.49–1.19 times its fixed-tension residual (target 1.25);
+  with the loads held it missed by up to 20 % of the moment range.
+
+- The default slip-scale table of `export_bending_law(..., slip_scale=True)` starts at zero
+  tension, with the caps of the contact model there (zero without clamping, the clamping caps
+  otherwise; row MX-group-0), so the scale runs to zero instead of ending at the lowest
+  exported tension. An explicit `slip_scale_tensions_N` is used as given.
+
+- CI runs the tests in parallel: the test matrix, the NumPy reference path and both coverage
+  passes run on one pytest-xdist worker per core (`pytest-xdist` joins the `dev` extra).
+  Every concurrent process writes its own numba cache: numba numbers a new cache entry from
+  the index it last read, so two processes compiling one kernel for different signatures at
+  once can overwrite each other's entries. `release/check_coverage.py --numprocesses N` and
+  `run_validation.py --jobs=N` take a worker count; `--jobs` evaluates the independent row
+  groups in worker processes and runs the three taxonomy groups concurrently. The coverage
+  run and the validation report check run side by side in two jobs, and the required check
+  "Coverage and validation report" passes only when both pass. The tests, the 95 % threshold,
+  the kernel coverage pass, the rows, the report and its staleness check are unchanged.
+
 - The rows that compare with the measured loops of Ménard and Cartraud (2023), BM1-loop,
   BM1-loop-uniform and BM1-ID, are stated, not gated (status INFO, the verdict against the
   registered target kept): the test is an unreliable reference. The benchmark register states the
@@ -453,6 +526,115 @@ All notable changes to CableXSec are recorded in this file. The format follows
   was refused; a stick modulus that changes over the record still is.
 
 ### Fixed
+
+- CableDyn deck reader mirrors CableDyn's record checks: a section header CableDyn
+  does not know is refused with the deck line (was skipped silently), as are a
+  record over 512 bytes without a comment, a NUL or non-ASCII whitespace
+  character outside a comment, a subnormal number, and END CONNECTIONS rows
+  CableDyn refuses (`none` or `-` torsion stiffness, zero `Ez`, a zero or
+  parallel `Nx` at a restrained end, two rows for one end, an unknown line, an
+  `EI = 0` line). Bytes that are not UTF-8 no longer stop the reader.
+- On a line CableDyn solves in torsion the reconstructed section axes start at
+  End A's torsion normal `Nx` (End B's on a line restrained at End B only), as
+  CableDyn's `CurvX`/`CurvY` axes do; they started at the reference vector and
+  stood 90 deg away on the coupled VolturnUS-S fixture `vu_torsion`, whose
+  components now agree within 0.3 to 1.2 %. `frame="section"` is refused on such
+  a line. An OpenFAST root holding the glue-code `<root>.out` beside
+  `<root>.CD.out` was refused as two runs; the CableDyn file is read.
+- `read_cabledyn_sections` refuses a standalone deck without `TMax` or with
+  `TMax 0` (a static run, one row) and a standalone record that ends before
+  `TMax` (a run that stopped early), naming the cause; an OpenFAST `.CD.out` is
+  no longer held against the deck's `dtM` (OpenFAST rounds it to whole glue
+  steps) or `TMax`. Malformed output rows, non-numeric profile cells and
+  non-text files raise `CableSchemaError` naming the file and line instead of
+  `ValueError`, `IndexError` or `UnicodeDecodeError`; NaN or negative curvature
+  check tolerances, a non-integer `line_id` and non-numeric section arcs are
+  refused.
+- Fallbacks are an error or a warning, never silent (`tests/test_silent_fallbacks.py`).
+  `fretting_regime.range_at_cycles` bisected on [1e-6, 1e6] MPa and returned the bound when the
+  life lay outside it (1e12 Pa for a life shorter than the curve's at 1e6 MPa, 1 Pa for a NaN
+  life); it refuses a life that is not finite and positive or outside its bracket. The
+  wire-yield guard of `compute_mkappa` swallowed every `ValueError`, so a bound that could not
+  be evaluated left no trace; it now warns (`ExtrapolationWarning`), and a cable without a
+  yield-stressed armour layer, which has no bound, is skipped as before. The bending-test
+  inversion returned its closest cached point as converged when it had no new point to try; it
+  bisects the bracket first (a target inside a step a few ulps wide, where the
+  interpolants round onto cached points, is resolved to the step) and raises
+  `CableSolverError` with the miss only when no point is left. A kinematic history whose
+  laid cores have no friction law held them to the cable axis silently; it warns and records
+  it in the provenance.
+- `compute_sheave` and the rig-test M-kappa loops ran their internal calls under
+  `warnings.simplefilter("ignore")`, dropping a wire-yield or clamping warning about the
+  caller's own curvature; each distinct warning is now relayed once
+  (`provenance.relayed_warnings`).
+- Adversarial inputs of the public API (`tests/test_robustness_inputs.py`): a friction
+  coefficient so large that the capstan factor overflows (`mu = 1e6`) stopped the reference
+  return map ("wire history exceeds floating-point range") while the compiled kernels held the
+  wires stuck; both paths now give the stuck answer, and so does `compute_mkappa`, which raised
+  on both (on the 33 kV template its loop at `mu = 1e6` equals the one at `mu = 100`). The
+  critical fibre, wire and layer of `compute_fatigue` are the first of the values within 1e-12
+  of the largest, so a round-off difference between the kernel paths no longer moves them (63
+  deg on one, 243 deg on the other, at equal damage). `compute_thermal` refuses a negative
+  current, temperatures below absolute zero and a core count that is not a positive integer
+  (`n_cores = 0` divided by zero), and so does `thermal_network` (a NaN ambient built a network
+  of NaN temperatures) with its steady, transient and matrix states (negative currents, ambients
+  below absolute zero); `export_bending_law` refuses a non-integer `n_points` (was numpy's
+  `TypeError`). A layer's schema error names the layer, its index and the file instead of the
+  union of layer kinds. `read_series_csv` refuses a file that is not UTF-8 with
+  `CableSchemaError` (was `UnicodeDecodeError`) and skips rows of spaces or separators only;
+  both CSV readers refuse a cell that is not a decimal number (`float` alone took `1_0` as 10).
+  `SeaStateBatchOptions` checks `n_fibres`, `chunk_rows`, `mu`, `exposure_years` and
+  `design_fatigue_factor` before any run is read, and `SeaStateRun` its `line_id`.
+- The series shear stack of the armour stick coefficient ξ (`xi_for_layer`, Yun et al. 2020)
+  stops at the layer's support. Walking inward, it adds each concentric cylindrical layer with
+  a modulus (interstitial fillers still skipped) and stops at the first helical layer inside and
+  at the laid power cores; no layer of an offset core is in it, and a single core on the axis
+  keeps its concentric insulation (`yun_shear_stack` returns the layers). Before, it counted
+  every layer inside the armour: the insulation of the offset cores of three-core cables and,
+  in flexible pipes, the pressure sheath under the steel pressure armour. ξ before → after:
+  Zeidan 2025 0.009 / 0.016 → 0.832 / 1.000 (EI_max 12.0 → 311.1 kN m²); Sævik 2011 tensile
+  armours 0.52 / 0.51 → 0.88 / 0.89; Witz 1996 0.141 / 0.138 → 0.422 / 0.466; Ménard 2023
+  0.208 / 0.248 → 0.686 / 0.888 (EI_max 59.1 → 189.8 kN m²); IEA 66 kV 0.775 / 0.857 →
+  0.934 / 0.992; the 33 kV and 220 kV three-core cables, Thies 2016 and Chae 2023 likewise; the
+  inner armour of the single-core 33 kV cable and of CIGRE TB 880 is unchanged, their outer
+  armour becomes 1 or 0.985. GJ, EA and the full-slip EI_min do not change. The rule, the
+  re-evaluated rows and held-out predictions were registered before the run
+  (doc/benchmarks.md, "Yun shear stack cut at the support"); no band or target changed. Z-EI
+  FAIL → PASS and SV11 (both diagnosed on, not independent): SV11-PLANE 1.62 → 2.17 (sectional
+  1.00 → 1.19, 12 of 14), SV11-GJ 1.80 → 2.07 (1.24 → 1.27), both still FAIL; Z-ID still FAIL
+  (P0 now identifiable, moment range −33 to −46 %). Held out: WITZ-ID 300-bar energy −14.2 →
+  −12.8 % (still FAIL on the width), BM1-loop work +8.8 → +11.8 % (stated, not gated; its
+  registered 10 % target now fails), BM1-ID (a) +26.0 → +28.5 %; each as predicted. The ring
+  stack of a core's wire screen (`compute_core_screen_fatigue`) stops at another resolved wire
+  screen inside, the same rule (no packaged cable changes). An armour on the armour inside it
+  now has ξ = 1: the distributed helix model (`friction_model="distributed"`) takes that rigid
+  interface with the along-wire chain's `RIGID_K_HAT` instead of refusing it, while
+  `friction_model="auto"` and the frictional heat keep the direction-tied cap for it as before.
+  `SectionLaw.from_cable(..., distributed_max_increment=0.02)` substeps the distributed law
+  more finely than the fatigue default (0.1), because the test solver bisects along legs: on
+  the Ménard cable in three-point bending the stiffer stick left a sampling residual of 8.5e-8
+  at 0.1 (2e-9 at 0.02). The README and quickstart outputs, which had drifted before this
+  change (peak 548 N m and 219.8 J/m printed against 541 N m and 212.0 J/m computed), are
+  regenerated.
+
+- `run_sea_state_batch` with `workers > 1`: each worker process writes a numba cache of its own
+  instead of sharing the caller's. numba numbers a new on-disk cache entry from the index it
+  last read and saves the index before the data, so two workers compiling one kernel for
+  different signatures at the same time could leave the index pointing at the other's machine
+  code, which a later process would load. Worker caches are slot folders `slot-<i>` under
+  `cablexsec/numba-batch` in the user cache directory (`CABLEXSEC_BATCH_CACHE_DIR` overrides
+  it), kept for later batches. Each worker locks its slot itself for as long as it runs (so
+  the slot stays taken even if the calling process ends first), a batch beside another takes
+  the next free slots, and a worker without a free slot or a writable folder gets a temporary
+  cache. Results are unchanged, and runs go to whichever worker is free, as before.
+
+- An interface of the radial section is open when its contact carries no line force, as the
+  contact solver decides it (`RadialSectionResult.interface_open`, `open_interfaces`); the
+  how-to recipe and the coiling check counted gaps above 1e-9 m. A closed contact reports
+  the round-off of the linear solve as its gap: about 1.5e-10 m on two interfaces carrying
+  1.1 MN/m of the 66 kV template at 100 kN and a sealed 2 MPa, within the solver's own
+  complementarity tolerance in metres (2e-10 to 4e-10 m there). macOS runs crossed 1e-9 m and
+  printed "open gaps 1" against the page's 0.
 
 - `SectionLaw.from_cable` reads the cable's own materials (its `materials:` block) when the law
   is built and every time it is evaluated. Outside `simulate_bending_test` it read the library

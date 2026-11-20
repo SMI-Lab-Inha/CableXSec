@@ -48,7 +48,8 @@ What a temperature does to the mechanics (per block):
     [Yan2021], 10--90 deg C, outside which the library refuses to
     extrapolate). The interface shear (stick) stiffness
     ``k_f = xi E_w cos^2 a`` follows through the Yun coefficient ``xi``
-    ([Yun2020]) of the polymer layers inside each armour layer. Materials
+    ([Yun2020]) of the layers between each armour layer and its support
+    (``yun_shear_stack``). Materials
     without a registered law keep their modulus unless a *relative transfer*
     of a registered law is requested explicitly (``modulus_transfer``; an
     assumption that is recorded). The steel wire modulus and the friction
@@ -1443,8 +1444,9 @@ def record_friction_work(
     holds for any biaxial history: every helix node dissipates at its own
     traction bound. The direction-tied cap of the fatigue path under-counts
     the dissipation of rotating curvature (module notes). The distributed
-    model needs ``xi < 1``; a rigid interface (``xi = 1``) falls back to the
-    direction-tied work, which is then exact only for planar records. Returns
+    model represents a rigid interface (``xi = 1``) only by the along-wire
+    penalty ``RIGID_K_HAT``; such a layer falls back to the direction-tied
+    work, which is then exact only for planar records. Returns
     the work and the model that gave it, ``"distributed"`` or
     ``"direction_tied"``.
     """

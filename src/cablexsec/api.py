@@ -49,6 +49,7 @@ from numpy.typing import NDArray
 from cablexsec.analysis.capacity import (
     BirdcageDetail,
     CapacityResult,
+    _armour_layers,
     birdcage_buckling_detail,
     compute_capacity,
     wire_yield_curvature,
@@ -169,11 +170,15 @@ from cablexsec.mechanics.concentric_section import (
 )
 from cablexsec.mechanics.contact_qp import ContactQPResult, solve_contact_qp
 from cablexsec.mechanics.core_friction import (
+    CORE_LOAD_MODES,
     CoreFrictionHistory,
     CoreFrictionModel,
     CoreFrictionSpec,
+    CoreLoadHistory,
+    CoreLoadMode,
     build_core_friction,
     core_friction_history,
+    core_load_history,
     resolve_core_friction,
 )
 from cablexsec.mechanics.core_kinematics import CoreSlipState
@@ -550,10 +555,12 @@ class _MkappaLaw:
         contact_pressure_Pa: Sequence[FloatArray] | None = None,
         friction_law: FrictionLaw | None = None,
         time_s: FloatArray | None = None,
+        core_loads: CoreLoadHistory | None = None,
     ) -> _MkappaRun:
         """Evaluate the law; ``contact_pressure_Pa`` is one armour ``P1+P2``
         history per layer (order of ``layers``), ``None`` for fixed pressure.
-        The laid-core model keeps its own fixed contact loads. A non-neutral
+        The laid-core model keeps its own fixed contact loads unless
+        ``core_loads`` gives their history. A non-neutral
         ``friction_law`` (armour wires, direction-tied law) is refused with
         the progressive law and the laid-core model."""
         phi_bend = self.phi_bend
@@ -595,6 +602,7 @@ class _MkappaLaw:
             kappa * direction[0],
             kappa * direction[1],
             initial_bending_angle=phi_bend,
+            loads=core_loads,
         )
         moment = res.moment_Nm + core_history.moment_Nm @ direction
         aw, cw = res.work, core_history.work
@@ -677,6 +685,7 @@ def compute_mkappa(
     contact_tension_history_N: FloatArray | None = None,
     friction_law: FrictionLaw | None = None,
     time_s: FloatArray | None = None,
+    core_loads: CoreLoadMode = "follow",
 ) -> MkappaResult:
     r"""Moment-curvature hysteresis of a cable over a curvature history.
 
@@ -697,12 +706,13 @@ def compute_mkappa(
     sets the friction bound of every wire at every sample, in the same
     return map as the fatigue path: the slip state is carried across the
     change, a falling bound clips a wire's friction stress (friction work),
-    and a rising bound leaves a sticking wire unchanged. What follows the
-    history is the armour friction bound only. The stick stiffness,
-    ``EI_min``, ``EI_max``, the laid-core and internal-ring contact loads
-    (``core_friction``) and the wire-yield range check stay at the reference
-    state (``tension_N``, ``section_state`` or ``radial_state``; the first
-    sample of a tension history).
+    and a rising bound leaves a sticking wire unchanged. With
+    ``contact_tension_history_N`` the laid-core and filler-profile contact
+    loads (``core_friction``) follow the same history by default
+    (``core_loads``). The stick stiffness, ``EI_min``, ``EI_max``, the
+    pressure-held part of the internal rings and the wire-yield range check
+    stay at the reference state (``tension_N``, ``section_state`` or
+    ``radial_state``; the first sample of a tension history).
 
     Parameters
     ----------
@@ -797,6 +807,15 @@ def compute_mkappa(
         Sample times [s] of ``kappa_history``, required by a law that depends
         on time (a slip rate or a finite positive healing time); refused
         otherwise.
+    core_loads : {"follow", "reference"}, optional
+        Contact loads of the laid cores and filler profiles under a
+        ``contact_tension_history_N``. ``"follow"`` (default) evaluates them
+        at every sample through the same contact model
+        (:func:`~cablexsec.mechanics.core_friction.core_load_history`), so
+        that every friction bound of the section follows the tension, as the
+        slip scale of an exported law assumes; ``"reference"`` holds them at
+        the first sample (the earlier behaviour). Without a tension history
+        the loads are those of the reference state either way.
 
     Returns
     -------
@@ -833,6 +852,10 @@ def compute_mkappa(
     require_finite(phi_bend, "phi_bend")
     if tension_N < 0.0:
         raise CableSchemaError("tension_N must be >= 0 for the contact model.")
+    if core_loads not in CORE_LOAD_MODES:
+        raise CableSchemaError(
+            f"core_loads must be one of {CORE_LOAD_MODES}, got {core_loads!r}"
+        )
     if mu is not None:
         require_finite(mu, "mu")
         if mu < 0.0:
@@ -949,33 +972,55 @@ def compute_mkappa(
 
     # Soft guard: the linear-elastic wire-stress assumption holds below the
     # armour yield curvature (where the capacity envelope's wire-yield mechanism
-    # is reached). Beyond it the elastic M-κ is unconservative.
-    try:
-        kappa_yield = wire_yield_curvature(
-            cable,
-            float(np.max(tension_history))
-            if tension_history is not None
-            else tension_N
-            if section_state is None
-            else 0.0,
-            mu=mu,
-            section_state=section_state,
-            contact_model=contact_model,
-            phi_bend=phi_bend,
-        )
-        if math.isfinite(kappa_yield) and kappa_yield > 0.0:
-            check_range(
-                float(np.max(np.abs(kappa))),
-                ValidatedRange(
-                    "peak |curvature| [1/m]",
-                    0.0,
-                    kappa_yield,
-                    "armour wire-yield curvature (capacity wire-yield mechanism)",
-                ),
+    # is reached). Beyond it the elastic M-κ is unconservative. A cable without
+    # an armour layer of published yield stress has no bound to check; a bound
+    # that cannot be evaluated for another reason is said so, not skipped.
+    if _armour_layers(cable):
+        try:
+            kappa_yield = wire_yield_curvature(
+                cable,
+                float(np.max(tension_history))
+                if tension_history is not None
+                else tension_N
+                if section_state is None
+                else 0.0,
+                mu=mu,
+                section_state=section_state,
+                contact_model=contact_model,
+                phi_bend=phi_bend,
             )
-    except (ValueError, KeyError):
-        pass  # no yield-strength armour: no curvature bound to check
+        except (CableSchemaError, ValueError, KeyError) as error:
+            warnings.warn(
+                "the armour wire-yield curvature, the bound of the elastic M-kappa "
+                f"law, could not be evaluated ({error}); the curvature history is "
+                "not checked against it",
+                ExtrapolationWarning,
+                stacklevel=3,
+            )
+        else:
+            if math.isfinite(kappa_yield) and kappa_yield > 0.0:
+                check_range(
+                    float(np.max(np.abs(kappa))),
+                    ValidatedRange(
+                        "peak |curvature| [1/m]",
+                        0.0,
+                        kappa_yield,
+                        "armour wire-yield curvature (capacity wire-yield mechanism)",
+                    ),
+                )
 
+    core_load_states = (
+        core_load_history(
+            cable,
+            mkappa_law.core_model,
+            tension_history,
+            contact_model=contact_model,
+        )
+        if mkappa_law.core_model is not None
+        and tension_history is not None
+        and core_loads == "follow"
+        else None
+    )
     run = mkappa_law.run(
         kappa,
         None
@@ -983,6 +1028,7 @@ def compute_mkappa(
         else [pressure_history[name] for name in names],
         friction_law=law,
         time_s=time_s,
+        core_loads=core_load_states,
     )
     res, moment, work, ei_max = run.armour, run.moment_Nm, run.work, run.EI_max_Nm2
     w_diss, core_history = run.W_diss_J_per_m, run.core_history
@@ -1008,9 +1054,18 @@ def compute_mkappa(
         ()
         if pressure_history is None
         else (
-            "only the armour friction bound follows the contact-pressure "
-            "history; the stick stiffness, EI_min, any laid-core and ring "
-            "contact loads and the wire-yield check use the reference state",
+            (
+                "the armour friction bound and the laid-core and profile "
+                "contact loads follow the tension history; the stick "
+                "stiffness, EI_min, the pressure-held part of the internal "
+                "rings and the wire-yield check use the reference state"
+            )
+            if core_load_states is not None
+            else (
+                "only the armour friction bound follows the contact-pressure "
+                "history; the stick stiffness, EI_min, any laid-core and ring "
+                "contact loads and the wire-yield check use the reference state"
+            ),
         )
     )
     model = mkappa_law.core_model
@@ -1040,10 +1095,21 @@ def compute_mkappa(
             )
         )
         citations_extra = ("[Yun2020] (core xi)", "[KarlsenHusoy2026]")
+        if core_load_states is not None:
+            method_extra += (
+                f"; the core contact loads follow the tension history through "
+                f"the {contact_model} contact model"
+            )
         limitations_extra = (
-            "core contact loads are the axisymmetric state held fixed in "
-            "bending; the layers of a core move together; core-core friction "
-            "acts on the slip of each core relative to the plane-section field",
+            "core contact loads are the axisymmetric state "
+            + (
+                "of every sample of the tension history"
+                if core_load_states is not None
+                else "of the reference"
+            )
+            + ", not changed by bending; the layers of a core move together; "
+            "core-core friction acts on the slip of each core relative to the "
+            "plane-section field",
             "internal rings take the core contact line load by line-force "
             "conservation (upper estimate) and the cable curvature",
         )

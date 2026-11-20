@@ -244,11 +244,27 @@ def _ring_xi(
     ea_wire: float,
     alpha: float,
 ) -> float:
-    """Yun coefficient of the ring on the shear of the core layers inside it."""
+    """Yun coefficient of the ring on the shear of the core layers inside it.
+
+    The core's layers are concentric about the ring's own axis, so they form
+    the series stack of :func:`~cablexsec.mechanics.stiffness.xi_for_layer`:
+    every layer between the ring and its support. As there, the stack stops
+    at a helical layer inside, here another resolved wire screen of the core.
+    """
+    floor = r_helix - d_wire / 2 + _TOL
+    support = max(
+        (
+            other.r_outer_m or 0.0
+            for other in _core_family(cable, layer)
+            if other.construction == "resolved_wire_screen"
+            and (other.r_outer_m or 0.0) <= floor
+        ),
+        default=0.0,
+    )
     stack: list[tuple[float, float, float]] = []
     for other in sorted(_core_family(cable, layer), key=lambda x: x.r_inner_m or 0.0):
         ri, ro = other.r_inner_m or 0.0, other.r_outer_m or 0.0
-        if ro > r_helix - d_wire / 2 + _TOL or ro <= ri:
+        if ro > floor or ro <= ri or ri < support - _TOL:
             continue
         try:
             e = library.get_property(other.material, "E_Pa")

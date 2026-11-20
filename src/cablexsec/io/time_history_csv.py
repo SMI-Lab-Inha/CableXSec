@@ -12,6 +12,7 @@ and ``N``.
 from __future__ import annotations
 
 import csv
+import io
 import re
 from pathlib import Path
 from typing import Literal, cast
@@ -20,7 +21,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from cablexsec.exceptions import CableSchemaError
-from cablexsec.io.series import LoadCaseSeries
+from cablexsec.io.series import LoadCaseSeries, parse_number
 from cablexsec.mechanics.section_conventions import rotation_to_strain_curvature
 from cablexsec.provenance import Provenance
 
@@ -216,7 +217,9 @@ def _read_csv_rows(path: Path) -> tuple[list[tuple[int, list[str]]], list[str]]:
         raise CableSchemaError(
             f"{path.name}: not a text CSV (neither UTF-8 nor Windows-1252)."
         )
-    reader = csv.reader(text.splitlines())
+    # A newline-preserving stream: a quoted cell keeps an embedded newline
+    # (and is refused), where split lines would join its parts.
+    reader = csv.reader(io.StringIO(text, newline=""))
     all_rows = [(reader.line_num, r) for r in reader if any(cell.strip() for cell in r)]
     if not all_rows:
         raise CableSchemaError(f"{path.name}: empty CSV.")
@@ -315,7 +318,7 @@ def _columns_to_arrays(
     for line, row in rows:
         for key, col in idx.items():
             try:
-                out[key].append(float(row[col]))
+                out[key].append(parse_number(row[col]))
             except ValueError as exc:
                 raise CableSchemaError(
                     f"{source}: line {line} column {col + 1} is not numeric: "

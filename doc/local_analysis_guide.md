@@ -23,7 +23,9 @@ defined layer by layer it computes:
 - **Section stiffness** (`compute_stiffness`): axial with fixed and free twist,
   axial–torsion coupling, and bending bounds: full slip (`ei_min_Nm2`),
   shear-compliant no slip with the Yun coefficient ξ (`ei_max_Nm2`) and the
-  plane-section reference (`ei_plane_section_Nm2`).
+  plane-section reference (`ei_plane_section_Nm2`). The shear stack of ξ is
+  the concentric layers between an armour layer and its support, the next
+  helical layer inside or the laid cores (`yun_shear_stack`).
 - **Helical armour stick–slip bending** (`compute_mkappa`): Papailiou
   slip-front law, slip spreading from the neutral axis; friction cap from
   Féret–Bournazel winding clamping plus the tension increment; Yun shear support.
@@ -946,6 +948,27 @@ print(core.loads, core.xi, core.mu_effective, core.stick_EI_Nm2)
   cores use the same direction-tied Papailiou cap and return map as the armour
   wires, so biaxial histories work
   (`cablexsec.mechanics.core_friction.core_friction_history`).
+- Friction model of the cores and profiles, as for the armour:
+  `core_friction_history(..., friction_model="distributed")` solves each
+  population with the distributed helix model of the armour (the axial force
+  of a core as a field along its pitch, with the shear-lag interface of `ξ`
+  and the slip of every helix node in the direction of its own traction, no
+  bending direction), and `"auto"` keeps the direction-tied law on planar
+  paths. Under rotating curvature the direction-tied cap turns with the
+  bending direction and takes too little friction work (66 kV template, cores
+  and profiles at μ 0.46: the distributed law takes 1.3 times the work on a
+  random walk and 2.3 times on a circular orbit). `compute_neutral_axes`
+  gives the cores the armour's `friction_model` (or `core_friction_model`).
+  The distributed form needs a compliant interface (`ξ < 1`, the default with
+  the core insulation shear).
+- Over a tension history the core and profile contact loads follow the
+  tension by default (`core_loads="follow"` of `compute_neutral_axes` and of
+  `compute_mkappa` with `contact_tension_history_N`; the loads per sample from
+  `core_load_history`), as the armour contact pressure does; `"reference"`
+  holds them at the first sample. With the loads held, the section missed the
+  slip-scaled exported law by up to 20 % of the moment range under a 10–70 kN
+  tension cycle; with them following, by the law's own fixed-tension residual
+  (rows CF-D and CF-T of the [benchmark register](benchmarks.md)).
 - Normal loads: the solved trefoil contact forces (`contact_model="solved"`)
   or a bounded estimate. In the estimate each core carries its capstan load
   `C` and one third of the line force `R` inside the innermost armour (winding
@@ -953,7 +976,7 @@ print(core.loads, core.xi, core.mu_effective, core.stick_EI_Nm2)
   reacted by the two neighbouring cores of a touching trefoil, whose contact
   forces sum to `(C + R/3)/sin 60°` (default), or radially by a central
   filler (`CoreFrictionSpec(central_filler=True)`). The solved model reads the
-  core support of the solved radial state. The loads are held fixed during
+  core support of the solved radial state. The loads are not changed by
   bending.
 - Filler profiles (`CoreFrictionSpec(filler_profiles=True)`,
   `mu_filler_profile`): the non-structural interstitial filler annulus (a

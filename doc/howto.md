@@ -89,7 +89,10 @@ twist free: strain 378 ue, twist 6.91 mrad/m, torque 0.0 N m
 ```
 
 `solve_cable_radial_state` takes trefoil cores and the declared manufacturing
-clamping. Here the external pressure acts on the outer sheath with the
+clamping. An interface is open when its contact carries no line force
+(`result.open_interfaces`), as the contact solver decides it: the reported gap
+of a closed contact is the round-off of the linear solve (about 1e-10 m here),
+not a measure of openness. Here the external pressure acts on the outer sheath with the
 {term}`annulus` sealed; `flooded_pressure_Pa` floods it. `solve_contact_qp` and
 `solve_concentric_section` accept concentric layers only and leave out the
 {term}`manufacturing clamping`. All three solve a state of tension, twist,
@@ -110,13 +113,13 @@ pressure and temperature without bending, as the
 ```text
 strain axis offset -3.82 mm
  kappa  theta    psi  delta  psi_L  stick
- 0.005    0.0    0.0    0.0    0.0    360
- 0.015    0.0    0.0    0.0    0.0    242
+ 0.005    0.0    0.0    0.0    0.0      0
+ 0.015    0.0    0.0    0.0    0.0      0
  0.025    0.0    0.0    0.0    0.0      0
  0.050    0.0    0.0    0.0    0.0      0
- 0.050   30.0   34.0    4.0   43.0    145
- 0.050  120.0  124.1    4.1  133.4    145
- 0.050  180.0 -175.9    4.1 -166.6    145
+ 0.050   30.0   59.1   29.1   79.0     48
+ 0.050  120.0  149.2   29.2  169.0     43
+ 0.050  180.0 -150.9   29.1 -131.0     48
 ```
 
 Angles are in degrees from the section x axis. `theta` is the bending
@@ -215,12 +218,12 @@ all from one record.
 <!-- howto-output: howto_06_fatigue_utilities.py -->
 ```text
 armour: critical layer inner_armour, wire at 0 deg, fibre at 0 deg
-  inner_armour  damage in 600 s 5.859e-06
-  outer_armour  damage in 600 s 2.245e-06
+  inner_armour  damage in 600 s 5.619e-05
+  outer_armour  damage in 600 s 2.468e-06
 copper fibre: 122 cycles, max amplitude 1568 ue, damage 3.647e-05
 curvature: mean 60 s maximum 0.0479 1/m, 1 h most probable 0.0761, 90 % fractile 0.0941 1/m
-inner_armour  slip range 0.0 um, slipping share 0.00
-outer_armour  slip range 284.7 um, slipping share 0.26
+inner_armour  slip range 361.4 um, slipping share 0.56
+outer_armour  slip range 530.8 um, slipping share 0.84
 ```
 
 `jonswap_series` makes a synthetic screening record. `fatigue_from_series`
@@ -267,8 +270,8 @@ coupling none
   friction heat 0.00 W/m at start, 0.00 W/m at 6 h
   after 6 h: conductor 31.9 C, outer armour 24.7 C
 coupling two_way
-  friction heat 9.90 W/m at start, 18.22 W/m at 6 h
-  after 6 h: conductor 34.7 C, outer armour 27.7 C
+  friction heat 9.90 W/m at start, 18.24 W/m at 6 h
+  after 6 h: conductor 34.7 C, outer armour 27.8 C
 ```
 
 This cable declares no manufacturing clamping, so the friction rests on the

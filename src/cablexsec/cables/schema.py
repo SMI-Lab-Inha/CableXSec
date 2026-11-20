@@ -69,6 +69,7 @@ from pydantic import (
     SerializationInfo,
     SerializerFunctionWrapHandler,
     TypeAdapter,
+    ValidationError,
     field_serializer,
     field_validator,
     model_serializer,
@@ -1676,9 +1677,11 @@ def _check_radial_order(layers: Sequence[Any]) -> None:
     """Layers are listed from the axis outwards and do not overlap.
 
     Analyses read the YAML order as the radial order (the shear stack under an
-    armour layer is the layers listed before it, [Yun2020] in
-    :func:`cablexsec.mechanics.stiffness.xi_for_layer`), so a layer listed out
-    of order or overlapping another is refused here rather than mis-assembled.
+    armour layer is the concentric layers listed between it and the helical
+    layer or power cores inside it, [Yun2020] in
+    :func:`cablexsec.mechanics.stiffness.yun_shear_stack`), so a layer listed
+    out of order or overlapping another is refused here rather than
+    mis-assembled.
     """
     envelope = _core_envelope(layers)
     inside = (
@@ -2084,6 +2087,35 @@ _TOP_LEVEL_KEYS = frozenset(
 )
 
 
+def _validate_layer(item: Any, index: int, source: str) -> Any:
+    """One layer of a cable file; an error names the layer and the file.
+
+    Pydantic titles a layer's error with the union of every layer kind and
+    locates it within the kind only; the title here is the layer's index and
+    name, and the location starts at ``layers.<index>``.
+    """
+    try:
+        return _LAYER_ADAPTER.validate_python(item)
+    except ValidationError as error:
+        name = item.get("name") if isinstance(item, Mapping) else None
+        title = f"layer {index}{f' {name!r}' if name else ''} of {source}"
+        details: list[Any] = []
+        for entry in error.errors():
+            detail: dict[str, Any] = {
+                "type": entry["type"],
+                "loc": ("layers", index, *entry["loc"]),
+                "input": entry["input"],
+            }
+            if "ctx" in entry:
+                detail["ctx"] = entry["ctx"]
+            details.append(detail)
+        try:
+            renamed = ValidationError.from_exception_data(title, details)
+        except (TypeError, ValueError, KeyError):  # an error kind it cannot rebuild
+            raise error from None
+        raise renamed from None
+
+
 def load_cable(
     yaml_path: str | Path,
     *,
@@ -2160,7 +2192,8 @@ def load_cable(
         )
 
     layers = tuple(
-        _LAYER_ADAPTER.validate_python(item) for item in raw.get("layers", [])
+        _validate_layer(item, index, path.name)
+        for index, item in enumerate(raw.get("layers", []))
     )
     return CableData(
         cable=CableMeta.model_validate(raw.get("cable", {})),

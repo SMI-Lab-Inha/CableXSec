@@ -8,7 +8,11 @@ the whole suite once as installed, then runs the kernel tests a second time with
 ``NUMBA_DISABLE_JIT=1`` so that the kernel bodies execute as Python, appends both to
 one coverage record, and fails below the threshold.
 
-Usage: ``python release/check_coverage.py [--fail-under 95]``
+``--numprocesses`` (pytest-xdist) runs both passes on several workers; pytest-cov
+combines the workers of each pass, and the second pass is appended to the first as in
+a serial run.
+
+Usage: ``python release/check_coverage.py [--fail-under 95] [--numprocesses auto]``
 """
 
 from __future__ import annotations
@@ -51,9 +55,18 @@ def run(command: list[str], extra_env: dict[str, str] | None = None) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--fail-under", type=float, default=95.0)
+    parser.add_argument(
+        "-n",
+        "--numprocesses",
+        default=None,
+        help="pytest-xdist workers for both passes (a number, auto or logical); "
+        "serial when omitted",
+    )
     args = parser.parse_args()
     python = sys.executable
     pytest = [python, "-m", "pytest", "-q", "-p", "no:cacheprovider"]
+    if args.numprocesses is not None:
+        pytest += ["-n", args.numprocesses]
     status = run(
         [*pytest, "--cov", "--cov-branch", "--cov-report=", "--cov-fail-under=0"]
     )

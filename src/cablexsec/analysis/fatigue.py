@@ -284,8 +284,10 @@ def _distributed_spec(
     A constant stick modulus is the Yun coefficient ``xi = k / (E cos^2 a)``
     of that state (a thermal block recomputes ``xi`` from its moduli), so the
     layer is returned with that coefficient. A stick modulus that changes
-    over the record, a rigid interface (``xi >= 1``) and a rate-dependent
-    friction law are not covered by the distributed model.
+    over the record and a rate-dependent friction law are not covered by the
+    distributed model; a rigid interface (``xi >= 1``) it represents only by
+    the along-wire penalty ``RIGID_K_HAT``, so the exact direction-tied cap
+    is kept for it.
     """
     law = active_friction_law(friction_law)
     if law is not None and law.rate_dependent:
@@ -351,6 +353,20 @@ def _warn_default_direction_tied(out_of_plane: float, stacklevel: int) -> None:
         DirectionTiedFrictionWarning,
         stacklevel=stacklevel + 1,
     )
+
+
+#: Values within this relative distance of the largest are a tie: the
+#: critical fibre, wire and layer are the first of them, so a round-off
+#: difference (compiled against reference kernels, or symmetric wires) does
+#: not move the reported location.
+_TIE_RTOL = 1e-12
+
+
+def _first_maximum(values: FloatArray) -> NDArray[np.intp]:
+    """Index of the first value of each row within ``_TIE_RTOL`` of its maximum."""
+    peak = np.max(values, axis=1, keepdims=True)
+    near = values >= peak - _TIE_RTOL * np.abs(peak)
+    return np.asarray(np.argmax(near, axis=1))
 
 
 def _check_distributed_bound(bound: str) -> None:
@@ -1645,8 +1661,9 @@ def compute_fatigue(
         when the curvature path is planar (out-of-plane ratio
         :func:`curvature_path_out_of_plane_ratio` at most
         ``PLANAR_PATH_TOLERANCE``) and the distributed model otherwise; a
-        layer that the distributed model does not cover (rigid interface
-        ``xi >= 1``, a stick modulus that changes over the record, a
+        layer that the distributed model does not cover exactly (rigid
+        interface ``xi >= 1``, which it represents only by the along-wire
+        penalty, a stick modulus that changes over the record, a
         rate-dependent friction law) keeps the direction-tied model, and the
         provenance records the model of every layer and the reason for such a
         fallback. The direction-tied cap turns with the bending direction:
@@ -2027,11 +2044,11 @@ def compute_fatigue(
                 if amplify
                 else fibre_damage[:, j]
             )
-        critical_indices = np.argmax(fibre_damage, axis=1)
+        critical_indices = _first_maximum(fibre_damage)
         db = fibre_damage[np.arange(n_eval), critical_indices]
         d_fibre[name] = fibre_damage
         critical_fibre[name] = np.degrees(fibre_angles[critical_indices])
-        adjusted_indices = np.argmax(amplified_damage, axis=1)
+        adjusted_indices = _first_maximum(amplified_damage)
         adjusted_db = amplified_damage[np.arange(n_eval), adjusted_indices]
         d_adjusted_fibre[name] = amplified_damage
         critical_adjusted_fibre[name] = np.degrees(fibre_angles[adjusted_indices])
@@ -2120,8 +2137,8 @@ def compute_fatigue(
     # Critical wire across all layers.
     crit_layer, crit_k, crit_val = "", 0, -1.0
     for name, dvec in d_total.items():
-        k = int(np.argmax(dvec))
-        if dvec[k] > crit_val:
+        k = int(_first_maximum(dvec[None, :])[0])
+        if dvec[k] > crit_val * (1.0 + _TIE_RTOL):
             crit_layer, crit_k, crit_val = name, k, float(dvec[k])
 
     if crit_layer:

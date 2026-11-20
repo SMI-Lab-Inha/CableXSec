@@ -122,6 +122,13 @@ CurvatureDefinition = Literal["station", "elastic", "fit"]
 _CONTROLS = ("load", "displacement", "moment", "curvature")
 _DEFINITIONS = ("station", "elastic", "fit")
 _MAX_ITERATIONS = 200
+#: Substep of the distributed helix law in a section law [units of the slip
+#: onset curvature]. The test solver bisects along monotone legs, so the law's
+#: dependence on the sampling of a leg must stay near the equilibrium
+#: tolerance. The fatigue default (0.1) leaves 8.5e-8 on the Menard cable in
+#: three-point bending once the armour sits on a stiff support (xi 0.69 and
+#: 0.89); 0.02 leaves 2e-9.
+SECTION_LAW_MAX_INCREMENT = 0.02
 
 
 # --------------------------------------------------------------------------- #
@@ -227,6 +234,7 @@ class SectionLaw:
         ] = "direction_tied",
         progressive: ProgressiveFriction | None = None,
         distributed_nodes_per_pitch: int | None = None,
+        distributed_max_increment: float = SECTION_LAW_MAX_INCREMENT,
     ) -> SectionLaw:
         """The :func:`~cablexsec.api.compute_mkappa` law of a cable.
 
@@ -237,8 +245,13 @@ class SectionLaw:
         stress by the distributed helix model of
         :mod:`cablexsec.mechanics.distributed_friction` (the fatigue-path
         option) and assembles the moment from the wire stresses in the same
-        way; it substeps internally, so its leg property holds to the
-        substep accuracy.
+        way, and solves the laid cores and filler profiles of
+        ``core_friction`` with the same model
+        (:func:`~cablexsec.mechanics.core_friction.core_friction_history`,
+        ``friction_model="distributed"``); it substeps internally
+        (``distributed_max_increment``, in units of the slip-onset curvature,
+        :data:`SECTION_LAW_MAX_INCREMENT` by default), so its leg property
+        holds to the substep accuracy.
 
         The contact pressure is that of the one contact state given here.
         The pressure and tension histories of
@@ -329,7 +342,11 @@ class SectionLaw:
             stored = 0.5 * law.ei_min * kappa**2
             for spec in law.layers:
                 hist = distributed_friction_history(
-                    spec, kx, ky, nodes_per_pitch=distributed_nodes_per_pitch
+                    spec,
+                    kx,
+                    ky,
+                    nodes_per_pitch=distributed_nodes_per_pitch,
+                    max_increment=distributed_max_increment,
                 )
                 weight = spec.A_wire_m2 * math.cos(spec.lay_angle_rad) * spec.r_helix_m
                 proj = np.cos(spec.phi_wires) * cos_b + np.sin(spec.phi_wires) * sin_b
@@ -338,7 +355,12 @@ class SectionLaw:
                 stored = stored + hist.stored_J_per_m
             if law.core_model is not None:
                 core = core_friction_history(
-                    law.core_model, kx, ky, initial_bending_angle=phi_bend
+                    law.core_model,
+                    kx,
+                    ky,
+                    friction_model="distributed",
+                    nodes_per_pitch=distributed_nodes_per_pitch,
+                    max_increment=distributed_max_increment,
                 )
                 moment = moment + core.moment_Nm @ np.array([cos_b, sin_b])
                 friction = friction + core.work.friction_J_per_m
@@ -932,9 +954,22 @@ class _MonotoneInverse:
                     cands.append(0.5 * (vl + vh))
             before = self.v.size
             self._add(np.concatenate(cands))
+            if self.v.size == before and inside.any():
+                # The interpolants rounded onto cached points (a target inside
+                # a step of u a few ulps of v wide, as the distributed friction
+                # model gives): bisect. A bracket with no float inside it is
+                # closed above (tiny).
+                self._add(0.5 * (V[lo[inside]] + V[hi[inside]]))
             if self.v.size == before:
-                # no new point: accept the closest cached point
-                return sol_v, sol_u
+                # No new point to try: the open targets are not reached within
+                # the tolerance, so the closest cached point would be a wrong
+                # answer returned as a converged one.
+                worst = float(np.max(np.minimum(r_hi, r_lo)[open_]))
+                raise CableSolverError(
+                    "bending-test inversion stalled: no new curvature point to try, "
+                    f"{int(np.count_nonzero(open_))} target(s) missed by up to "
+                    f"{worst:.3g} (tolerance {self.tol:.3g})"
+                )
         raise CableSolverError("bending-test inversion did not converge")
 
 

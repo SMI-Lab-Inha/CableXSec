@@ -126,9 +126,6 @@ TwistSense = Literal["unwind", "tighten", "signed"]
 #: and screens lie at 10-50 deg.
 NEAR_HOOP_LAY_ANGLE_DEG = 75.0
 
-#: Gap [m] above which a contact of the twisted section counts as open.
-OPEN_GAP_M = 1.0e-9
-
 _PROVENANCE = Provenance(
     method="coiling: twisted radial-axial-torsional section (free axial) with "
     "rotating bending, slip-front friction and local wire bending on fixed fibres; "
@@ -509,15 +506,9 @@ def compute_coiling(
             )
         else:
             layers_out[layer.name] = replace(partial, utilisation=buckling)
-    # A contact that carries a load reports a gap of round-off size (1e-18 to
-    # 1e-15 m); an open one a gap of a solved size (0.1 mm and more here).
-    open_ifaces = tuple(
-        "/".join(name)
-        for name, gap in zip(
-            result.interface_names, result.interface_gap_m, strict=True
-        )
-        if gap > OPEN_GAP_M
-    )
+    # Open or closed as the contact solver decides it (no line force), not by
+    # the reported gap, whose round-off follows the linear algebra.
+    open_ifaces = tuple("/".join(name) for name in result.open_interfaces)
     from cablexsec.analysis.components import (  # noqa: PLC0415
         capacity_utilisation,
         compute_component_response,
