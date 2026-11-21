@@ -103,6 +103,10 @@ from cablexsec.mechanics.friction_law import (
 )
 from cablexsec.mechanics.mkappa import HelicalLayerSpec
 from cablexsec.mechanics.return_mapping import CoulombElement
+from cablexsec.mechanics.station_coupling import (
+    StationCoupling,
+    project_station_groups,
+)
 
 if TYPE_CHECKING:
     from cablexsec.mechanics.progressive_friction import ProgressiveFriction
@@ -114,6 +118,7 @@ __all__ = [
     "compute_mkappa_papailiou",
     "DIRECTION_HOLD_FRACTION",
     "compute_mkappa_wire_slip_front",
+    "coupled_slip_stress_bounds",
     "direction_threshold_curvature",
     "full_slip_curvature",
     "slip_onset_curvature",
@@ -123,6 +128,8 @@ __all__ = [
 ]
 
 FloatArray = NDArray[np.float64]
+#: Interlayer upper, lower and intralayer bounds of coupled stations.
+_Bounds3 = tuple[FloatArray, FloatArray, FloatArray]
 
 #: Default fraction ``f`` of the smallest slip-onset curvature below which the
 #: bending direction of the slip cap is held and blended (see
@@ -423,6 +430,81 @@ def wire_slip_stress_bounds(
 #: The tension friction bound of a wire whose capstan factor overflows [Pa]:
 #: finite, far above any wire stress, so the wire never slips.
 _UNREACHABLE_CAP_PA = 1.0e300
+
+
+def coupled_slip_stress_bounds(
+    layer: HelicalLayerSpec,
+    coupling: StationCoupling,
+    phi_bend: float,
+    *,
+    contact_pressure_Pa: float | None = None,
+    intralayer_pressure_Pa: float | None = None,
+) -> tuple[FloatArray, FloatArray, FloatArray]:
+    r"""Interlayer and intralayer bounds of coupled stations [Pa].
+
+    Returns ``(upper, lower, cap)``: the interlayer bounds of
+    :func:`wire_slip_stress_bounds` with the coupling's interlayer coefficient
+    at ``contact_pressure_Pa`` (default the layer's), and the intralayer bound
+
+    .. math::
+
+        C = \sigma_0(P_c) \, \mu_{cc} |\sin a| \, g \min(\psi, \pi / n),
+
+    with ``sigma_0`` of :func:`wire_slip_stress_cap` at the intralayer
+    pressure ``P_c`` (default the coupling's) and ``psi`` the angle of the
+    station from the neutral axis
+    (:mod:`cablexsec.mechanics.station_coupling`).
+    """
+    interlayer = dataclasses.replace(layer, mu=coupling.interlayer_mu)
+    upper, lower = wire_slip_stress_bounds(
+        interlayer, phi_bend, contact_pressure_Pa=contact_pressure_Pa
+    )
+    pressure = (
+        coupling.intralayer_pressure_Pa
+        if intralayer_pressure_Pa is None
+        else intralayer_pressure_Pa
+    )
+    sin_a = abs(math.sin(layer.lay_angle_rad))
+    if pressure <= 0.0 or sin_a < 1.0e-12 or coupling.intralayer_mu <= 0.0:
+        return upper, lower, np.zeros(layer.n_wires, dtype=np.float64)
+    width = 2.0 * math.pi * layer.r_helix_m / layer.n_wires
+    rate = (
+        layer.r_helix_m
+        * pressure
+        * width
+        * math.cos(layer.lay_angle_rad)
+        * coupling.intralayer_mu
+        / (layer.A_wire_m2 * sin_a)
+    )
+    g = (
+        np.ones(layer.n_wires, dtype=np.float64)
+        if layer.shape_g is None
+        else np.asarray(layer.shape_g, dtype=np.float64)
+    )
+    cphi = np.cos(layer.phi_wires - phi_bend)
+    psi = np.arcsin(np.clip(np.abs(cphi), 0.0, 1.0))
+    cap = rate * g * np.minimum(psi, coupling.plateau_rad)
+    return upper, lower, np.asarray(cap, dtype=np.float64)
+
+
+def _coupled_threshold_coefficient(
+    layer: HelicalLayerSpec, coupling: StationCoupling, hold_fraction: float
+) -> tuple[float, float]:
+    """Direction-threshold coefficients of the interlayer pressure and of the
+    intralayer pressure (the threshold is ``(c_a P + c_c P_c) / k``)."""
+    interlayer = dataclasses.replace(layer, mu=coupling.interlayer_mu)
+    coefficient_a = _threshold_coefficient(interlayer, hold_fraction)
+    if hold_fraction == 0.0:
+        return coefficient_a, 0.0
+    g_min = 1.0 if layer.shape_g is None else float(np.min(layer.shape_g))
+    lam = coupling.interlayer_mu * abs(math.sin(layer.lay_angle_rad))
+    intralayer = dataclasses.replace(layer, mu=coupling.intralayer_mu)
+    coefficient_c = (
+        hold_fraction
+        * _compression_onset_factor(lam)
+        * _onset_coefficient(intralayer, max(g_min, 0.0))
+    )
+    return coefficient_a, coefficient_c
 
 
 def slip_onset_curvature(
@@ -753,8 +835,22 @@ def wire_slip_history(
     keep_cap: bool = False,
     friction_law: FrictionLaw | None = None,
     time_s: FloatArray | None = None,
+    coupling: StationCoupling | None = None,
+    intralayer_pressure_Pa: FloatArray | None = None,
 ) -> WireSlipHistory:
     """Shared small-strain, mean-clamping update for bending and bulk fatigue.
+
+    Coupled stations. ``coupling``
+    (:class:`~cablexsec.mechanics.station_coupling.StationCoupling`) makes the
+    stations of one axial position a group with the interlayer and intralayer
+    bounds of :func:`coupled_slip_stress_bounds` and the group return map of
+    :func:`~cablexsec.mechanics.station_coupling.project_station_groups`
+    (the laid cores with ``core_core_coupling="relative"``); the direction
+    hold below blends the three bounds alike, ``contact_pressure_Pa`` is then
+    the pressure of the interlayer bounds and ``intralayer_pressure_Pa`` that
+    of the intralayer bound (default the coupling's). ``keep_cap`` returns the
+    station bound ``upper + cap`` or ``lower + cap``. It takes no friction
+    law. ``None`` keeps the independent stations, bit for bit.
 
     No spatial contact solve is introduced. The Papailiou bounds of
     :func:`wire_slip_stress_bounds` and a scalar spring-slider describe each
@@ -894,6 +990,25 @@ def wire_slip_history(
         raise CableInputError(
             "nonnegative pressure and positive stiffness are required"
         )
+    if coupling is not None:
+        if law is not None:
+            raise CableInputError(
+                "coupled stations (relative core-core slip) take no friction law"
+            )
+        return _coupled_wire_slip_history(
+            layer,
+            coupling,
+            kx,
+            ky,
+            pressure,
+            intralayer_pressure_Pa,
+            stiffness,
+            initial_bending_angle,
+            float(direction_hold_fraction),
+            keep_cap,
+        )
+    if intralayer_pressure_Pa is not None:
+        raise CableInputError("an intralayer pressure needs a station coupling")
     if law is not None:
         return _law_wire_slip_history(
             layer,
@@ -1042,6 +1157,171 @@ def wire_slip_history(
             remainder,
             balance,
         ),
+        caps,
+    )
+
+
+def _coupled_wire_slip_history(
+    layer: HelicalLayerSpec,
+    coupling: StationCoupling,
+    kx: FloatArray,
+    ky: FloatArray,
+    pressure: FloatArray,
+    intralayer_pressure_Pa: FloatArray | None,
+    stiffness: FloatArray,
+    initial_bending_angle: float,
+    hold_fraction: float,
+    keep_cap: bool,
+) -> WireSlipHistory:
+    """:func:`wire_slip_history` of coupled station groups (validated inputs).
+
+    The same update as the independent stations with the three bounds of
+    :func:`coupled_slip_stress_bounds` and the group return map; the work
+    terms are those of the independent stations (the plastic work of each
+    group update is non-negative).
+    """
+    count = kx.size
+    if layer.n_wires % coupling.group_size:
+        raise CableInputError(
+            f"{layer.n_wires} stations do not form groups of "
+            f"{coupling.group_size} cores"
+        )
+    intralayer = (
+        np.full(count, coupling.intralayer_pressure_Pa)
+        if intralayer_pressure_Pa is None
+        else np.asarray(intralayer_pressure_Pa, dtype=float)
+    )
+    if intralayer.shape != kx.shape or not np.isfinite(intralayer).all():
+        raise CableInputError(
+            "intralayer pressure must be finite and match curvature histories"
+        )
+    if np.any(intralayer < 0):
+        raise CableInputError("nonnegative intralayer pressure is required")
+    coefficient_a, coefficient_c = _coupled_threshold_coefficient(
+        layer, coupling, hold_fraction
+    )
+    element = CoulombElement(k=float(stiffness[0]), shape=(layer.n_wires,))
+    directions = np.column_stack((np.cos(layer.phi_wires), np.sin(layer.phi_wires)))
+    drive_map = layer.r_helix_m * directions
+    weight = layer.A_wire_m2 * math.cos(layer.lay_angle_rad)
+    stress = np.empty((layer.n_wires, count))
+    caps = np.empty((layer.n_wires, count)) if keep_cap else None
+    moment = np.empty((count, 2))
+    slipping_count = np.empty(count, dtype=np.int64)
+    stored, friction, endpoint, remainder, material = (
+        np.zeros(count) for _ in range(5)
+    )
+    totals = np.zeros(4)
+    old_drive = np.zeros(layer.n_wires)
+    held = current = initial_bending_angle
+    zero = np.zeros(layer.n_wires)
+
+    caches: dict[str, tuple[tuple[float, float, float] | None, _Bounds3]] = {
+        "held": (None, (zero, zero, zero)),
+        "current": (None, (zero, zero, zero)),
+    }
+
+    def oriented(slot: str, angle: float, load: float, load_c: float) -> _Bounds3:
+        key, value = caches[slot]
+        if key != (angle, load, load_c):
+            value = coupled_slip_stress_bounds(
+                layer,
+                coupling,
+                angle,
+                contact_pressure_Pa=load,
+                intralayer_pressure_Pa=load_c,
+            )
+            for part in value:
+                if (
+                    part.shape != (layer.n_wires,)
+                    or not np.isfinite(part).all()
+                    or np.any(part < 0)
+                ):
+                    raise CableInputError(
+                        "wire caps must be finite, nonnegative and match the population"
+                    )
+            caches[slot] = ((angle, load, load_c), value)
+        return value
+
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        try:
+            for index, (x, y) in enumerate(zip(kx, ky, strict=True)):
+                current_stiffness = float(stiffness[index])
+                if current_stiffness != element.k:
+                    elastic_strain = element.f / element.k
+                    totals[3] += (
+                        0.5
+                        * weight
+                        * (current_stiffness - element.k)
+                        * (elastic_strain**2).sum()
+                    )
+                    element.set_stiffness(current_stiffness)
+                old_stress, old_plastic = element.f, element.slip_total
+                load = float(pressure[index])
+                load_c = float(intralayer[index])
+                if x != 0 or y != 0:
+                    current = math.atan2(y, x)
+                threshold = (
+                    coefficient_a * load + coefficient_c * load_c
+                ) / current_stiffness
+                magnitude = math.sqrt(x * x + y * y)
+                if magnitude >= threshold:
+                    held = current
+                    upper, lower, cap = oriented("held", held, load, load_c)
+                else:
+                    blend = magnitude / threshold
+                    upper, lower, cap = oriented("held", held, load, load_c)
+                    if blend > 0.0:
+                        now = oriented("current", current, load, load_c)
+                        upper = (1.0 - blend) * upper + blend * now[0]
+                        lower = (1.0 - blend) * lower + blend * now[1]
+                        cap = (1.0 - blend) * cap + blend * now[2]
+                drive = drive_map @ np.array([x, y])
+                increment = drive - old_drive
+                if not np.isfinite(increment).all():
+                    raise CableInputError("derived wire increment must be finite")
+                trial = element.f + element.k * increment
+                force = project_station_groups(
+                    trial, upper, lower, cap, coupling.group_size
+                )
+                slipping = force != trial
+                slip = np.where(
+                    slipping, increment - (force - element.f) / element.k, 0.0
+                )
+                element.f = force
+                element.slip_total = element.slip_total + slip
+                stress[:, index] = force
+                if caps is not None:
+                    caps[:, index] = np.where(force < 0.0, lower, upper) + cap
+                moment[index] = weight * (force @ drive_map)
+                slipping_count[index] = np.count_nonzero(slipping)
+                stored[index] = weight * (force**2).sum() / (2 * current_stiffness)
+                totals[0] += weight * (force * (element.slip_total - old_plastic)).sum()
+                totals[1] += weight * (force * increment).sum()
+                totals[2] += (
+                    weight * ((force - old_stress) ** 2).sum() / (2 * current_stiffness)
+                )
+                friction[index], endpoint[index], remainder[index], material[index] = (
+                    totals
+                )
+                old_drive = drive
+            balance = endpoint + material - stored - friction - remainder
+        except FloatingPointError as error:
+            raise CableInputError(
+                "wire history exceeds floating-point range"
+            ) from error
+    if not all(
+        np.isfinite(v).all()
+        for v in (stress, moment, element.slip_total, stored, friction, balance)
+    ):
+        raise CableInputError("wire history produced nonfinite results")
+    return WireSlipHistory(
+        stress,
+        moment,
+        slipping_count,
+        element.slip_total.copy(),
+        material,
+        BendingWork(stored, friction, endpoint, remainder, balance),
         caps,
     )
 

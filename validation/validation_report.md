@@ -79,8 +79,8 @@ Every row is computed from published data or closed-form references in this repo
 
 ## Test taxonomy (full gate suite)
 
-- analytical_sanity: `1265 passed`
-- independent_method: `79 passed`
+- analytical_sanity: `1278 passed`
+- independent_method: `92 passed`
 - full_scale: `59 passed`
 
 Run `pytest -m <marker>` to reproduce each group.
