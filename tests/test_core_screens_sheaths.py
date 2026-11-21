@@ -267,8 +267,16 @@ def test_stuck_core_adds_the_axis_strain_to_the_screen(thies):
     assert free.axis_strain_range[0] == 0.0
     assert np.max(stuck.stress_range_Pa) > 3 * np.max(free.stress_range_Pa)
     assert np.any(stuck.exceeds_yield)
-    # The axis strain is common to the core layers: no extra slip.
-    assert np.allclose(stuck.slip_amplitude_m, free.slip_amplitude_m, rtol=1e-12)
+    # The axis strain is common to the core layers: no extra slip. The stuck
+    # core bends with the normal curvature cos^4(beta) instead of the free
+    # cos^2(beta) cos(2 beta) (the normal curvature follows the core slip
+    # state), so the screen slip grows at most by cos^2(beta) / cos(2 beta).
+    moving = free.slip_amplitude_m > 0.0
+    assert np.array_equal(moving, stuck.slip_amplitude_m > 0.0)
+    ratio = stuck.slip_amplitude_m[moving] / free.slip_amplitude_m[moving]
+    assert np.all(ratio >= 1.0 - 1e-12)
+    assert np.all(ratio <= math.cos(beta) ** 2 / math.cos(2 * beta) * (1 + 1e-12))
+    assert np.any(ratio > 1.0 + 1e-6)
 
 
 def test_thies_screen_reproduces_the_core_level_workaround(aligned):

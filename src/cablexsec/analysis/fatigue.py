@@ -841,7 +841,9 @@ def _wire_stress_series(
     Shape ``(n_wires, n_steps)``; ``sigma_total = sigma_A + sigma_B + sigma_f
     + sigma_T`` with the parts of :func:`_wire_stress_parts` (same options)
     and the local bending stress at the outer face (``t/2`` for a
-    rectangular or profiled wire, gap G1).
+    rectangular or profiled wire, gap G1), whose normal curvature follows
+    the slip state of the friction stress
+    (:func:`~cablexsec.mechanics.wire_stress.slip_state_normal_curvature`).
     """
     parts = _wire_stress_parts(
         layer,
@@ -869,6 +871,8 @@ def _wire_stress_series(
         spec.E_wire_Pa if wire_modulus_Pa is None else wire_modulus_Pa,
         d_wire,
         spec.lay_angle_rad,
+        friction_stress_Pa=parts.friction,
+        r_helix_m=spec.r_helix_m,
     )
     return np.asarray(
         parts.axial[None, :] + sigma_B_kt + parts.friction + parts.thermal[None, :]
@@ -1276,7 +1280,14 @@ def wire_stress_field(
 
     Local tendon bending (gap G1, :mod:`cablexsec.mechanics.tendon_bending`).
     A rectangular or profiled wire (``layer.spec.section``) takes its local
-    bending at the outer face ``t/2`` and the edge ``b/2``. ``transverse``
+    bending at the outer face ``t/2`` and the edge ``b/2``. The normal
+    (radial) curvature follows each wire's axial slip state: the
+    deformed-helix term ``cos^2 a cos 2a p_n`` plus ``(sin^2 a / r_h)
+    sigma_f / E`` of the friction stress the wire carries, with any
+    termination increment
+    (:func:`~cablexsec.mechanics.wire_stress.slip_state_normal_curvature`):
+    ``cos^4 a`` for a stuck wire with ``xi = 1``, ``cos^2 a cos 2a`` without
+    friction stress. ``transverse``
     (:class:`~cablexsec.mechanics.tendon_bending.TransverseSlipModel`) adds
     the transverse slip towards the geodesic per wire (Jenkin element): the
     lateral curvature becomes ``cos a (1 + sin^2 a) p_l - k^2 v`` and the
@@ -1426,8 +1437,12 @@ def wire_stress_field(
         depth = 2 * spec.section.half_thickness_m
         width = 2 * spec.section.half_width_m
     phi_eval = spec.phi_wires if wires is None else spec.phi_wires[wires]
+    # The normal curvature of each wire's slip state is set by the axial
+    # stress the wire carries from bending: its friction stress with any
+    # termination clamp increment.
+    held = parts.friction if extra is None else parts.friction + extra
     if _FAST_FIELD:
-        # One compiled pass, equal bit for bit to the expressions below.
+        # One compiled pass, with the arithmetic of the expressions below.
         mean, radial, tangential = assemble_wire_field(
             kx,
             ky,
@@ -1440,6 +1455,7 @@ def wire_stress_field(
             parts.friction,
             parts.thermal,
             extra,
+            spec.r_helix_m,
         )
     else:
         # Outward radial fibre (y_n = t/2) and edge (y_l = b/2); a rectangular
@@ -1451,6 +1467,8 @@ def wire_stress_field(
             modulus,
             depth,
             spec.lay_angle_rad,
+            friction_stress_Pa=held,
+            r_helix_m=spec.r_helix_m,
         )
         tangential = local_bending_fibre_stress(
             kx,
@@ -1460,6 +1478,8 @@ def wire_stress_field(
             width,
             spec.lay_angle_rad,
             math.pi / 2,
+            friction_stress_Pa=held,
+            r_helix_m=spec.r_helix_m,
         )
         outward = (
             parts.axial[None, :] + radial + parts.friction + parts.thermal[None, :]

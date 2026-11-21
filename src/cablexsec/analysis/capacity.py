@@ -137,7 +137,10 @@ from cablexsec.mechanics.axisymmetric import (
 from cablexsec.mechanics.papailiou import wire_slip_stress_bounds
 from cablexsec.mechanics.section_state import SectionState, solve_section_state
 from cablexsec.mechanics.stiffness import ea_fixed
-from cablexsec.mechanics.wire_stress import local_bending_amplitude
+from cablexsec.mechanics.wire_stress import (
+    local_bending_amplitude,
+    slip_state_normal_curvature,
+)
 from cablexsec.provenance import Provenance
 
 
@@ -308,6 +311,8 @@ def _local_bending_max(
     e_w: float,
     lay_angle_rad: float,
     phi_bend: float,
+    friction_stress_Pa: NDArray[np.float64] | None = None,
+    r_helix_m: float | None = None,
 ) -> NDArray[np.float64]:
     """Largest local bending stress over the wire section [Pa].
 
@@ -315,18 +320,38 @@ def _local_bending_max(
     wires (gap G1): the normal curvature at the outer face ``t/2`` and the
     lateral curvature at the edge ``b/2`` combined at the corner
     (:meth:`~cablexsec.mechanics.tendon_section.WireSection.max_bending_stress`).
+    A given friction stress (with the helix radius) adds the normal curvature
+    of each wire's slip state
+    (:func:`~cablexsec.mechanics.wire_stress.slip_state_normal_curvature`);
+    without it the normal term is the slip limit ``cos^2 a cos 2a``.
     """
     assert layer.d_wire_m is not None
     if layer.wire_shape == "round":
         return np.asarray(
             local_bending_amplitude(
-                kappa, phi, e_w, layer.d_wire_m, lay_angle_rad, phi_bend
+                kappa,
+                phi,
+                e_w,
+                layer.d_wire_m,
+                lay_angle_rad,
+                phi_bend,
+                friction_stress_Pa=friction_stress_Pa,
+                r_helix_m=r_helix_m,
             )
         )
     section = layer.wire_section
     angle = np.asarray(phi, dtype=np.float64) - phi_bend
     c, s = math.cos(lay_angle_rad), math.sin(lay_angle_rad)
-    face = e_w * abs(kappa) * c * c * math.cos(2 * lay_angle_rad) * np.cos(angle)
+    if friction_stress_Pa is None:
+        face = e_w * abs(kappa) * c * c * math.cos(2 * lay_angle_rad) * np.cos(angle)
+    else:
+        assert r_helix_m is not None
+        face = e_w * (
+            kappa * c * c * math.cos(2 * lay_angle_rad) * np.cos(angle)
+            + slip_state_normal_curvature(
+                friction_stress_Pa, e_w, lay_angle_rad, r_helix_m
+            )
+        )
     edge = e_w * abs(kappa) * c * (1 + s * s) * np.sin(angle)
     return section.max_bending_stress(
         face * section.half_thickness_m, edge * section.half_width_m
@@ -685,7 +710,14 @@ def _wire_usage(
             sigma_slip = np.where(cos_phi >= 0.0, cap_hi, cap_lo)
             sigma_friction = np.sign(cos_phi) * np.minimum(sigma_stick, sigma_slip)
             sigma_bending = _local_bending_max(
-                layer, kappa, phi, spec.E_wire_Pa, spec.lay_angle_rad, phi_bend
+                layer,
+                kappa,
+                phi,
+                spec.E_wire_Pa,
+                spec.lay_angle_rad,
+                phi_bend,
+                friction_stress_Pa=sigma_friction,
+                r_helix_m=spec.r_helix_m,
             )
             sigma_total = (
                 np.abs(sigma_axial + sigma_friction + sigma_T_Pa) + sigma_bending

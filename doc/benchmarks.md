@@ -147,7 +147,7 @@ All rows are verification, not validation. Source: the scorecard
 | CF | A | Laid-core friction: μ = 0 gives the armour-only loop; large μ tangent vs EI_max; full-slip core moment vs closed form; dissipation ≥ 0; rotation equivariance | 0 N·m; < 1e-9; < 5e-3; ≥ 0; < 1e-9 rel. | 0; 1.0e-15; 1.0e-4; 5.0e-6; 5.0e-14 | PASS |
 | CFW | A | Laid-core contact statics (wedged trefoil and central filler, with and without a filler): radial equilibrium of one core; filler profiles: μ = 0 gives the armour-only loop; full-slip profile moment vs closed form; stick tangent vs `EI_max + E J_f cos³β_f / 2` | < 1e-12 rel.; 0 N·m; < 5e-3; < 1e-9 | 9.5e-17; 0; 1.0e-4; 7.8e-16 | PASS |
 | A11 | A | Moment–curvature energy closure (loop area vs closed form) | < 0.1% | 0.082% | PASS |
-| σ_B | A | Radial-fibre bending stress vs Ménard Eq. 14 | < 1e-6% | 0 | PASS |
+| σ_B | A | Radial-fibre bending stress at φ = 0: μ = 0 vs Ménard Eq. 14; stuck wire vs `cos²α cos2α + ξ sin²α cos²α`; slipping wire vs Eq. 14 + `(sin²α / r) σ_f / E` (section NT) | < 1e-6% each | 0; 0; 0 | PASS |
 | M-rec | I | Assembled per-wire moment vs `compute_mkappa`, single core | < 2% | 0.000% | PASS |
 | M-rec-3core | I | As M-rec, offset-core geometry | < 2% | 0.000% | PASS |
 | MK-Tcyc | I | `compute_mkappa` with a contact-tension history cycling inside the bending cycles vs the moment of the fatigue-path friction stress on the same history; work-balance residual over the friction work | < 1e-12 rel.; < 1e-12 rel. | 3.4e-16; 1.1e-15 | PASS |
@@ -2979,6 +2979,31 @@ fixed axially in the FE; the test arrangement is not described), FE 209.5 /
 No input is changed and the band is not tightened: the model reproduces the
 source's analytical model term by term, and nothing published locates the
 FE's or the test's smaller direction dependence.
+
+## Normal wire curvature and the slip state (NT)
+
+The normal (out-of-surface, weak-axis) local bending of a helical wire is
+`cos²α cos2α p_n + (sin²α / r) σ_f / E` per unit material length: the curve
+curvature of the deformed helix (Out and von Morgen 1997, Eq. 41; Leroy and
+Estrier 2001, Eq. 13) plus the initial normal curvature `sin²α / r` times the
+axial strain `σ_f / E` the wire carries
+(`cablexsec.mechanics.wire_stress.slip_state_normal_curvature`). Earlier
+releases used `cos²α cos2α` in every slip state. The stick and slip limits were
+checked against an independent finite-element model of a wire on a bent
+support (not published). Tests `tests/test_normal_term_slip_state.py`.
+
+| ID | Class | Check | Target | Result | Status |
+| --- | --- | --- | --- | --- | --- |
+| NT-1 | A | Stuck wire, `ξ = 1`, monotonic ramp below the onset (10°, 20.1°, 35°; compiled and NumPy field): outer-face bending over `E (d/2) p_n` against `cos⁴α` | 1e-12 relative | PASS | PASS |
+| NT-2 | A | Stuck wire with `ξ` = 0.35 and 0.8: `cos²α cos2α + ξ sin²α cos²α` | 1e-12 relative | PASS | PASS |
+| NT-3 | A | `μ = 0` (no friction stress), direction-tied, distributed and progressive laws, biaxial history: the field equals Ménard Eq. 14 (`cos²α cos2α`) | 1e-12 of scale | PASS | PASS |
+| NT-4 | A | Partial slip, cyclic biaxial history, three friction laws, compiled and NumPy: field minus the Eq. 14 value equals `(d/2)(sin²α / r) σ_f`; with a termination increment, `σ_f` includes it | 1e-12 of scale | PASS | PASS |
+| NT-5 | A | Spring-slider on a planar history: stick steps take the slope `cos²α cos2α + ξ sin²α cos²α`, slip steps `cos²α cos2α` (no transition on a sample) | 1e-9 relative | PASS | PASS |
+| NT-6 | A | Lateral term `cos α (1 + sin²α)` unchanged | 1e-12 of scale | PASS | PASS |
+| NT-7 | A | Compiled assembly with friction, termination increment and a modulus history against the NumPy expressions | 1e-12 of scale | PASS | PASS |
+| NT-8 | A | `compute_stress` (μ = 0 and the shipped μ), capacity bending (round and rectangular) against the closed form with the per-wire friction stress | 1e-12 | PASS | PASS |
+| NT-9 | A | Laid cores: normal gradient `cos⁴β κ_r` stuck, `cos²β cos2β κ_r` free, `cos²β cos2β κ_r + (sin²β / r_c) ε_b` frictional | 1e-12 of scale | PASS | PASS |
+| NT-10 | A | Conductor strand slip, outer fibre: stick slope `R cos²α + (d/2) cos⁴α`, slip slope `(d/2) cos²α cos2α`, friction amplitude times `1 + (d/2) sin²α / R`; centroid parameters unchanged | 1e-13 | PASS | PASS |
 
 ## Planned benchmarks
 

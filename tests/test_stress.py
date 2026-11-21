@@ -50,22 +50,31 @@ def _stress_contact(kappa=0.03):
         return cx.compute_stress(_contact_cable(), kappa, tension_N=0.0)
 
 
-def test_sigma_B_at_phi0_matches_menard_eq14_closed_form() -> None:
+def test_sigma_B_at_phi0_matches_menard_eq14_plus_the_slip_state_term() -> None:
+    # Ménard Eq. 14 is the normal curvature of a wire without friction
+    # stress; the friction stress the wire carries adds (sin^2 a / r) sigma_f / E
+    # (wire_stress.slip_state_normal_curvature).
     cable = _menard()
-    sr = _stress()
-    for name in sr.phi_deg:
-        lyr = cable.get_layer(name)
-        e = library.get_property(lyr.material, "E_Pa")
-        a = lyr.lay_angle_rad
-        closed = (
-            e
-            * sr.kappa_mag_1_m
-            * math.cos(a) ** 2
-            * math.cos(2 * a)
-            * (lyr.d_wire_m / 2.0)
-        )
-        k0 = int(np.argmin(np.abs(sr.phi_deg[name])))  # wire nearest phi = 0
-        assert sr.sigma_B_Pa[name][k0] == pytest.approx(closed, rel=1e-9)
+    for mu in (0.0, None):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            sr = cx.compute_stress(cable, 0.03, tension_N=1.0e4, mu=mu)
+        for name in sr.phi_deg:
+            lyr = cable.get_layer(name)
+            e = library.get_property(lyr.material, "E_Pa")
+            a = lyr.lay_angle_rad
+            k0 = int(np.argmin(np.abs(sr.phi_deg[name])))  # wire nearest phi = 0
+            closed = (
+                e
+                * (
+                    sr.kappa_mag_1_m * math.cos(a) ** 2 * math.cos(2 * a)
+                    + math.sin(a) ** 2 / lyr.r_helix_m * sr.sigma_f_Pa[name][k0] / e
+                )
+                * (lyr.d_wire_m / 2.0)
+            )
+            assert sr.sigma_B_Pa[name][k0] == pytest.approx(closed, rel=1e-9)
+            if mu == 0.0:
+                assert sr.sigma_f_Pa[name][k0] == 0.0
 
 
 def test_sigma_f_respects_per_wire_kappa_c_boundary() -> None:

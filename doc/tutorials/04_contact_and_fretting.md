@@ -143,10 +143,10 @@ loading; they are not the stresses of the deformed contact.
 contact loads at 150 kN; extreme fibre of the dynamic bending at -4.0 deg
 inner_armour/outer_face on outer_armour: mu 0.12, load 209.7 N, p0 3112 MPa, transition amplitude 1.11 um
   largest slip amplitude 364 um; cycles in stick 0%, partial slip 16%, gross slip 84%
-  damage per year at the contact fibre 9.597 at 1 deg from the extreme fibre; largest wear at 88 deg
+  damage per year at the contact fibre 9.687 at 1 deg from the extreme fibre; largest wear at 88 deg
 outer_armour/inner_face on inner_armour: mu 0.12, load 209.7 N, p0 3112 MPa, transition amplitude 1.11 um
   largest slip amplitude 402 um; cycles in stick 0%, partial slip 15%, gross slip 85%
-  damage per year at the contact fibre 2.169 at 4 deg from the extreme fibre; largest wear at 88 deg
+  damage per year at the contact fibre 2.149 at 4 deg from the extreme fibre; largest wear at 88 deg
 outer_armour/outer_face: no normal load on this face
 ```
 
@@ -254,18 +254,18 @@ strain histories.
 
 <!-- tutorial-output -->
 ```text
-wire 109 (gross slip): largest bulk cycle 373.0 MPa about 106.9 MPa
-SWT of the bulk cycle alone 0.2598 MPa
+wire 109 (gross slip): largest bulk cycle 373.9 MPa about 107.1 MPa
+SWT of the bulk cycle alone 0.2610 MPa
 x = +0.0 a, z = 0.5 b: SWT 0.0000 MPa
-x = -1.0 a, z = 0.5 b: SWT 0.2911 MPa
-x = -1.1 a, z = 0.5 b: SWT 0.3546 MPa
-x = -1.1 a, z = 0.05 b: SWT 0.8058 MPa, plane normal 8 deg from the wire axis
-x = -1.1 a, z = 0.10 b: SWT 0.7393 MPa, plane normal 8 deg from the wire axis
-x = -1.1 a, z = 0.20 b: SWT 0.6116 MPa, plane normal 8 deg from the wire axis
-x = -1.1 a, z = 0.30 b: SWT 0.5033 MPa, plane normal 8 deg from the wire axis
-x = -1.1 a, z = 0.50 b: SWT 0.3546 MPa, plane normal 8 deg from the wire axis
-x = -1.1 a, z = 0.75 b: SWT 0.2665 MPa, plane normal 10 deg from the wire axis
-x = -1.1 a, z = 1.00 b: SWT 0.2345 MPa, plane normal 10 deg from the wire axis
+x = -1.0 a, z = 0.5 b: SWT 0.2923 MPa
+x = -1.1 a, z = 0.5 b: SWT 0.3560 MPa
+x = -1.1 a, z = 0.05 b: SWT 0.8079 MPa, plane normal 8 deg from the wire axis
+x = -1.1 a, z = 0.10 b: SWT 0.7413 MPa, plane normal 8 deg from the wire axis
+x = -1.1 a, z = 0.20 b: SWT 0.6134 MPa, plane normal 8 deg from the wire axis
+x = -1.1 a, z = 0.30 b: SWT 0.5049 MPa, plane normal 8 deg from the wire axis
+x = -1.1 a, z = 0.50 b: SWT 0.3560 MPa, plane normal 8 deg from the wire axis
+x = -1.1 a, z = 0.75 b: SWT 0.2677 MPa, plane normal 10 deg from the wire axis
+x = -1.1 a, z = 1.00 b: SWT 0.2356 MPa, plane normal 10 deg from the wire axis
 ```
 
 The script builds one cycle at the crossing of the inner-armour wire with the

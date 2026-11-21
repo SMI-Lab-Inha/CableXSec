@@ -149,16 +149,16 @@ tension and curvature, for a section stress map.
 ```text
 core state: frictional
 layer              kind      min MPa  max MPa    use  limit
-cu_conductor       annulus     -34.9    107.1  0.893  yielding
+cu_conductor       annulus     -35.0    107.3  0.894  yielding
 conductor_screen   annulus      -0.2      0.3      -  no limit given
 xlpe_insulation    annulus      -0.3      0.4      -  no limit given
 insulation_screen  annulus      -0.3      0.4      -  no limit given
-cu_screen          annulus    -249.7    309.0      -  follows the section
+cu_screen          annulus    -250.0    310.7      -  follows the section
 hdpe_core_sheath   annulus      -2.1      2.5  0.037  strain limit
 pp_filler          annulus      -7.0      7.6      -  no limit given
 hdpe_bedding       annulus      -4.3      4.6  0.068  strain limit
-inner_armour       wires       -71.4    152.2  0.221  yielding
-outer_armour       wires       -25.7     97.8  0.142  yielding
+inner_armour       wires       -71.9    152.7  0.221  yielding
+outer_armour       wires       -25.7     98.0  0.142  yielding
 hdpe_outer_sheath  annulus      -5.5      5.9  0.086  strain limit
 inner_armour: 61 wires, centre line -38.9 to 119.7 MPa
 outer_armour: 67 wires, centre line 7.9 to 65.3 MPa
@@ -218,8 +218,8 @@ all from one record.
 <!-- howto-output: howto_06_fatigue_utilities.py -->
 ```text
 armour: critical layer inner_armour, wire at 0 deg, fibre at 0 deg
-  inner_armour  damage in 600 s 5.619e-05
-  outer_armour  damage in 600 s 2.468e-06
+  inner_armour  damage in 600 s 5.749e-05
+  outer_armour  damage in 600 s 2.509e-06
 copper fibre: 122 cycles, max amplitude 1568 ue, damage 3.647e-05
 curvature: mean 60 s maximum 0.0479 1/m, 1 h most probable 0.0761, 90 % fractile 0.0941 1/m
 inner_armour  slip range 361.4 um, slipping share 0.56

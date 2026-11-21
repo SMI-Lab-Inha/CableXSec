@@ -9,8 +9,10 @@ axial and thermal stress and the curvature history in one pass, with the
 arithmetic of the NumPy expressions it replaces, operation for operation:
 the local bending stress of
 :func:`cablexsec.mechanics.wire_stress.local_bending_fibre_stress` at the
-outward radial fibre and at the edge (fibre angle ``pi/2``), the outward
-total ``((sigma_A + sigma_B) + sigma_f) + sigma_T`` plus any termination
+outward radial fibre and at the edge (fibre angle ``pi/2``), with the
+normal curvature of the wire's slip state from its friction stress (and any
+termination increment) when the helix radius is given, the outward total
+``((sigma_A + sigma_B) + sigma_f) + sigma_T`` plus any termination
 increment, and ``mean = outward - radial``. The trigonometric factors are
 evaluated by NumPy, as in the reference expressions, and passed in. The
 results are equal to the NumPy path bit for bit
@@ -28,6 +30,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from cablexsec._numba import HAVE_NUMBA, njit
+from cablexsec.exceptions import CableInputError
 
 __all__ = ["HAVE_NUMBA", "assemble_wire_field"]
 
@@ -53,6 +56,9 @@ def _assemble_kernel(
     thermal: FloatArray,
     extra: FloatArray,
     has_extra: bool,
+    modulus: FloatArray,
+    slip_coefficient: float,
+    has_slip: bool,
 ) -> tuple[FloatArray, FloatArray, FloatArray]:
     n_w, n_t = friction.shape
     mean = np.empty((n_w, n_t))
@@ -65,6 +71,11 @@ def _assemble_kernel(
             x = kx[i]
             y = ky[i]
             rb = c_radial * (x * cp + y * sp)
+            if has_slip:
+                f = friction[w, i]
+                if has_extra:
+                    f = f + extra[w, i]
+                rb = rb + slip_coefficient * (f / modulus[i])
             tb = c_tangential * ((-x) * sp + y * cp)
             sb = coef_radial[i] * (rb * cos_outward + tb * sin_outward)
             out = ((axial[i] + sb) + friction[w, i]) + thermal[i]
@@ -88,22 +99,29 @@ def assemble_wire_field(
     friction_Pa: FloatArray,
     thermal_Pa: FloatArray,
     extra_Pa: FloatArray | None = None,
+    r_helix_m: float | None = None,
 ) -> tuple[FloatArray, FloatArray, FloatArray]:
     """``(mean, radial, tangential)`` of the wire stress field [Pa].
 
-    Equal bit for bit to the NumPy expressions ::
+    Equal to the NumPy expressions ::
 
-        radial = local_bending_fibre_stress(kx, ky, phi[:, None], E, depth, a)
+        held = friction + extra  # friction alone without extra
+        radial = local_bending_fibre_stress(
+            kx, ky, phi[:, None], E, depth, a,
+            friction_stress_Pa=held, r_helix_m=r_helix_m,
+        )
         tangential = local_bending_fibre_stress(
-            kx, ky, phi[:, None], E, width, a, pi / 2
+            kx, ky, phi[:, None], E, width, a, pi / 2,
+            friction_stress_Pa=held, r_helix_m=r_helix_m,
         )
         outward = axial[None, :] + radial + friction + thermal[None, :]
         outward = outward + extra  # when given
         mean = outward - radial
 
-    ``modulus_Pa`` is a constant or one value per sample; ``axial_Pa`` and
-    ``thermal_Pa`` hold one value per sample, ``friction_Pa`` and
-    ``extra_Pa`` one row per wire.
+    ``r_helix_m=None`` leaves out the normal curvature of the slip state
+    (``friction_stress_Pa=None`` above). ``modulus_Pa`` is a constant or one
+    value per sample; ``axial_Pa`` and ``thermal_Pa`` hold one value per
+    sample, ``friction_Pa`` and ``extra_Pa`` one row per wire.
     """
     kx = np.ascontiguousarray(kappa_x, dtype=np.float64)
     ky = np.ascontiguousarray(kappa_y, dtype=np.float64)
@@ -116,7 +134,15 @@ def assemble_wire_field(
     c, s = math.cos(lay_angle_rad), math.sin(lay_angle_rad)
     c_radial = c * c * math.cos(2 * lay_angle_rad)
     c_tangential = c * (1 + s * s)
+    has_slip = r_helix_m is not None
+    slip_coefficient = 0.0
+    if r_helix_m is not None:
+        if not (math.isfinite(r_helix_m) and r_helix_m > 0.0):
+            raise CableInputError("the helix radius must be finite and positive")
+        # As slip_state_normal_curvature forms it.
+        slip_coefficient = math.sin(lay_angle_rad) ** 2 / r_helix_m
     modulus = np.asarray(modulus_Pa)
+    modulus_t = np.ascontiguousarray(np.broadcast_to(modulus, (n_t,)), dtype=np.float64)
     coef_radial = np.ascontiguousarray(
         np.broadcast_to(modulus * depth_m / 2, (n_t,)), dtype=np.float64
     )
@@ -148,4 +174,7 @@ def assemble_wire_field(
         np.ascontiguousarray(thermal_Pa, dtype=np.float64),
         extra,
         extra_Pa is not None,
+        modulus_t,
+        slip_coefficient,
+        has_slip,
     )

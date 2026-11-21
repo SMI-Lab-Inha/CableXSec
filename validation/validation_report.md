@@ -25,7 +25,7 @@ Every row is computed from published data or closed-form references in this repo
 | 1 | TQ-SV | Saint-Venant twist rigidity with free warping (trefoil filler lobes): 2 x 1 rectangle vs series solution; bonded annulus as a mirrored 60 deg sector vs polar moment | < 3e-4 relative; < 1e-6 relative | 1.0e-04; -1.5e-08 | PASS |
 | 1 | TQ-FT | Twist-rate wire stress of the fatigue path (Knapp 1981 Eqs. 2, 11): 66 kV armour stress and damage under tension and twist vs closed form; Feyrer 1x37 torque and tension from the wire stresses vs K_et, K_tt; mirror lay with reversed twist; zero twist vs none | < 1e-12; < 1e-12; < 1e-12; 0 | 4.5e-15; 2.2e-16; 0.0e+00; 0.0e+00 | PASS |
 | 1 | A11 | M-κ energy closure (loop area vs closed form) | < 0.1% | 0.082% | PASS |
-| 1 | σ_B | Radial-fibre bending vs Ménard Eq. 14 (φ=0 from extension side) | < 1e-6% | 0.00e+00% | PASS |
+| 1 | σ_B | Radial-fibre bending at φ=0 (from the extension side): μ = 0 vs Ménard Eq. 14; stuck wire vs cos²α cos2α + ξ sin²α cos²α (cos⁴α at ξ = 1); slipping wire vs Eq. 14 + (sin²α / r) σ_f / E | < 1e-6% each | μ = 0 0.00e+00%; stuck 0.00e+00%; slipping 0.00e+00% | PASS |
 | 1 | M-rec | Assembled per-wire moment vs compute_mkappa (cross-engine, single-core) | < 2% | 0.000% | PASS |
 | 1 | M-rec-3core | Cross-engine moment vs compute_mkappa with offset-core geometry and shared mean armour pressure | < 2% | 0.000% | PASS |
 | 1 | MK-Tcyc | compute_mkappa with a tension history cycling within the bending cycles vs the fatigue-path friction stress on the same history; work balance under the changing friction bound | < 1e-12 relative; < 1e-12 relative | 3.4e-16; 8.9e-16 | PASS |
@@ -79,7 +79,7 @@ Every row is computed from published data or closed-form references in this repo
 
 ## Test taxonomy (full gate suite)
 
-- analytical_sanity: `1278 passed`
+- analytical_sanity: `1316 passed`
 - independent_method: `92 passed`
 - full_scale: `59 passed`
 

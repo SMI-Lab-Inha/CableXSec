@@ -104,16 +104,23 @@ def test_armour_stress_extrema_include_all_fibres_not_only_the_radial_fibre():
             result.sigma_A_Pa[name] + result.sigma_f_Pa[name] + result.sigma_T_Pa[name]
         )
         angles = np.radians(result.phi_deg[name]) - math.atan2(ky, kx)
+        e = library.get_property(layer.material, "E_Pa")
+        kappa = math.hypot(kx, ky)
+        # The curve curvature of the bent helix, whose normal component gains
+        # the term of each wire's slip state, (sin^2 a / r) sigma_f / E.
+        slip = (
+            math.sin(layer.lay_angle_rad) ** 2
+            / layer.r_helix_m
+            * result.sigma_f_Pa[name]
+            / (e * kappa)
+        )
         direct = np.array(
-            [np.linalg.norm(_gradient(layer.lay_angle_rad, p)) for p in angles]
+            [
+                np.linalg.norm(_gradient(layer.lay_angle_rad, p) + np.array([s, 0.0]))
+                for p, s in zip(angles, slip, strict=True)
+            ]
         )
-        amplitude = (
-            direct
-            * library.get_property(layer.material, "E_Pa")
-            * math.hypot(kx, ky)
-            * layer.d_wire_m
-            / 2
-        )
+        amplitude = direct * e * kappa * layer.d_wire_m / 2
         np.testing.assert_allclose(
             result.sigma_perimeter_min_Pa[name], mean - amplitude, rtol=1e-7, atol=0.01
         )

@@ -38,6 +38,7 @@ import numpy as np
 import cablexsec as cx
 from cablexsec.analysis.capacity import birdcage_buckling_detail
 from cablexsec.analysis.curve_comparison import cycle_work, insert_cycle_crossings
+from cablexsec.cable_adapters import cable_to_mkappa_specs
 from cablexsec.cables import (
     inter_array_single_core_legacy_r2_yaml_path,
     inter_array_three_core_legacy_r2_yaml_path,
@@ -1554,24 +1555,47 @@ def _rows() -> list[Row]:
         )
     )
 
-    # σ_B closed form (Ménard Eq. 14) at φ=0.
-    sr = cx.compute_stress(menard, 0.03, tension_N=1.0e4)
-    name = next(iter(sr.phi_deg))
+    # σ_B at φ=0: the normal curvature follows the wire's slip state,
+    # cos²a cos2a κ + (sin²a / r) σ_f / E. Without friction (μ = 0) it is
+    # Ménard Eq. 14; a stuck wire takes cos²a cos2a + ξ sin²a cos²a (cos⁴a
+    # at ξ = 1); a slipping wire adds the term of its friction stress.
+    name = next(iter(cx.compute_stress(menard, 0.03, tension_N=1.0e4).phi_deg))
     lyr = menard.get_layer(name)
     e = library.get_property(lyr.material, "E_Pa")
     a = lyr.lay_angle_rad
-    closed = (
-        e * sr.kappa_mag_1_m * math.cos(a) ** 2 * math.cos(2 * a) * (lyr.d_wire_m / 2)
+    c2, s2 = math.cos(a) ** 2, math.sin(a) ** 2
+    lox = c2 * math.cos(2 * a)
+    xi_b = next(
+        s.xi
+        for s in cable_to_mkappa_specs(menard, 1.0e4)
+        if math.isclose(s.r_helix_m, lyr.r_helix_m)
     )
-    k0 = int(np.argmin(np.abs(sr.phi_deg[name])))
+    errors_b = []
+    stuck_b = slipping_b = True
+    for kappa_b, mu_b in ((0.03, 0.0), (1.0e-5, None), (0.03, None)):
+        sr = cx.compute_stress(menard, kappa_b, tension_N=1.0e4, mu=mu_b)
+        k0 = int(np.argmin(np.abs(sr.phi_deg[name])))
+        sigma_f0 = float(sr.sigma_f_Pa[name][k0])
+        if mu_b == 0.0:
+            coefficient = lox * sr.kappa_mag_1_m
+        elif kappa_b < 1e-3:
+            stuck_b = not bool(sr.slipping[name][k0])
+            coefficient = (lox + xi_b * s2 * c2) * sr.kappa_mag_1_m
+        else:
+            slipping_b = bool(sr.slipping[name][k0])
+            coefficient = lox * sr.kappa_mag_1_m + s2 / lyr.r_helix_m * sigma_f0 / e
+        closed = e * coefficient * (lyr.d_wire_m / 2)
+        errors_b.append(_pct(sr.sigma_B_Pa[name][k0], closed))
     rows.append(
         Row(
             "1",
             "σ_B",
-            "Radial-fibre bending vs Ménard Eq. 14 (φ=0 from extension side)",
-            "< 1e-6%",
-            f"{_pct(sr.sigma_B_Pa[name][k0], closed):.2e}%",
-            "PASS" if _pct(sr.sigma_B_Pa[name][k0], closed) < 1e-6 else "FAIL",
+            "Radial-fibre bending at φ=0 (from the extension side): μ = 0 vs "
+            "Ménard Eq. 14; stuck wire vs cos²α cos2α + ξ sin²α cos²α (cos⁴α at "
+            "ξ = 1); slipping wire vs Eq. 14 + (sin²α / r) σ_f / E",
+            "< 1e-6% each",
+            "μ = 0 {:.2e}%; stuck {:.2e}%; slipping {:.2e}%".format(*errors_b),
+            "PASS" if max(errors_b) < 1e-6 and stuck_b and slipping_b else "FAIL",
         )
     )
 
