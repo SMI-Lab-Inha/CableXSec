@@ -305,7 +305,8 @@ def test_utilisation_is_the_largest_fibre_over_yield() -> None:
     limit = library.get_property(material, "sigma_y_Pa")
     largest = np.abs(layer.stress_Pa) + layer.bending_Pa
     np.testing.assert_allclose(layer.utilisation, largest / limit, rtol=1e-12)
-    # The local bending is that of the stress route at the outer fibres.
+    # The local bending is that of the stress route at the outer fibres, its
+    # normal curvature following the friction stress of each station.
     spec = cable_to_mkappa_specs(CABLE, 80e3)[0]
     diameter = 2 * math.sqrt(spec.A_wire_m2 / math.pi)
     radial = local_bending_fibre_stress(
@@ -315,6 +316,8 @@ def test_utilisation_is_the_largest_fibre_over_yield() -> None:
         spec.E_wire_Pa,
         diameter,
         spec.lay_angle_rad,
+        friction_stress_Pa=layer.friction_Pa,
+        r_helix_m=spec.r_helix_m,
     )
     tangential = local_bending_fibre_stress(
         CYCLE[None, :],
@@ -324,6 +327,8 @@ def test_utilisation_is_the_largest_fibre_over_yield() -> None:
         diameter,
         spec.lay_angle_rad,
         math.pi / 2,
+        friction_stress_Pa=layer.friction_Pa,
+        r_helix_m=spec.r_helix_m,
     )
     np.testing.assert_allclose(layer.bending_Pa, np.hypot(radial, tangential))
 

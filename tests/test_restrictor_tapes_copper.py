@@ -577,7 +577,10 @@ def test_tape_states_closed_forms():
         mu=0.2,
     )
     assert np.allclose(lo, free)
-    centre = hi[0, :, 0, :] - own[:, None] * k[None, :]
+    # The stuck line carries factor rho cos(theta) kappa, which adds
+    # (t/2) (sin^2 beta / rho) times it to the flat-wise curvature.
+    held = g.thickness_m / 2 * math.sin(beta) ** 2 * factor * np.cos(theta)
+    centre = hi[0, :, 0, :] - (own + held)[:, None] * k[None, :]
     stuck_mid = factor * (
         eps0[None, :] + g.radius_m * np.cos(theta)[:, None] * k[None, :]
     )

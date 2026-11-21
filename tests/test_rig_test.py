@@ -144,6 +144,15 @@ def test_local_bending_and_axial_parts(menard, menard_run):
             / E
             * 1e6
         )
+        # The normal curvature follows the slip state: the friction strain the
+        # wire carries adds (d/2)(sin^2 a / r) times it at the outer face.
+        expected = expected + (
+            layer.d_wire_m
+            / 2
+            * math.sin(layer.lay_angle_rad) ** 2
+            / layer.r_helix_m
+            * np.asarray(g.friction)
+        )
         assert np.allclose(g.local_bending, expected, atol=1e-9)
         tension = 50e3
         state = solve_cable_radial_state(menard, tension)

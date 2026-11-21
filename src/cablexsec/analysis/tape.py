@@ -54,7 +54,11 @@ Tape states
     ``sigma_0 = rho (P1 + P2) / (t sin^2 beta)`` and ``psi`` the helix
     angle from the neutral line of the current bending direction
     ([Papailiou1997]; the per-unit-length friction force of a tape is
-    ``mu (P1 + P2) w``), plus the uniform part.
+    ``mu (P1 + P2) w``), plus the uniform part. The flat-wise bending of the
+    free state gains, in this state, ``+-(t/2) (sin^2 beta / rho) sigma / E``
+    of the bending stress ``sigma`` the line carries: the normal curvature of
+    a helix follows its axial slip state
+    (:func:`~cablexsec.mechanics.wire_stress.slip_state_normal_curvature`).
 
 Slip and overlap
 ----------------
@@ -129,6 +133,7 @@ from cablexsec.materials.strain_life import (
 from cablexsec.mechanics.core_friction import CoreFrictionSpec
 from cablexsec.mechanics.core_kinematics import CoreSlipState, core_kinematics
 from cablexsec.mechanics.radial_cable import CableRadialState
+from cablexsec.mechanics.wire_stress import slip_state_normal_curvature
 from cablexsec.provenance import Provenance
 
 __all__ = [
@@ -300,6 +305,7 @@ def tape_strain(
                 else:
                     last = direction[i]
         line_strain: dict[float, FloatArray] = {}
+        line_bending: dict[float, FloatArray] = {}
         for w_pos in lines:
             ang = theta + w_pos * geometry.edge_angle_rad
             bend_stuck = rho * (
@@ -324,6 +330,7 @@ def tape_strain(
                     bend_stuck, direction, ang, k, sigma0, mu * math.sin(beta)
                 )
                 membrane = uniform + stress / E_Pa
+                line_bending[w_pos] = stress / E_Pa
             line_strain[w_pos] = membrane
             if w_pos == 0.0:
                 # slip along the tape: integral of (stuck - carried) strain
@@ -357,6 +364,12 @@ def tape_strain(
             value = line_strain[w_pos]
             if state != "stuck":
                 value = value + face * half_t * flat
+                if w_pos in line_bending:
+                    # The flat-wise curvature follows the slip state of the
+                    # line: (sin^2 beta / rho) times its bending strain.
+                    value = value + face * half_t * slip_state_normal_curvature(
+                        line_bending[w_pos], 1.0, beta, rho
+                    )
                 if path == "loxodromic" and w_pos != 0.0:
                     value = value + w_pos * half_w * edge
             else:

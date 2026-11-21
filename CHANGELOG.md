@@ -38,6 +38,48 @@ All notable changes to CableXSec are recorded in this file. The format follows
     `core_full_slip_moment` and `core_full_slip_curvature`.
   - The default stays `"absolute"`; its results are unchanged, bit for bit.
 
+### Changed
+
+- The normal (out-of-surface, weak-axis) local bending of a helical wire follows the
+  wire's axial slip state. This is a correction and the new default; it changes results.
+  - Before, every recovery used the curve curvature of the deformed helix,
+    `cos²α cos2α` per unit projected curvature (Out and von Morgen 1997 Eq. 41; Leroy
+    and Estrier 2001 Eq. 13), in every slip state. That value belongs to a wire that
+    carries no friction stress.
+  - The bending strain of a wire is set by the rotation of its cross-section per unit
+    material length. The helix starts with the normal curvature `sin²α / r`, so the
+    axial strain `σ_f / E` that the wire carries adds `(sin²α / r) σ_f / E`
+    (`cablexsec.mechanics.wire_stress.slip_state_normal_curvature`). A stuck wire with
+    the plane-section strain takes `cos⁴α`; with the stick coefficient ξ,
+    `cos²α cos2α + ξ sin²α cos²α`; a wire without friction stress keeps `cos²α cos2α`;
+    a wire in Coulomb slip keeps that slope and carries the offset of its friction
+    stress. On the outer face the term is `(t/2)(sin²α / r) σ_f`.
+  - Before, a stuck wire's weak-axis bending stress was low by
+    `cos⁴α / (cos²α cos2α) − 1`: 3.2 % at 10°, 15.5 % at 20.1° and 96 % at 35°. The
+    stick and slip limits were checked against an independent finite-element model of
+    a wire on a bent support (not published).
+  - It enters the fatigue field (direction-tied, distributed and progressive friction,
+    compiled and NumPy paths, with any termination increment), `compute_stress`, the
+    wire-yield capacity, the helix field of `compute_kinematics`, the rig-test gauges,
+    the laid cores (core normal curvature of `core_kinematics`, the component states and
+    utilisation), the frictional tape state and the outer-fibre strand-slip parameters
+    of conductors (stick slope `R cos²α + (d/2) cos⁴α`, friction amplitude times
+    `1 + (d/2) sin²α / R`). The lateral term `cos α (1 + sin²α)` and the section
+    stiffness are unchanged.
+  - `local_bending_fibre_stress`, `local_bending_stress` and `local_bending_amplitude`
+    take the friction stress and the helix radius as keyword arguments; without them
+    they return the value of a wire without friction stress, as before.
+  - Validation row σ_B now checks the three states (μ = 0 against Ménard Eq. 14, a stuck
+    wire, a slipping wire); its target is unchanged. No other row changes. Tests:
+    `tests/test_normal_term_slip_state.py`.
+  - Effect on the power-cable examples is small, because their wires slip in most of each
+    cycle and `(t/2) sin²α / r` is about 1e-3: on the 66 kV template record of
+    doc/template_66kv.md Section 4 the largest wire damage rises 0.23–0.27 % (inner
+    armour) and 0.05–0.06 % (outer armour) in all four model combinations; tutorial 3
+    moves by −0.1 % (the governing inner face takes the term with the opposite sign) and
+    the tutorial and how-to outputs are regenerated. Riser armour at 35° in stick takes
+    nearly twice the earlier weak-axis bending stress.
+
 ## [0.2.0] - 2026-11-21
 
 The Python interfaces are versioned but may change before `1.0.0`. The evidence for

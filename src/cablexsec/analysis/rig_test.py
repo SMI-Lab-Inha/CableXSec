@@ -28,7 +28,8 @@ pressure chain (``contact_model="auto"``).
 Sectional friction and local bending: the package laws at the local curvature
 ``kappa(x, t) = kappa_ref(t) k_hat(x)`` (direction-tied friction,
 :func:`~cablexsec.mechanics.fast_slip.wire_friction_stress`; outward-fibre
-local bending, :func:`~cablexsec.mechanics.wire_stress.local_bending_fibre_stress`).
+local bending, :func:`~cablexsec.mechanics.wire_stress.local_bending_fibre_stress`,
+whose normal curvature follows the friction strain the wire carries).
 
 Clamp: each wire is followed along the whole specimen with the anchored-wire
 solver of :mod:`cablexsec.mechanics.clamp_layer` (anchors at both clamps,
@@ -1447,34 +1448,42 @@ def simulate_rig_test(
 
         def bending(
             theta: float,
+            friction_microstrain: FloatArray,
             kx: FloatArray = kx_local,
             sp: HelicalLayerSpec = spec,
             d: float = diameter,
         ) -> FloatArray:
+            # Outer-face local bending; its normal curvature follows the
+            # wire's slip state through the friction strain it carries.
             stress = local_bending_fibre_stress(
-                kx, 0.0, theta, sp.E_wire_Pa, d, sp.lay_angle_rad, 0.0
+                kx,
+                0.0,
+                theta,
+                sp.E_wire_Pa,
+                d,
+                sp.lay_angle_rad,
+                0.0,
+                friction_stress_Pa=friction_microstrain * 1e-6 * sp.E_wire_Pa,
+                r_helix_m=sp.r_helix_m,
             )
             return np.asarray(stress / sp.E_wire_Pa * 1e6)
 
         nominal = runs[(g.layer, *nominal_key)]
         theta_g = nominal.theta[i]
-        bend = bending(theta_g)
         friction = nominal.friction[i]
+        bend = bending(theta_g, friction)
         total = axial + bend + friction
-        by_mu = {
-            mu_nominal[g.layer] * f: rng(
-                axial + bend + runs[(g.layer, f, nominal_setback)].friction[i]
+        by_mu: dict[float, float] = {}
+        for f in mu_values:
+            held = runs[(g.layer, f, nominal_setback)].friction[i]
+            by_mu[mu_nominal[g.layer] * f] = rng(axial + bending(theta_g, held) + held)
+        by_setback: dict[float, float] = {}
+        for sb in setbacks:
+            run = runs[(g.layer, 1.0, sb)]
+            by_setback[sb] = rng(
+                axial + bending(run.theta[i], run.friction[i]) + run.friction[i]
             )
-            for f in mu_values
-        }
-        by_setback = {
-            sb: rng(
-                axial
-                + bending(runs[(g.layer, 1.0, sb)].theta[i])
-                + runs[(g.layer, 1.0, sb)].friction[i]
-            )
-            for sb in setbacks
-        }
+        sectional = nominal.sectional[i]
         results.append(
             GaugeResult(
                 location=g,
@@ -1492,7 +1501,7 @@ def simulate_rig_test(
                     "total": rng(total),
                 },
                 range_by_mu=by_mu,
-                range_sectional=rng(axial + bend + nominal.sectional[i]),
+                range_sectional=rng(axial + bending(theta_g, sectional) + sectional),
                 range_by_setback=by_setback,
             )
         )
