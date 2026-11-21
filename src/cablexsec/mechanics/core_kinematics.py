@@ -79,9 +79,9 @@ from cablexsec.mechanics.core_friction import (
     CoreFrictionSpec,
     _core_geometry,
     build_core_friction,
+    core_station_history,
 )
 from cablexsec.mechanics.core_lay import core_angle
-from cablexsec.mechanics.papailiou import wire_slip_history
 from cablexsec.mechanics.radial_cable import CableRadialState
 from cablexsec.mechanics.section_state import SectionState
 
@@ -269,12 +269,8 @@ def core_kinematics(
                 "the frictional state uses n_cores * n_stations_per_core stations "
                 f"({population.n_wires}); set CoreFrictionSpec.n_stations_per_core"
             )
-        history = wire_slip_history(
-            population,
-            kx,
-            ky,
-            initial_bending_angle=initial_bending_angle,
-            direction_hold_fraction=spec.direction_hold_fraction,
+        history = core_station_history(
+            model, kx, ky, initial_bending_angle=initial_bending_angle
         )
         phase = np.asarray(population.phi_wires, dtype=np.float64)
         axis = np.asarray(history.stress_Pa / population.E_wire_Pa)

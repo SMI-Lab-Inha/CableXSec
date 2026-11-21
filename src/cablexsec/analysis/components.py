@@ -97,7 +97,11 @@ from cablexsec.cables.schema import (
 )
 from cablexsec.exceptions import CableInputError, CableSchemaError
 from cablexsec.materials import library
-from cablexsec.mechanics.core_friction import CoreFrictionSpec, build_core_friction
+from cablexsec.mechanics.core_friction import (
+    CoreFrictionSpec,
+    build_core_friction,
+    core_station_history,
+)
 from cablexsec.mechanics.core_kinematics import CORE_SLIP_STATES, CoreSlipState
 from cablexsec.mechanics.core_lay import core_angle, core_bending_components
 from cablexsec.mechanics.papailiou import wire_slip_stress_bounds
@@ -132,6 +136,10 @@ KINEMATIC = (
     "the load path in the model"
 )
 """How the stress of a layer outside the load path is obtained, in words."""
+
+#: Increments of the proportional path of the coupled (relative) core law in
+#: the frictional core state of one section.
+_COUPLED_RAMP_SAMPLES = 400
 
 _STATE_WORDS = {
     "stuck": "stuck (cores held to the cable axis)",
@@ -478,6 +486,25 @@ def _core_axis(
     if kappa == 0.0:
         frictional = np.zeros(layer.n_cores)
         slipping = 0
+    elif model.coupling is not None:
+        # Relative core-core coupling: the stations of one axial position
+        # redistribute their stress, so the monotonic state is the end of a
+        # proportional path from the stress-free state.
+        stations = np.arange(layer.n_cores) * model.spec.n_stations_per_core
+        ramp = np.linspace(0.0, 1.0, _COUPLED_RAMP_SAMPLES + 1)[1:]
+        history = core_station_history(
+            model,
+            ramp * kappa_x,
+            ramp * kappa_y,
+            initial_bending_angle=math.atan2(kappa_y, kappa_x),
+        )
+        stress = np.asarray(history.stress_Pa)[stations, -1]
+        frictional = stress / population.E_wire_Pa
+        cosine = np.cos(phases - math.atan2(kappa_y, kappa_x))
+        stick = population.k_f * population.r_helix_m * cosine * kappa
+        slipping = int(
+            np.count_nonzero(np.abs(stress - stick) > 1e-9 * (np.abs(stick) + 1.0))
+        )
     else:
         phi_bend = math.atan2(kappa_y, kappa_x)
         stations = np.arange(layer.n_cores) * model.spec.n_stations_per_core
@@ -490,9 +517,11 @@ def _core_axis(
     return _CoreAxis(
         stuck,
         frictional,
-        f"core friction coefficient {model.mu_effective:.3g}, stick coefficient "
-        f"{model.xi:.3g}, contact line load {model.loads.total_N_per_m:.4g} N/m per "
-        f"core; {slipping} of {layer.n_cores} cores slipping in this section",
+        f"core friction coefficient {model.mu_effective:.3g}"
+        + (" (relative core-core slip)" if model.coupling is not None else "")
+        + f", stick coefficient {model.xi:.3g}, contact line load "
+        f"{model.loads.total_N_per_m:.4g} N/m per core; {slipping} of "
+        f"{layer.n_cores} cores slipping in this section",
     )
 
 

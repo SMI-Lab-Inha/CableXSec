@@ -144,6 +144,45 @@ filler profiles as the armour does (``friction_model``):
 
 The internal rings keep the [KarlsenHusoy2026] operator in every model.
 
+Core--core coupling
+-------------------
+``CoreFrictionSpec(core_core_coupling=...)`` sets the slip on which the
+core--core friction acts:
+
+* ``"absolute"`` (default): every contact of a core, the neighbouring cores
+  included, resists the slip of that core relative to the plane-section
+  field, like a helix on a fixed cylinder, with the load-weighted coefficient
+  ``mu_eff``. Under planar bending full slip comes at ``pi / 2`` times the
+  onset curvature.
+* ``"relative"``: a coupled intralayer slip model of laid cores. The
+  neighbouring cores of the layer touch at the same axial position, and the
+  friction between two of them resists their relative slip ``u_i - u_j``; the
+  filler and ring contacts (interlayer) keep the absolute slip. The stations
+  of the ``n`` cores at one axial position form a group
+  (:mod:`cablexsec.mechanics.station_coupling`): the station stress is the
+  interlayer share, bounded as above with the interlayer coefficient
+  ``mu_a = (mu_cf q_cf + mu_cs q_cs) / q_core`` (the capstan form kept on this
+  share), plus the intralayer share, bounded by the constant Coulomb bound
+  ``sigma_0 mu_cc (q_cc / q_core) |sin beta| min(psi, pi / n)``, and the
+  intralayer shares of a group sum to zero. The return map is the closest
+  point of the group on that set. For three cores with core--core contact
+  only, slip starts at the same onset curvature, the largest frozen friction
+  stress at full slip is ``2/3`` of the absolute value (the stress plateaus
+  beyond ``pi / 3`` from the neutral axis), the full-slip moment is
+  ``sqrt(3)/2`` of the absolute one and full slip comes at
+  ``2 pi / (3 sqrt 3) = 1.209`` times the onset curvature. These match an
+  independent field solver of the coupled axial equilibrium of the cores
+  (``validation/scripts/coupled_core_slip_reference.py``) on monotonic and
+  reversed planar paths, with and without interlayer friction. Two cores
+  slip relative to each other in the sense of their absolute slip, and the
+  coupled law then differs from the absolute one only by the capstan term of
+  the core--core share. Without core--core load (a central filler) the two
+  options agree. The stick coefficient, the contact loads, the filler
+  profiles and the internal rings are the same in both. The relative coupling
+  is a direction-tied law: it takes no distributed model, and
+  ``friction_model="auto"`` keeps it on a non-planar path with a
+  :class:`~cablexsec.provenance.FrictionModelFallbackWarning`.
+
 Contact loads over a tension history
 ------------------------------------
 :func:`core_load_history` evaluates the core and profile contact loads of the
@@ -175,8 +214,12 @@ Assumptions (stated, not solved)
 * The layers of one core are bonded and move together axially; the core is
   a rod of rigidity ``EA_core`` whose interior shear enters only through
   ``xi``.
-* Core--core friction is applied to the slip of each core relative to the
-  plane-section field, as are the filler and sheath contacts.
+* With ``core_core_coupling="absolute"`` (default) core--core friction is
+  applied to the slip of each core relative to the plane-section field, as
+  are the filler and sheath contacts; ``"relative"`` applies it to the
+  relative slip of neighbouring cores (section "Core--core coupling"), with
+  the constant Coulomb bound of the core--core load (no capstan term on that
+  share) and pointwise station bounds, as the direction-tied law.
 * The contact width for ``k_s`` is the core perimeter.
 * Internal rings use the cable curvature times the helical-rod bending factor
   of the core lay; their external contact pressure is the core contact line
@@ -214,12 +257,19 @@ from cablexsec.mechanics.mkappa import HelicalLayerSpec
 from cablexsec.mechanics.papailiou import (
     DIRECTION_HOLD_FRACTION,
     BendingWork,
+    WireSlipHistory,
+    coupled_slip_stress_bounds,
+    full_slip_curvature,
     wire_slip_history,
     wire_slip_stress_bounds,
 )
 from cablexsec.mechanics.radial_cable import CableRadialState
 from cablexsec.mechanics.section_geometry import is_interstitial_filler
 from cablexsec.mechanics.section_state import SectionState
+from cablexsec.mechanics.station_coupling import (
+    StationCoupling,
+    project_station_groups,
+)
 from cablexsec.mechanics.stiffness import axial_stiffness_by_layer, ea_fixed
 from cablexsec.mechanics.strand_slip import (
     ConductorRing,
@@ -234,9 +284,11 @@ from cablexsec.mechanics.yun_coefficient import (
 )
 
 __all__ = [
+    "CORE_CORE_COUPLINGS",
     "CORE_FRICTION_MODELS",
     "CORE_LOAD_MODES",
     "CoreContactLoads",
+    "CoreCoreCoupling",
     "CoreFrictionHistory",
     "CoreFrictionModel",
     "CoreFrictionModelName",
@@ -248,7 +300,11 @@ __all__ = [
     "build_core_friction",
     "core_contact_loads",
     "core_friction_history",
+    "core_full_slip_curvature",
+    "core_full_slip_moment",
     "core_load_history",
+    "core_station_bounds",
+    "core_station_history",
     "resolve_core_friction",
 ]
 
@@ -261,6 +317,11 @@ CORE_FRICTION_MODELS: tuple[str, ...] = ("direction_tied", "distributed", "auto"
 #: history (:func:`core_load_history`) or hold the ``"reference"`` state.
 CoreLoadMode = Literal["follow", "reference"]
 CORE_LOAD_MODES: tuple[str, ...] = ("follow", "reference")
+#: Slip on which the core--core friction acts (module notes): ``"absolute"``
+#: (each core against the plane section, default) or ``"relative"`` (the
+#: relative slip of neighbouring cores).
+CoreCoreCoupling = Literal["absolute", "relative"]
+CORE_CORE_COUPLINGS: tuple[str, ...] = ("absolute", "relative")
 #: Solved tensions of a solved-model load history before it is interpolated.
 _SOLVED_LOAD_NODES = 33
 
@@ -314,6 +375,11 @@ class CoreFrictionSpec:
     mu_filler_profile : float or None
         Friction coefficient of the profile contacts (default:
         ``mu_core_filler``).
+    core_core_coupling : {"absolute", "relative"}
+        Slip on which the core--core friction acts (module notes, section
+        "Core--core coupling"): ``"absolute"`` (default) the slip of each core
+        relative to the plane section, ``"relative"`` the relative slip of
+        neighbouring cores (coupled stations; direction-tied law only).
     """
 
     mu_core_filler: float = DEFAULT_CORE_MU
@@ -329,6 +395,7 @@ class CoreFrictionSpec:
     central_filler: bool | None = None
     filler_profiles: bool = False
     mu_filler_profile: float | None = None
+    core_core_coupling: CoreCoreCoupling = "absolute"
 
     @property
     def filler_mu(self) -> float:
@@ -348,6 +415,11 @@ class CoreFrictionSpec:
             raise CableInputError("central_filler must be None, True or False")
         if not isinstance(self.filler_profiles, bool):
             raise CableInputError("filler_profiles must be True or False")
+        if self.core_core_coupling not in CORE_CORE_COUPLINGS:
+            raise CableInputError(
+                f"core_core_coupling must be one of {CORE_CORE_COUPLINGS}, "
+                f"got {self.core_core_coupling!r}"
+            )
         for name in ("mu_strand", "mu_strand_outer", "mu_filler_profile"):
             value = getattr(self, name)
             if value is not None and (not math.isfinite(value) or value < 0.0):
@@ -408,6 +480,13 @@ class CoreContactLoads:
             + spec.mu_core_filler * self.core_filler_N_per_m
             + spec.mu_core_sheath * self.core_sheath_N_per_m
         ) / total
+
+    def mu_interlayer(self, spec: CoreFrictionSpec) -> float:
+        """Interlayer (filler and ring) friction over the total core load,
+        ``(mu_cf q_cf + mu_cs q_cs) / q_core`` (``mu_core_filler`` if
+        unloaded): the coefficient of the interlayer share of the relative
+        coupling, :meth:`mu_effective` with ``mu_core_core = 0``."""
+        return self.mu_effective(dataclasses.replace(spec, mu_core_core=0.0))
 
 
 def _core_layers(cable: CableData) -> list[CylindricalOffsetLayer]:
@@ -644,6 +723,9 @@ class CoreFrictionModel:
     strand_rings: tuple[StrandRingFriction, ...] = field(default=())
     tension_N: float = 0.0
     fillers: FillerProfiles | None = None
+    #: Coupled station groups of ``core_core_coupling="relative"`` (``None``:
+    #: the absolute law).
+    coupling: StationCoupling | None = None
 
     @property
     def core_stick_EI_Nm2(self) -> float:
@@ -918,6 +1000,16 @@ def build_core_friction(
     mu = loads.mu_effective(spec)
     n_st = n_cores * spec.n_stations_per_core
     area_core = math.pi * r_core**2
+    coupling = None
+    if spec.core_core_coupling == "relative":
+        coupling = StationCoupling(
+            group_size=n_cores,
+            interlayer_mu=loads.mu_interlayer(spec),
+            intralayer_mu=spec.mu_core_core,
+            intralayer_pressure_Pa=n_cores
+            * loads.core_core_N_per_m
+            / (2.0 * math.pi * r_c),
+        )
     population = HelicalLayerSpec(
         n_wires=n_st,
         r_helix_m=r_c,
@@ -948,6 +1040,7 @@ def build_core_friction(
             if spec.filler_profiles
             else None
         ),
+        coupling=coupling,
     )
 
 
@@ -965,6 +1058,12 @@ class CoreLoadHistory:
     the most loaded sample. ``filler_profile_N_per_m`` and
     ``filler_pressure_Pa`` are those of the filler profiles (``None``
     without them). ``contact_model`` names the model the loads come from.
+
+    With ``core_core_coupling="relative"`` the core pressure and the capstan
+    coefficient are those of the interlayer share (the same rule with the
+    interlayer coefficient), and ``core_intralayer_pressure_Pa`` is the
+    pressure equivalent ``n q_cc / (2 pi r_c)`` of the core--core load at
+    every sample (``None`` for the absolute law).
     """
 
     tension_N: FloatArray
@@ -975,6 +1074,7 @@ class CoreLoadHistory:
     filler_profile_N_per_m: FloatArray | None = None
     filler_pressure_Pa: FloatArray | None = None
     core_mu_capstan: float | None = None
+    core_intralayer_pressure_Pa: FloatArray | None = None
 
 
 def _population_cap_per_pressure(spec: HelicalLayerSpec, mu: float) -> float:
@@ -1054,17 +1154,30 @@ def core_load_history(
     mu[positive] = weighted[positive] / total[positive]
     population = model.population
     pressure = model.n_cores * total / (2.0 * math.pi * model.r_offset_m)
+    # The capstan share: the whole load (absolute law) or the interlayer
+    # share (relative coupling, the coefficient with mu_core_core = 0).
+    share = mu
     reference_mu = float(population.mu)
-    if reference_mu <= 0.0 and np.any(mu[positive] > 0.0):
+    intralayer = None
+    if model.coupling is not None:
+        share = np.full(total.shape, spec.mu_core_filler)
+        interlayer = spec.mu_core_filler * filler + spec.mu_core_sheath * sheath
+        share[positive] = interlayer[positive] / total[positive]
+        reference_mu = float(model.coupling.interlayer_mu)
+        intralayer = np.asarray(
+            model.n_cores * core_core / (2.0 * math.pi * model.r_offset_m),
+            dtype=np.float64,
+        )
+    if reference_mu <= 0.0 and np.any(share[positive] > 0.0):
         # A zero reference coefficient cannot carry the friction of later
         # samples: normalise by the coefficient of the most loaded sample.
-        reference_mu = float(mu[int(np.argmax(total))])
-    if np.any(np.abs(mu - reference_mu) > 1e-12 * max(reference_mu, 1e-300)):
+        reference_mu = float(share[int(np.argmax(total))])
+    if np.any(np.abs(share - reference_mu) > 1e-12 * max(reference_mu, 1e-300)):
         # The full-slip friction moment of the population at each sample's
         # coefficient over that at the normalising coefficient (positive
         # here unless every sample is frictionless).
         reference = _population_cap_per_pressure(population, reference_mu)
-        values, inverse = np.unique(mu, return_inverse=True)
+        values, inverse = np.unique(share, return_inverse=True)
         ratio = np.array(
             [
                 _population_cap_per_pressure(population, float(value)) / reference
@@ -1088,6 +1201,7 @@ def core_load_history(
         filler_profile_N_per_m=profile,
         filler_pressure_Pa=profile_pressure,
         core_mu_capstan=reference_mu,
+        core_intralayer_pressure_Pa=intralayer,
     )
 
 
@@ -1119,6 +1233,126 @@ class CoreFrictionHistory:
         if self.filler_moment_Nm is not None:
             total = total + self.filler_moment_Nm
         return np.asarray(total)
+
+
+def core_station_history(
+    model: CoreFrictionModel,
+    kappa_x: FloatArray,
+    kappa_y: FloatArray,
+    *,
+    initial_bending_angle: float = 0.0,
+    keep_cap: bool = False,
+) -> WireSlipHistory:
+    """Direction-tied history of the core stations of ``model`` at its
+    reference loads: :func:`~cablexsec.mechanics.papailiou.wire_slip_history`
+    of the core population, with the coupled station groups of
+    ``core_core_coupling="relative"`` (module notes)."""
+    return wire_slip_history(
+        model.population,
+        kappa_x,
+        kappa_y,
+        initial_bending_angle=initial_bending_angle,
+        direction_hold_fraction=model.spec.direction_hold_fraction,
+        keep_cap=keep_cap,
+        coupling=model.coupling,
+    )
+
+
+def core_station_bounds(
+    model: CoreFrictionModel, phi_bend: float
+) -> tuple[FloatArray, FloatArray]:
+    """Rising and falling friction-stress bounds of every core station [Pa]
+    for the bending direction ``phi_bend``: those of
+    :func:`~cablexsec.mechanics.papailiou.wire_slip_stress_bounds` (absolute
+    law), or the interlayer bounds plus the intralayer bound of the relative
+    coupling (the bound a station holds in full slip)."""
+    if model.coupling is None:
+        return wire_slip_stress_bounds(model.population, phi_bend)
+    upper, lower, cap = coupled_slip_stress_bounds(
+        model.population, model.coupling, phi_bend
+    )
+    return np.asarray(upper + cap), np.asarray(lower + cap)
+
+
+def core_full_slip_moment(model: CoreFrictionModel) -> float:
+    """Planar full-slip friction moment of the core population [N m]: every
+    station on the bound of its side (:func:`core_station_bounds`) under a
+    large curvature about ``phi_bend = 0``. The coupled stations of the
+    relative law hold the same bounds in full slip, whose intralayer shares
+    cancel in every group."""
+    population = model.population
+    upper, lower = core_station_bounds(model, 0.0)
+    c = np.cos(population.phi_wires)
+    bound = np.where(c > 0.0, upper, lower)
+    return float(
+        population.A_wire_m2
+        * math.cos(population.lay_angle_rad)
+        * population.r_helix_m
+        * np.sum(bound * np.abs(c))
+    )
+
+
+#: Curvature samples of the monotonic path of :func:`core_full_slip_curvature`
+#: (relative coupling) and bisections of its last interval.
+_FULL_SLIP_SAMPLES = 2000
+_FULL_SLIP_BISECTIONS = 40
+
+
+def core_full_slip_curvature(model: CoreFrictionModel, phi_bend: float = 0.0) -> float:
+    """Curvature at which the last core station starts to slip [1/m].
+
+    Absolute law: :func:`~cablexsec.mechanics.papailiou.full_slip_curvature`
+    of the core population. Relative coupling: the stations of a group
+    redistribute their stress, so the point depends on the path; it is the
+    first curvature of a monotonic planar path from the stress-free state
+    (``phi_bend``, 2000 equal increments up to the value of independent
+    stations with the same bounds, refined by bisection of the last
+    increment) at which
+    every loaded station is on its bound. Zero without friction.
+    """
+    population = model.population
+    if model.coupling is None:
+        return full_slip_curvature(population, phi_bend=phi_bend)
+    if not math.isfinite(phi_bend):
+        raise CableInputError("bending direction must be finite")
+    upper, lower, cap = coupled_slip_stress_bounds(population, model.coupling, phi_bend)
+    cosine = np.cos(population.phi_wires - phi_bend)
+    bound = np.where(cosine >= 0.0, upper, lower) + cap
+    loaded = np.abs(cosine) > 1.0e-12
+    unit = population.k_f * population.r_helix_m * cosine
+    if not np.any(loaded) or not np.any(bound > 0.0):
+        return 0.0
+    # Every station on its own bound: the independent-station value, the
+    # first bracket (doubled while the coupled stations stick beyond it).
+    top = float(np.max(bound[loaded] / np.abs(unit[loaded])))
+    n = model.coupling.group_size
+
+    def project(stress: FloatArray, step: float) -> FloatArray:
+        return project_station_groups(stress + step * unit, upper, lower, cap, n)
+
+    def slipping(stress: FloatArray) -> bool:
+        side = np.abs(stress[loaded]) >= bound[loaded] * (1.0 - 1.0e-12)
+        return bool(np.all(side))
+
+    for _ in range(4):
+        steps = np.linspace(0.0, top, _FULL_SLIP_SAMPLES + 1)
+        stress = np.zeros_like(unit)
+        for k0, k1 in zip(steps[:-1], steps[1:], strict=True):
+            trial = project(stress, k1 - k0)
+            if slipping(trial):
+                lo, hi = float(k0), float(k1)
+                for _ in range(_FULL_SLIP_BISECTIONS):
+                    mid = 0.5 * (lo + hi)
+                    if slipping(project(stress, mid - k0)):
+                        hi = mid
+                    else:
+                        lo = mid
+                return hi
+            stress = trial
+        top *= 2.0  # pragma: no cover - the first bracket held in every case
+    raise CableInputError(  # pragma: no cover
+        "the coupled core stations did not reach full slip"
+    )
 
 
 def _strand_history(
@@ -1176,6 +1410,18 @@ def _resolve_core_model(
         friction_model == "auto"
         and curvature_path_out_of_plane_ratio(kx, ky) <= PLANAR_PATH_TOLERANCE
     ):
+        return "direction_tied"
+    if model.coupling is not None:
+        reason = (
+            "the relative core-core coupling (core_core_coupling='relative') "
+            "is a direction-tied law"
+        )
+        if friction_model == "distributed":
+            raise CableInputError(
+                f"the distributed core law is not available: {reason}; use "
+                "friction_model='direction_tied' or core_core_coupling='absolute'"
+            )
+        _warn_auto_fallback("the laid-core law", reason, stacklevel + 1)
         return "direction_tied"
     rigid = [
         f"the {name} (xi = {pop.xi:.6g})"
@@ -1255,7 +1501,12 @@ def core_friction_history(
     station) and substeps of at most ``max_increment`` slip-onset curvatures
     (the default of the distributed model), ``"auto"`` the direction-tied
     law on a planar path and the distributed law otherwise. The rings use
-    :func:`strand_slip_strain`.
+    :func:`strand_slip_strain`. A model with
+    ``core_core_coupling="relative"`` takes the coupled station groups of
+    :func:`~cablexsec.mechanics.papailiou.wire_slip_history` (direction-tied
+    only: ``"distributed"`` raises, ``"auto"`` keeps the direction-tied law
+    with a :class:`~cablexsec.provenance.FrictionModelFallbackWarning` on a
+    non-planar path); its load history must come from the same model.
     ``loads`` (:func:`core_load_history`, one sample per curvature sample)
     makes the contact loads follow a tension history; ``None`` holds the
     model's reference loads. All return moments in the material frame of the
@@ -1280,7 +1531,26 @@ def core_friction_history(
         filler_pressure = loads.filler_pressure_Pa
         tension = loads.tension_N
     population = model.population
-    if (
+    coupling = model.coupling
+    intralayer: FloatArray | None = None
+    if loads is not None and (
+        (loads.core_intralayer_pressure_Pa is None) != (coupling is None)
+    ):
+        raise CableInputError(
+            "the core load history belongs to another core model "
+            "(its core-core coupling differs)"
+        )
+    if coupling is not None:
+        if loads is not None:
+            intralayer = loads.core_intralayer_pressure_Pa
+            if (
+                loads.core_mu_capstan is not None
+                and loads.core_mu_capstan != coupling.interlayer_mu
+            ):
+                coupling = dataclasses.replace(
+                    coupling, interlayer_mu=loads.core_mu_capstan
+                )
+    elif (
         loads is not None
         and loads.core_mu_capstan is not None
         and loads.core_mu_capstan != population.mu
@@ -1302,6 +1572,8 @@ def core_friction_history(
             contact_pressure_Pa=core_pressure,
             initial_bending_angle=initial_bending_angle,
             direction_hold_fraction=model.spec.direction_hold_fraction,
+            coupling=coupling,
+            intralayer_pressure_Pa=intralayer,
         )
         core_moment, w = np.asarray(history.moment_Nm), history.work
         slip = history.slipping_count / float(model.population.n_wires)

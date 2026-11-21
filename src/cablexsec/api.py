@@ -1109,7 +1109,12 @@ def compute_mkappa(
     else:
         method_extra = (
             "; laid-core stick-slip (direction-tied Papailiou cap, "
-            f"{model.loads.source} core contact loads, stick coefficient "
+            + (
+                ""
+                if model.coupling is None
+                else "relative core-core slip of neighbouring cores, "
+            )
+            + f"{model.loads.source} core contact loads, stick coefficient "
             f"{model.xi:.3f}, effective friction coefficient "
             f"{model.mu_effective:.3f})"
             + (
@@ -1140,8 +1145,14 @@ def compute_mkappa(
                 else "of the reference"
             )
             + ", not changed by bending; the layers of a core move together; "
-            "core-core friction acts on the slip of each core relative to the "
-            "plane-section field",
+            + (
+                "core-core friction acts on the slip of each core relative to the "
+                "plane-section field"
+                if model.coupling is None
+                else "core-core friction acts on the relative slip of neighbouring "
+                "cores (coupled stations, constant Coulomb bound of the core-core "
+                "load)"
+            ),
             "internal rings take the core contact line load by line-force "
             "conservation (upper estimate) and the cable curvature",
         )

@@ -258,6 +258,20 @@ What the comparison shows:
   Fig. 12b and Table 13), and no input is changed to follow either.
 - A synthetic 61-wire conductor (lay ratio 12, Table 2 copper friction 0.30)
   raises the half-height by a further 0.03 kN·m.
+- **Core–core coupling.** With `CoreFrictionSpec(core_core_coupling="relative")`
+  (the coupled intralayer slip model of the local analysis guide,
+  Section 6.1) the friction between neighbouring cores acts on their relative
+  slip. At 50 kN with the default coefficients (0.2) the bounded trefoil puts
+  67 % of the core contact load on the core–core contacts; the solved radial
+  state has no core–core contact force at that tension (98 % of the load is
+  on the filler), so the two options agree on it. On the bounded state the cores reach full slip at 1.22 instead of
+  1.61 times their onset curvature, their full-slip friction moment is 9 %
+  lower and the range of the core-axis friction strain 22 % lower. The
+  section secant stiffness falls by 2.8, 2.5 and 2.1 % at 2, 5 and 10 times
+  the core onset (the stick value is unchanged), the cycle work at ±10 times
+  the onset by 2.4 %, and the exported backbone by 0.5 % at 0.04 1/m and
+  0.1 % at 0.2 1/m. Armour and conductor damage are curvature driven and do
+  not change.
 
 ### 4.2 Energised cable: temperature history into clamping and fatigue
 
