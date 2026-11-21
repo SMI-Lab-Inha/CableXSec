@@ -1549,8 +1549,16 @@ def _state_law(
 def _group_caps(law: _MkappaLaw) -> FloatArray:
     """Planar full-slip friction moment of every friction group [N m]."""
     values = [_friction_cap(spec) for spec in law.layers]
-    if law.core_model is not None:
-        values += [_friction_cap(spec) for spec in law.core_model.populations]
+    model = law.core_model
+    if model is not None:
+        from cablexsec.mechanics.core_friction import (  # noqa: PLC0415
+            core_full_slip_moment,
+        )
+
+        # The cores hold the bounds of their own law (relative coupling: the
+        # interlayer plus the intralayer bound), the profiles the Papailiou cap.
+        values.append(core_full_slip_moment(model))
+        values += [_friction_cap(spec) for spec in model.populations[1:]]
     return np.asarray(values, dtype=np.float64)
 
 
@@ -1601,14 +1609,26 @@ def _slip_transitions(
     if law.progressive is not None and law.progressive.density == "uniform":
         n = law.progressive.n_elements
         spread = 1.0 - law.progressive.spread * (1.0 - 1.0 / n)
-    specs = [(spec, spread) for spec in law.layers]
-    if law.core_model is not None:
-        specs += [(spec, 1.0) for spec in law.core_model.populations]
+    specs: list[tuple[HelicalLayerSpec, float, float | None]] = [
+        (spec, spread, None) for spec in law.layers
+    ]
+    model = law.core_model
+    if model is not None:
+        from cablexsec.mechanics.core_friction import (  # noqa: PLC0415
+            core_full_slip_curvature,
+        )
+
+        # The coupled stations of the relative core law have their own
+        # full-slip curvature (core_full_slip_curvature).
+        core_full = None if model.coupling is None else core_full_slip_curvature(model)
+        specs += [(model.population, 1.0, core_full)]
+        specs += [(spec, 1.0, None) for spec in model.populations[1:]]
     out = []
-    for spec, factor in specs:
+    for spec, factor, full in specs:
         if friction_law is not None and friction_law.pressure_dependent:
             scale = float(friction_law.pressure_factor_at(spec.contact_pressure_Pa))
             spec = dataclasses.replace(spec, mu=spec.mu * scale)
+            full = None if full is None else full * scale
         onset = slip_onset_curvature(spec)
         if not (math.isfinite(onset) and onset > 0.0):
             continue  # no friction: the group is in full slip from zero
@@ -1618,7 +1638,7 @@ def _slip_transitions(
                 tension,
                 onset * _compression_onset_factor(lam) * factor,
                 onset,
-                full_slip_curvature(spec),
+                full_slip_curvature(spec) if full is None else full,
             )
         )
     return out

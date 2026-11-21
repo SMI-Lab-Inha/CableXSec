@@ -87,6 +87,7 @@ from cablexsec.materials import library
 from cablexsec.mechanics.core_friction import (
     CoreFrictionSpec,
     build_core_friction,
+    core_full_slip_curvature,
     resolve_core_friction,
 )
 from cablexsec.mechanics.papailiou import full_slip_curvature, slip_onset_curvature
@@ -1111,7 +1112,7 @@ def _core_slip(
         model.mu_effective,
         model.xi,
         slip_onset_curvature(population),
-        full_slip_curvature(population),
+        core_full_slip_curvature(model),
         model.stick_EI_Nm2,
         None if fillers is None else fillers.line_load_N_per_m,
         None if fillers is None else slip_onset_curvature(fillers.population),

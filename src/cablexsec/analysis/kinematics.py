@@ -111,6 +111,7 @@ from cablexsec.materials import library
 from cablexsec.mechanics.core_friction import (
     CoreFrictionSpec,
     build_core_friction,
+    core_station_history,
     resolve_core_friction,
 )
 from cablexsec.mechanics.distributed_friction import distributed_friction_history
@@ -789,12 +790,7 @@ def _core_field(
 
     model = build_core_friction(cable, spec, tension_N, contact_model=contact_model)
     population = model.population
-    history = wire_slip_history(
-        population,
-        drive.kx,
-        drive.ky,
-        direction_hold_fraction=spec.direction_hold_fraction,
-    )
+    history = core_station_history(model, drive.kx, drive.ky)
     phi = np.asarray(population.phi_wires, dtype=np.float64)
     lay = cable.core_lay
     sign = _lay_sign(lay.lay_direction) if lay is not None else 1

@@ -901,7 +901,9 @@ for state in response.states:
   states of Section 13.1: `sigma_stick_*` (core held to the cable axis,
   `"stuck"`), `sigma_frictional_*` (the core friction law of Section 6.1 in
   closed form for a monotonic ramp, default `CoreFrictionSpec()`, μ = 0.2 on
-  every core contact) and `sigma_local_*` (free core slip: each core bends
+  every core contact; with `core_core_coupling="relative"` the end of a
+  400-increment proportional ramp, since the coupled stations redistribute
+  their stress) and `sigma_local_*` (free core slip: each core bends
   about its own axis). The stuck state holds only below the slip curvature of
   the cores; on the IEA 66 kV template the cores slip at about 3e-4 1/m, so at
   any practical curvature the frictional state is close to free slip.
@@ -978,6 +980,32 @@ print(core.loads, core.xi, core.mu_effective, core.stick_EI_Nm2)
   cores use the same direction-tied Papailiou cap and return map as the armour
   wires, so biaxial histories work
   (`cablexsec.mechanics.core_friction.core_friction_history`).
+- Core–core coupling (`CoreFrictionSpec(core_core_coupling=...)`). By default
+  (`"absolute"`) every contact of a core, its neighbours included, resists the
+  slip of that core against the plane section, as for a helix on a fixed
+  cylinder: full slip at `π/2` times the onset curvature. `"relative"` is a
+  coupled intralayer slip model of laid cores: neighbouring cores touch at
+  the same axial position, so the friction between them resists their
+  relative slip `u_i − u_j`, while the filler and ring contacts keep the
+  absolute slip. The stations of the cores at one axial position form a
+  group whose intralayer friction shares sum to zero; the intralayer share of
+  a station is bounded by `σ0 μ_cc (q_cc/q) |sin β| min(ψ, π/n)` (`ψ` from the
+  neutral axis), the interlayer share by the Papailiou cap with
+  `μ_a = (μ_cf q_cf + μ_cs q_cs)/q`, and the return map is the closest point
+  of the group (`cablexsec.mechanics.station_coupling`). With core–core
+  contact only (three cores) slip starts at the same onset, the largest
+  frozen friction stress is 2/3 and the full-slip moment `√3/2` of the
+  absolute values, and full slip comes at `2π/(3√3) = 1.209` times the onset.
+  An independent field solver of the coupled axial equilibrium of the three
+  cores (`validation/scripts/coupled_core_slip_reference.py`) gives the same
+  onset, full-slip curvature, moment–curvature, friction-force distribution
+  and reversal loop, with and without interlayer friction
+  (`tests/test_core_coupled_slip.py`). It is a direction-tied law:
+  `friction_model="distributed"` raises and `"auto"` keeps it on a non-planar
+  path with a `FrictionModelFallbackWarning`. The stick state, the contact
+  loads and the onset are those of the default. The default stays
+  `"absolute"`; the effect on the shipped cables is in
+  [template_66kv.md](template_66kv.md) Section 4.1.
 - Friction model of the cores and profiles, as for the armour:
   `core_friction_history(..., friction_model="distributed")` solves each
   population with the distributed helix model of the armour (the axial force
@@ -1033,7 +1061,9 @@ print(core.loads, core.xi, core.mu_effective, core.stick_EI_Nm2)
   `export_bending_law(..., core_friction=...)`. The cores stick and carry
   their parallel-axis term until slip onset `μ q / (ξ EA_core sin β cos β)`
   (Skeie and Sødahl 2012, Eq. 2.31) and all slip from
-  `q expm1(μ sin β π/2) / (ξ EA_core sin² β cos β)` (Papailiou 1997, Eq. 15);
+  `q expm1(μ sin β π/2) / (ξ EA_core sin² β cos β)` (Papailiou 1997, Eq. 15;
+  with `core_core_coupling="relative"` the full-slip curvature of the coupled
+  stations, `core_full_slip_curvature`);
   both curvatures are reported per case and are nodes of the backbone grid.
   With `CoreFrictionSpec(core_shear=False, strand_slip=False)` the backbone
   starts on `compute_stiffness(cable).ei_max_Nm2`; with the core insulation

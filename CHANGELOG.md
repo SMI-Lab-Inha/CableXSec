@@ -6,6 +6,38 @@ All notable changes to CableXSec are recorded in this file. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `CoreFrictionSpec(core_core_coupling="relative")`: a coupled intralayer slip
+  model of laid cores. Neighbouring cores touch at the same axial position, so
+  the friction between them acts on their relative slip, while the filler and
+  ring contacts keep the slip of each core against the plane section.
+  - The stations of the cores at one axial position form a group whose
+    intralayer friction shares sum to zero. The intralayer share of a station
+    has the constant Coulomb bound `σ0 μ_cc (q_cc/q) |sin β| min(ψ, π/n)`, the
+    interlayer share the Papailiou cap with `μ_a = (μ_cf q_cf + μ_cs q_cs)/q`.
+    The return map is the closest point of the group
+    (`cablexsec.mechanics.station_coupling`, a NumPy path and a numba kernel
+    that agree to round-off).
+  - Three cores in core–core contact only: same slip onset, the largest frozen
+    friction stress 2/3 and the full-slip moment `√3/2` of the default law,
+    full slip at `2π/(3√3) = 1.209` times the onset instead of `π/2`.
+  - Verified against an independent field solver of the coupled axial
+    equilibrium of the cores (`validation/scripts/coupled_core_slip_reference.py`):
+    onset, full-slip curvature, moment–curvature, friction-force distribution
+    and reversal loop, with and without interlayer friction
+    (`tests/test_core_coupled_slip.py`).
+  - Routes: `core_friction_history`, `compute_mkappa`, the bending-law export
+    (group cap and transitions), the section properties, the core kinematics,
+    the component states and the screen, tape and sheath fatigue of the cores.
+    It is a direction-tied law: `friction_model="distributed"` raises and
+    `"auto"` keeps it on a non-planar path with a `FrictionModelFallbackWarning`.
+  - New helpers `core_station_history`, `core_station_bounds`,
+    `core_full_slip_moment` and `core_full_slip_curvature`.
+  - The default stays `"absolute"`; its results are unchanged, bit for bit.
+
 ## [0.2.0] - 2026-11-21
 
 The Python interfaces are versioned but may change before `1.0.0`. The evidence for
