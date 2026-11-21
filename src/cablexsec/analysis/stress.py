@@ -20,7 +20,11 @@ component    definition                                     source
 ============ ====================================================== ==============
 
 with ``σ_total = σ_A + σ_B + σ_f + σ_T`` and ``p_0`` the Hertz peak pressure of
-the opposite-laid armour crossing.
+the opposite-laid armour crossing. The normal (radial) curvature in ``σ_B``
+follows each wire's slip state: ``cos²α cos2α κ cosθ + (sin²α / r) σ_f / E``
+(:func:`~cablexsec.mechanics.wire_stress.slip_state_normal_curvature`), which
+is ``cos⁴α`` for a stuck wire with ``ξ = 1`` and the Eq. 14 value
+``cos²α cos2α`` for a wire without friction stress.
 The retained sigma_vm names do not denote a resolved contact tensor invariant:
 the axial and contact terms need not be coincident, and the result is not a
 proven upper bound. A local contact assessment must recover coincident tensors.
@@ -78,6 +82,7 @@ from cablexsec.mechanics.thermal import ThermalResult
 from cablexsec.mechanics.wire_stress import (
     local_bending_amplitude,
     local_bending_stress,
+    slip_state_normal_curvature,
     von_mises_stress,
 )
 from cablexsec.provenance import Provenance, require_finite
@@ -397,11 +402,22 @@ def compute_stress(
             # second thermal increment or replace it with N/EA.
             sigma_A_val = section_state.layers[lyr.name].longitudinal_stress_Pa
         sigma_A = np.full(spec.n_wires, sigma_A_val)
-        # sigma_B: local wire bending ([MenardCartraud2023] Eq. 14).
+        # sigma_B: local wire bending ([MenardCartraud2023] Eq. 14), with the
+        # normal curvature of each wire's slip state from its friction stress
+        # (cos^4 a stuck at xi = 1, cos^2 a cos 2a without friction stress).
         section = spec.section
         depth = d_wire if section is None else 2.0 * section.half_thickness_m
         sigma_B = np.asarray(
-            local_bending_stress(kappa_mag, phi, e_w, depth, a, phi_bend)
+            local_bending_stress(
+                kappa_mag,
+                phi,
+                e_w,
+                depth,
+                a,
+                phi_bend,
+                friction_stress_Pa=sigma_f,
+                r_helix_m=r_h,
+            )
         )
         # sigma_T: fully restrained thermal increment (0 if isothermal).
         # Heating at fixed global strain is compressive in the tensile-positive
@@ -428,12 +444,22 @@ def compute_stress(
         sigma_vm = np.asarray(von_mises_stress(sigma_total, p0))
         if section is None:
             bending_amplitude = local_bending_amplitude(
-                kappa_mag, phi, e_w, d_wire, a, phi_bend
+                kappa_mag,
+                phi,
+                e_w,
+                d_wire,
+                a,
+                phi_bend,
+                friction_stress_Pa=sigma_f,
+                r_helix_m=r_h,
             )
         else:
             # Rectangular/profiled wire (gap G1): corner of the section.
             s_a = math.sin(a)
-            face = e_w * kappa_mag * cos_b**2 * math.cos(2 * a) * cphi
+            face = e_w * (
+                kappa_mag * cos_b**2 * math.cos(2 * a) * cphi
+                + slip_state_normal_curvature(sigma_f, e_w, a, r_h)
+            )
             edge = e_w * kappa_mag * cos_b * (1 + s_a * s_a) * np.sin(phi - phi_bend)
             bending_amplitude = section.max_bending_stress(
                 face * section.half_thickness_m, edge * section.half_width_m

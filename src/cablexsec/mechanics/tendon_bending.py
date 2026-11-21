@@ -15,9 +15,14 @@ azimuth ``phi`` measured from the tensile extreme fibre and the projections
 * loxodrome (no transverse slip): lateral ``cos a (1 + sin^2 a) p_l``
   (Sævik 1992 Eq. 2.65; Sævik 2011 Eq. 51; Lukassen 2019 Eq. 16), normal
   ``cos^2 a cos 2a p_n`` (the curve curvature of the deformed helix, Out and
-  von Morgen 1997 Eq. 41, used throughout CableXSec; Sævik's material value
-  for a stuck tendon is ``cos^4 a``, Eq. 2.66, which differs by the term of
-  the axial strain ``sin^2 a cos^2 a``, Skeie 2026 Eq. 15);
+  von Morgen 1997 Eq. 41; Leroy and Estrier 2001 Eq. 13), the normal
+  curvature of a tendon that carries no friction stress. The stress
+  recovery adds the term of the tendon's axial slip state,
+  ``(sin^2 a / r) sigma_f / E``
+  (:func:`~cablexsec.mechanics.wire_stress.slip_state_normal_curvature`),
+  which gives Sævik's material value ``cos^4 a`` (Eq. 2.66) for a stuck
+  tendon; the coefficients below (the individual tendon bending of the
+  section stiffness) are those of the slipping tendon;
 * geodesic (free transverse slip): lateral ``0``, normal ``3 cos^2 a p_n``
   (Sævik 1992 Eq. 2.32; Out and von Morgen Eq. 39; Lukassen Eq. 15);
 * partial transverse slip ``v = eta w_g p_l`` towards the geodesic offset
@@ -132,7 +137,8 @@ def curvature_coefficients(
 
     ``eta = 0`` returns the coefficients of
     :func:`~cablexsec.mechanics.wire_stress.local_bending_fibre_stress`
-    (loxodrome), ``eta = 1`` the geodesic (module notes).
+    without a friction stress (loxodrome, slipping tendon), ``eta = 1`` the
+    geodesic (module notes).
     """
     eta = float(transverse_fraction)
     if not (math.isfinite(eta) and 0.0 <= eta <= 1.0):

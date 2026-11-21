@@ -107,6 +107,8 @@ def test_variable_modulus_wire_history_matches_independent_plastic_strain_update
         friction = np.clip(stiffness[t] * (drive - plastic), -lower[t], upper[t])
         plastic = drive - friction / stiffness[t]
         bending = modulus[t] * value * cosine**2 * math.cos(0.8) * 0.003 / 2
+        # The normal curvature follows the slip state of the friction stress.
+        bending += 0.003 / 2 * sine**2 / spec.r_helix_m * friction
         expected.append(normal[t] + friction + bending)
     np.testing.assert_allclose(calculated[0], expected, rtol=1e-12, atol=1e-8)
 

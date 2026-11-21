@@ -78,7 +78,8 @@ twist held, ``eps0 = T / EA_fixed`` (as the stress route), or a prescribed
 strain; the ends are held against twist, so the twist is zero. The centre-line
 wire stress is ``E cos^2 a eps0 + sigma_f``; the utilisation is the largest
 stress round the wire (with its local bending,
-:func:`~cablexsec.mechanics.wire_stress.local_bending_fibre_stress`) over the
+:func:`~cablexsec.mechanics.wire_stress.local_bending_fibre_stress`, whose
+normal curvature follows the friction stress of the station) over the
 yield stress of the armour material.
 
 The transverse slip of the wire from its loxodrome
@@ -569,8 +570,14 @@ def _bending(
     phi: FloatArray,
     kx: FloatArray,
     ky: FloatArray,
+    friction: FloatArray,
 ) -> tuple[FloatArray, FloatArray]:
-    """Local bending stress at the outer face and the edge (stations, kept)."""
+    """Local bending stress at the outer face and the edge (stations, kept).
+
+    The normal curvature follows each station's slip state through its
+    friction stress
+    (:func:`~cablexsec.mechanics.wire_stress.slip_state_normal_curvature`).
+    """
     depth = 2.0 * section.half_thickness_m
     width = 2.0 * section.half_width_m
     radial = local_bending_fibre_stress(
@@ -580,6 +587,8 @@ def _bending(
         spec.E_wire_Pa,
         depth,
         spec.lay_angle_rad,
+        friction_stress_Pa=friction,
+        r_helix_m=spec.r_helix_m,
     )
     tangential = local_bending_fibre_stress(
         kx[None, :],
@@ -589,6 +598,8 @@ def _bending(
         width,
         spec.lay_angle_rad,
         math.pi / 2,
+        friction_stress_Pa=friction,
+        r_helix_m=spec.r_helix_m,
     )
     return np.asarray(radial), np.asarray(tangential)
 
@@ -646,7 +657,7 @@ def _armour_field(
         slip, slipping, share = _spring_slider_slip(spec, phi, stress, drive, sign)
         friction = stress[:, drive.kept]
     kx, ky = drive.kx[drive.kept], drive.ky[drive.kept]
-    radial, tangential = _bending(spec, section, phi, kx, ky)
+    radial, tangential = _bending(spec, section, phi, kx, ky, friction)
     transverse_slip = None
     if transverse is not None:
         transverse_slip, radial, tangential = _transverse(

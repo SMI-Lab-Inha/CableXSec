@@ -190,12 +190,18 @@ def test_strip_stress_at_faces_edges_and_corners(strip_layer):
     assert spec.section is not None and spec.section.shape == "rectangular"
     kx = np.array([0.0, 0.05, 0.1])
     ky = np.zeros(3)
-    field = wire_stress_field(strip_layer, kx, ky)
+    field = wire_stress_field(strip_layer, kx, ky, keep_friction=True)
+    assert field.friction_Pa is not None
     c = curvature_coefficients(spec.lay_angle_rad)
     phi = spec.phi_wires[:, None]
     e = spec.E_wire_Pa
+    # Loxodrome normal term plus the slip-state term of the friction stress.
+    slip = math.sin(spec.lay_angle_rad) ** 2 / spec.r_helix_m * field.friction_Pa / e
     assert np.allclose(
-        field.radial_Pa, e * c.normal * kx * np.cos(phi) * 0.0025, rtol=1e-12, atol=1e-6
+        field.radial_Pa,
+        e * (c.normal * kx * np.cos(phi) + slip) * 0.0025,
+        rtol=1e-12,
+        atol=1e-6,
     )
     assert np.allclose(
         field.tangential_Pa,
@@ -222,14 +228,27 @@ def test_transverse_model_in_the_field_reaches_the_geodesic(strip_layer):
     assert model.frictionless_fraction == pytest.approx(1.0, abs=1e-12)
     kx = np.linspace(0.0, 0.1, 21)
     field = wire_stress_field(strip_layer, kx, np.zeros_like(kx), transverse=model)
-    plain = wire_stress_field(strip_layer, kx, np.zeros_like(kx))
+    plain = wire_stress_field(strip_layer, kx, np.zeros_like(kx), keep_friction=True)
+    assert plain.friction_Pa is not None
+    # The slip-state term of the friction stress is added to both fields.
+    held = (
+        spec.E_wire_Pa
+        * math.sin(spec.lay_angle_rad) ** 2
+        / spec.r_helix_m
+        * plain.friction_Pa
+        / spec.E_wire_Pa
+        * 0.0025
+    )
     assert np.allclose(field.tangential_Pa, 0.0, atol=1e-3)
     geo = curvature_coefficients(spec.lay_angle_rad, 1.0).normal
     lox = curvature_coefficients(spec.lay_angle_rad, 0.0).normal
     # the normal curvature gains the tangent-rotation term (finite difference
     # over the 55 wire azimuths)
     assert np.allclose(
-        field.radial_Pa, plain.radial_Pa * geo / lox, rtol=3e-3, atol=1e-3
+        field.radial_Pa - held,
+        (plain.radial_Pa - held) * geo / lox,
+        rtol=3e-3,
+        atol=1e-3,
     )
     assert np.array_equal(field.mean_Pa, plain.mean_Pa)
 

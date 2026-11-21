@@ -282,6 +282,9 @@ def test_capacity_boundary_matches_public_stress_engine() -> None:
             layer.d_wire_m,
             layer.lay_angle_rad,
             stress.phi_bend_rad,
+            # The normal curvature follows each wire's slip state.
+            friction_stress_Pa=stress.sigma_f_Pa[layer.name],
+            r_helix_m=layer.r_helix_m,
         )
         usage = max(
             usage,

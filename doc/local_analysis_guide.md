@@ -552,6 +552,22 @@ rotating bending it can be constant while material points cycle. For direct
 control use `cx.compute_fatigue(cable, kx, ky, ...)` with one of `tension_N`,
 `axial_strain` or `section_states`.
 
+**Local bending follows the slip state.** The normal (radial, weak-axis)
+local bending of each wire is `E (t/2) [cos²α cos2α p_n + (sin²α / r) σ_f / E]`
+with `p_n = κx cos φ + κy sin φ` and `σ_f` the friction stress the wire carries
+at that sample (with any termination increment). The first term is the curve
+curvature of the deformed helix (Out and von Morgen 1997, Eq. 41; Leroy and
+Estrier 2001, Eq. 13); the second converts it to the rotation of the wire's
+cross-section per unit material length, which is what bends the wire. A stuck
+wire with the plane-section strain therefore takes `cos⁴α`, with the stick
+coefficient `ξ` it takes `cos²α cos2α + ξ sin²α cos²α`, and a wire without
+friction stress keeps `cos²α cos2α`. In Coulomb slip the slope stays
+`cos²α cos2α`. The lateral term `cos α (1 + sin²α) p_l` does not depend on the
+slip state. `radial_Pa` of `WireStressField` holds the sum, so every fibre
+recovery and component stress concentration factor uses it. The stick and slip
+limits were checked against an independent finite-element model of a wire on a
+bent support (not published).
+
 **Selected wire positions.** For long records at many cable locations,
 `cx.compute_fatigue(..., wire_positions=12)` evaluates 12 equally spaced wire
 positions per armour layer instead of every wire. A list of azimuths in degrees
@@ -1201,7 +1217,9 @@ tendon on the bent pipe and its transverse equilibrium:
   coefficients per unit pipe curvature for a transverse slip fraction `eta`
   of the geodesic offset `w_g = r² cos a (1 + sin² a) / sin² a` (Sævik 1992
   Eq. 2.30). `eta = 0` is the loxodrome of the fatigue path (lateral
-  `cos a (1 + sin² a)`, normal `cos² a cos 2a`), `eta = 1` the geodesic
+  `cos a (1 + sin² a)`, normal `cos² a cos 2a` for a tendon without friction
+  stress; the stress recovery adds the term of the tendon's slip state,
+  Section 5, Step 2), `eta = 1` the geodesic
   (lateral 0, normal `3 cos² a`, Sævik 1992 Eq. 2.32, Out and von Morgen
   1997 Eq. 39; checked against a numerical geodesic on the torus in
   `validation/scripts/check_out_von_morgen.py`).
@@ -2292,7 +2310,10 @@ kin = cx.core_kinematics(cable, kx, ky, state="stuck")   # axis strain, gradient
 ```
 
 A cable axial strain adds `ε cos²β` to the core axis in every state. The
-layers of a core are taken as bonded (they share `ε_c`).
+layers of a core are taken as bonded (they share `ε_c`). The normal gradient
+`g_r` follows the core slip state like the normal bending of an armour wire
+(Section 5, Step 2): `g_r = cos²β cos2β κ_r + (sin²β / r_c) ε_b`, with `ε_b` the
+bending part of `ε_c`, which is `cos⁴β κ_r` stuck and `cos²β cos2β κ_r` free.
 
 ### 13.2 Wire screens wound about each core (P1)
 

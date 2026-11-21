@@ -42,8 +42,14 @@ direction is held.
 resolved wire ring of a stranded conductor from geometry, friction and
 contact load. The stick slope is the plane-section strain ``R cos^2 alpha``;
 the slip slope is the local wire bending ``(d/2) cos^2 alpha cos 2 alpha``
-([Nasution2014b] Eq. 6); the friction amplitude integrates the available
-friction force per unit wire length over a quarter pitch
+([Nasution2014b] Eq. 6). At the outer fibre the normal curvature of the wire
+follows its slip state
+(:func:`cablexsec.mechanics.wire_stress.slip_state_normal_curvature`): the
+axial strain the wire carries is taken ``1 + (d/2) sin^2 alpha / R`` times
+(``StrandSlipParameters.slip_state_factor``), so the outer-fibre stick slope
+is ``R cos^2 alpha + (d/2) cos^4 alpha`` and the slip slope stays
+``(d/2) cos^2 alpha cos 2 alpha``. The friction amplitude integrates the
+available friction force per unit wire length over a quarter pitch
 ([Nasution2014b] Eq. 7). The interface line loads are the inward helix loads
 of all rings outside the interface (with the ring's own load on its inner
 face), the reading of [Nasution2014b] Eq. 9 adopted here, plus an optional
@@ -112,6 +118,13 @@ class StrandSlipParameters:
     eps_f_zero_tension : tuple of float
         Friction strain amplitudes at zero tension (pressure-held contact).
         Empty means zero, which is Eq. 4 exactly.
+    slip_state_factor : float
+        Factor on the wire-axis part ``eps_B - beta_n kappa`` of the bending
+        strain, the axial strain the wire carries (positive). At the outer
+        fibre of a wire it is ``1 + (d/2) sin^2 a / R``: the normal curvature
+        of the wire follows its slip state
+        (:func:`cablexsec.mechanics.wire_stress.slip_state_normal_curvature`).
+        ``1`` (default) leaves the operator of the source unchanged.
     """
 
     alpha_per_N: float
@@ -119,6 +132,7 @@ class StrandSlipParameters:
     eps_f_ref: tuple[float, ...]
     T0_N: float
     eps_f_zero_tension: tuple[float, ...] = field(default=())
+    slip_state_factor: float = 1.0
 
     def __post_init__(self) -> None:
         beta = tuple(float(x) for x in self.beta_m)
@@ -131,6 +145,10 @@ class StrandSlipParameters:
         values = (self.alpha_per_N, self.T0_N, *beta, *ref, *zero)
         if not all(math.isfinite(x) for x in values):
             raise CableInputError("strand-slip parameters must be finite")
+        factor = float(self.slip_state_factor)
+        if not (math.isfinite(factor) and factor > 0.0):
+            raise CableInputError("slip_state_factor must be finite and positive")
+        object.__setattr__(self, "slip_state_factor", factor)
         if min(ref + zero, default=0.0) < 0:
             raise CableInputError("friction strain amplitudes must be nonnegative")
         if self.T0_N < 0 or (self.T0_N == 0 and ref != zero):
@@ -346,6 +364,11 @@ def strand_slip_strain(
             np.ascontiguousarray(kappa_e), np.ascontiguousarray(eps_f), beta
         )
         bending = order_strain[-1]
+        if parameters.slip_state_factor != 1.0:
+            # The axial part the wire carries, eps_B - beta_n kappa, sets the
+            # normal curvature of its slip state at the outer fibre.
+            local = beta[-1] * kappa_e
+            bending = local + parameters.slip_state_factor * (bending - local)
     axial = np.broadcast_to(parameters.alpha_per_N * tension, kappa_e.shape).copy()
     provenance = Provenance(
         method=(
@@ -530,6 +553,13 @@ def _friction_strain(
     return math.pi * ring.r_helix_m * tau / (2.0 * s * ring.area_m2 * E_Pa)
 
 
+def _outer_fibre_slip_factor(
+    d_wire_m: float, lay_angle_rad: float, r_helix_m: float
+) -> float:
+    """``(d/2) sin^2 a / R``: outer-fibre normal curvature per wire-axis strain."""
+    return 0.5 * d_wire_m * math.sin(lay_angle_rad) ** 2 / r_helix_m
+
+
 def conductor_ring_parameters(
     rings: Sequence[ConductorRing],
     E_Pa: float,
@@ -629,6 +659,15 @@ def conductor_ring_parameters(
         face_mu = mu_out if i == last else mu_wire
         eps_ref = _friction_strain(ring, out_ref[i], in_ref[i], face_mu, mu_wire, E_Pa)
         eps_zero = _friction_strain(ring, out_0[i], in_0[i], face_mu, mu_wire, E_Pa)
+        # Outer fibre: the normal curvature follows the slip state.
+        factor = (
+            1.0
+            + _outer_fibre_slip_factor(
+                ring.d_wire_m, ring.lay_angle_rad, ring.r_helix_m
+            )
+            if fibre == "outer"
+            else 1.0
+        )
         parameters.append(
             StrandSlipParameters(
                 alpha_per_N=alpha,
@@ -636,6 +675,7 @@ def conductor_ring_parameters(
                 eps_f_ref=(eps_ref,),
                 T0_N=reference_tension_N,
                 eps_f_zero_tension=(eps_zero,),
+                slip_state_factor=factor,
             )
         )
     return tuple(parameters)

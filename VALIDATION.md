@@ -41,7 +41,7 @@ afterwards: a comparison that misses its target is reported as failed.
 | **TQ-SV** | Saint-Venant twist rigidity with free warping: rectangle; bonded annulus as a mirrored 60° sector | series solution; polar moment | 1.0e-4; −1.5e-8 | <3e-4; <1e-6 | Pass |
 | **TQ-FT** | Twist-rate wire stress of the fatigue path: stress and damage, torque and tension carried by the wires, mirror lay, zero twist | Knapp (1981), Eqs. 2, 11; `K_et`, `K_tt` | 4.5e-15; 2.2e-16; 0; 0 | <1e-12; <1e-12; <1e-12; 0 | Pass |
 | **A11** | Moment–curvature energy closure | loop area against closed form | 0.082 % | <0.1 % | Pass |
-| **σ_B** | Radial-fibre bending stress | Ménard and Cartraud (2023), Eq. 14 | 0 | <1e-6 % | Pass |
+| **σ_B** | Radial-fibre bending stress: no friction stress (μ = 0), stuck wire, slipping wire; the normal curvature follows the slip state | Ménard and Cartraud (2023), Eq. 14 (μ = 0); `cos²α cos2α + ξ sin²α cos²α` (stuck); Eq. 14 + `(sin²α / r) σ_f / E` (slipping) | 0; 0; 0 | <1e-6 % each | Pass |
 | **M-rec, M-rec-3core** | Assembled per-wire moment against the section engine | cross-engine | 0.000 % | <2 % | Pass |
 | **MK-Tcyc** | Moment–curvature law with tension cycling inside the bending cycles; work balance under the changing friction bound | fatigue-path friction stress, same kernels | 3.4e-16; 8.9e-16 | <1e-12 | Pass |
 | **MX-scale** | Exported bending law with a slip scaling variable: bound homogeneity, scaled group yield curvatures, tension cycle inside the bending cycles | `compute_mkappa` at another tension; contact-tension history | 5.5e-16; 1.2e-13; ratio 1.21 | <1e-12; <1e-9; ≤1.25 | Pass |

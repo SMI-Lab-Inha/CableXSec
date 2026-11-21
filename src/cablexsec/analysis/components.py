@@ -114,7 +114,10 @@ from cablexsec.mechanics.section_state import (
 from cablexsec.mechanics.shell_bending import shell_wall_stress
 from cablexsec.mechanics.stiffness import axial_stiffness_by_layer
 from cablexsec.mechanics.thermal import ThermalResult
-from cablexsec.mechanics.wire_stress import local_bending_amplitude
+from cablexsec.mechanics.wire_stress import (
+    local_bending_amplitude,
+    slip_state_normal_curvature,
+)
 from cablexsec.provenance import Provenance, require_finite
 
 __all__ = [
@@ -418,6 +421,22 @@ def _axial_stiffnesses(cable: CableData) -> dict[str, float]:
     return axial_stiffness_by_layer(cable)
 
 
+def _core_slip_curvature(
+    beta: float, r_c: float, axis_strain: float | np.ndarray
+) -> np.ndarray:
+    """Normal curvature of a laid core's slip state [1/m].
+
+    ``(sin^2(beta) / r_c) epsilon_b`` of the bending part ``epsilon_b`` of
+    the core-axis strain
+    (:func:`~cablexsec.mechanics.wire_stress.slip_state_normal_curvature`):
+    the core's normal curvature is ``cos^4(beta)`` per unit projected cable
+    curvature when stuck and ``cos^2(beta) cos(2 beta)`` when free.
+    """
+    if r_c <= 0.0:
+        return np.zeros_like(np.asarray(axis_strain, dtype=np.float64))
+    return slip_state_normal_curvature(axis_strain, 1.0, beta, r_c)
+
+
 @dataclass(frozen=True)
 class _CoreAxis:
     """Bending part of the core-axis strain of each core, per slip state.
@@ -582,6 +601,7 @@ def _resolved_core_states(
     """
     phi = np.linspace(0, 2 * math.pi, n_points, endpoint=False)
     beta = core_angle(section_state.cable, layer)
+    r_c = float(layer.r_offset_m or 0.0)
     e = section_state.youngs_modulus_Pa[layer.name]
     out: dict[str, list[np.ndarray]] = {}
     for state in CORE_SLIP_STATES:
@@ -600,6 +620,22 @@ def _resolved_core_states(
                 local_x, local_y = core_bending_components(
                     beta, phase, kappa_x, kappa_y
                 )
+                # The normal curvature of the core follows its slip state.
+                local_x += float(
+                    _core_slip_curvature(beta, r_c, float(axis_strain[core]))
+                )
+                ring_strain = (
+                    c2
+                    * ring.r_helix_m
+                    * (local_x * np.cos(phi) + local_y * np.sin(phi))
+                )
+                # The ring wires carry the ring strain (held to the core axis)
+                # or none (free), which sets their own normal curvature.
+                held = (
+                    e * ring_strain
+                    if state != "free" and ring.r_helix_m > 0.0
+                    else None
+                )
                 amp = local_bending_amplitude(
                     math.hypot(local_x, local_y),
                     phi,
@@ -607,11 +643,8 @@ def _resolved_core_states(
                     ring.d_wire_m,
                     ring.lay_angle_rad,
                     math.atan2(local_y, local_x),
-                )
-                ring_strain = (
-                    c2
-                    * ring.r_helix_m
-                    * (local_x * np.cos(phi) + local_y * np.sin(phi))
+                    friction_stress_Pa=held,
+                    r_helix_m=ring.r_helix_m if held is not None else None,
                 )
                 if state == "free":
                     centre = np.full(n_points, mean)
@@ -641,6 +674,7 @@ def _laid_annulus_states(
     scales the bending about the core's own axis (:func:`own_bending_ratio`).
     """
     beta = core_angle(section_state.cable, layer)
+    r_c = float(layer.r_offset_m or 0.0)
     theta = np.linspace(0, 2 * math.pi, n_points, endpoint=False)
     if radius is None:
         radius = layer.r_outer_m or 0.0
@@ -658,6 +692,7 @@ def _laid_annulus_states(
         for i in range(layer.n_cores):
             phase = 2 * math.pi * i / layer.n_cores
             bx, by = core_bending_components(beta, phase, kx, ky)
+            bx += float(_core_slip_curvature(beta, r_c, float(axis_strain[i])))
             bending = e * c2 * (bx * local_x + by * local_y)
             chunks.append(mean + bending + e * c2 * axis_strain[i])
         out[state] = chunks
@@ -1855,8 +1890,11 @@ def core_component_utilisation(
         c, s = math.cos(beta), math.sin(beta)
         radial = kx * np.cos(phi) + ky * np.sin(phi)
         tangential = -kx * np.sin(phi) + ky * np.cos(phi)
+        # The normal curvature of the core follows its slip state.
         local = np.hypot(
-            c * c * math.cos(2 * beta) * radial, c * (1 + s * s) * tangential
+            c * c * math.cos(2 * beta) * radial
+            + _core_slip_curvature(beta, float(layer.r_offset_m or 0.0), axis),
+            c * (1 + s * s) * tangential,
         )
         c2 = axial_cosine(layer) ** 2
         lever = own_bending_ratio(layer) * float(layer.r_outer_m or 0.0)

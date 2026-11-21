@@ -18,12 +18,15 @@ cross-section (``theta = 0`` points radially away from the cable axis,
 ``theta = pi/2`` along the lay circle in the direction of increasing
 ``phi``) and ``g_r``, ``g_t`` are the strain gradients of the core's own
 bending: the two Lutchansky components of the helical core axis,
-``g_r = cos^2(beta) cos(2 beta) kappa_r`` and
+``g_r = cos^2(beta) cos(2 beta) kappa_r + (sin^2(beta) / r_c) epsilon_b`` and
 ``g_t = cos(beta) (1 + sin^2 beta) kappa_t``
 (:func:`cablexsec.mechanics.core_lay.core_bending_components`, after
-[MenardCartraud2023] Eq. 14). The core curvature follows the cable curvature
-in every state; the slip state sets only the core-axis strain
-``epsilon_c``:
+[MenardCartraud2023] Eq. 14), where ``epsilon_b`` is the bending part of the
+core-axis strain (the normal curvature of a helical rod follows its axial
+slip state, :func:`cablexsec.mechanics.wire_stress.slip_state_normal_curvature`:
+``g_r = cos^4(beta) kappa_r`` stuck, ``cos^2(beta) cos(2 beta) kappa_r``
+free). The slip state sets the core-axis strain ``epsilon_c`` and, through
+it, the normal core curvature:
 
 ``"stuck"``
     Plane-section bound: the core is bonded to the cable cross-section,
@@ -84,6 +87,7 @@ from cablexsec.mechanics.core_friction import (
 from cablexsec.mechanics.core_lay import core_angle
 from cablexsec.mechanics.radial_cable import CableRadialState
 from cablexsec.mechanics.section_state import SectionState
+from cablexsec.mechanics.wire_stress import slip_state_normal_curvature
 
 __all__ = [
     "CORE_SLIP_STATES",
@@ -308,6 +312,9 @@ def core_kinematics(
         else:
             axis = np.zeros((count, kx.size))
             xi = 0.0
+    # The normal curvature of the core follows its slip state through the
+    # bending part of the core-axis strain (before the axial strain is added).
+    held = slip_state_normal_curvature(axis, 1.0, beta, r_c) if r_c > 0.0 else 0.0
     if eps_axial is not None:
         axis = axis + math.cos(beta) ** 2 * eps_axial[None, :]
     c, s = math.cos(beta), math.sin(beta)
@@ -320,7 +327,7 @@ def core_kinematics(
         lay_angle_rad=beta,
         phase_rad=phase,
         axis_strain=np.asarray(axis, dtype=np.float64),
-        gradient_radial_per_m=np.asarray(c * c * math.cos(2.0 * beta) * kr),
+        gradient_radial_per_m=np.asarray(c * c * math.cos(2.0 * beta) * kr + held),
         gradient_tangential_per_m=np.asarray(c * (1.0 + s * s) * kt),
         xi=xi,
         slipping=slipping,

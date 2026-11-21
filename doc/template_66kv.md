@@ -189,6 +189,13 @@ armour governs):
 | `direction_tied` (default) | 1.31e-9 | 7.88e-10 |
 | `distributed` | 1.30e-9 | 7.77e-10 |
 
+Since the normal local bending of the wires follows their slip state
+(CHANGELOG, Unreleased), the largest wire damage of this record (0.1 s
+sampling, noise 4e-4 1/m) is 0.23–0.27 % higher for the inner armour and
+0.05–0.06 % higher for the outer armour in all four columns, at the same
+wire and fibre; the table keeps its earlier values, like the other
+stick-dependent values above.
+
 The two friction laws agree within 1 % on this smooth history. Core
 friction (Section 4.1) does not change these damages: the fatigue path is
 curvature driven, and the armour wire stresses do not depend on the cores. At 50 kN the

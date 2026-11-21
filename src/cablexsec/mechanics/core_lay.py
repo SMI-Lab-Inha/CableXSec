@@ -41,7 +41,12 @@ def core_bending_components(
     The azimuth is measured from the positive extension side of kx, as in
     the global core-axis strain. Ménard and Cartraud (2023), Eq. (14), use
     an azimuth measured from the bending axis instead. Its second coefficient
-    is cos²(angle)*cos(2*angle), not cos⁴(angle).
+    is cos²(angle)*cos(2*angle), the curve curvature of the deformed helix:
+    the normal curvature of a core that carries no bending axial strain
+    (free). The slip state adds ``(sin²(angle) / r_c) epsilon_b`` of the
+    bending part of the core-axis strain
+    (:func:`~cablexsec.mechanics.wire_stress.slip_state_normal_curvature`),
+    which makes a stuck core ``cos⁴(angle)``; the callers add it.
     """
     c, s = math.cos(angle), math.sin(angle)
     radial = kx * math.cos(phase) + ky * math.sin(phase)

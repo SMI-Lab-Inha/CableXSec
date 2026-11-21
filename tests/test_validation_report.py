@@ -30,7 +30,9 @@ def test_changed_wire_bending_fails_reported_comparison(monkeypatch):
     monkeypatch.setattr(run_validation.cx, "compute_stress", incorrect_bending)
     row = next(r for r in run_validation._rows() if r.ident == "σ_B")
     assert row.status == "FAIL"
-    assert float(row.value.rstrip("%")) == pytest.approx(100.0)
+    # Every state (mu = 0, stuck, slipping) reports the doubled bending.
+    values = [float(part.split()[-1].rstrip("%")) for part in row.value.split(";")]
+    assert values == pytest.approx([100.0, 100.0, 100.0])
 
 
 @needs_numba
