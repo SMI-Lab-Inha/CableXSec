@@ -31,14 +31,16 @@ Each environment is a new conda environment (conda-forge Python) into which the 
 
 | Gate | Result |
 | --- | --- |
-| Test suite, Python 3.12 (`python -m pytest -n 6`) | 4932 passed, 3 skipped (kernel-replacement tests that need the kernels as Python; they run in the `NUMBA_DISABLE_JIT=1` pass of the coverage gate) |
+| Test suite, Python 3.12 (`python -m pytest -n 6`) | 4933 passed, 3 skipped (kernel-replacement tests that need the kernels as Python; they run in the `NUMBA_DISABLE_JIT=1` pass of the coverage gate) |
 | Line and branch coverage of `cablexsec`, Python 3.11 (`release/check_coverage.py`: whole suite, then the kernel tests with `NUMBA_DISABLE_JIT=1`) | 96.84 %; gate 95 % |
 | Ruff lint and format check (`src`, `tests`, `examples`, `validation`, `release`, `doc`) | clean on Python 3.11 and 3.12 |
 | mypy, strict, package `cablexsec` (the CI configuration, Python 3.11 with NumPy 2.4.6) | no issues in 121 source files |
-| Validation report (`validation/scripts/run_validation.py --check`) | the committed report is current; 66 rows: 48 pass, 7 fail (BM1-loop, BM1-ID, Z-ID, HU-3PB, WITZ-ID, SV11-PLANE, SV11-GJ; registered targets unchanged), 8 stated without a target (info), 1 partial (BM5), 1 not comparable (HU-uniform), 1 not validated (BM4); taxonomy 1264 `analytical_sanity`, 79 `independent_method`, 59 `full_scale` tests |
+| Validation report (`validation/scripts/run_validation.py --check`, Python 3.11 and 3.12) | the committed report is current in both environments; 66 rows: 48 pass, 7 fail (BM1-loop, BM1-ID, Z-ID, HU-3PB, WITZ-ID, SV11-PLANE, SV11-GJ; registered targets unchanged), 8 stated without a target (info), 1 partial (BM5), 1 not comparable (HU-uniform), 1 not validated (BM4); taxonomy 1265 `analytical_sanity`, 79 `independent_method`, 59 `full_scale` tests |
 | Sphinx documentation (`-W --keep-going`) | built with no warnings |
 | Release metadata (`release/check_release_metadata.py`) | passed |
-| Release-tree audit (`release/audit_release_tree.py --tree .`) | passed on the staged tree |
+| Release-tree audit (`release/audit_release_tree.py --tree .` and `--archive-ref HEAD`) | passed |
+| Python distributions (`python -m build`, `twine check`) | sdist and wheel pass; both carry LICENSE and NOTICE; the wheel holds only `cablexsec` and its metadata |
+| Wheel in a new conda environment (Python 3.12), sdist in another (Python 3.11), each with the `fast` extra | in both: `cablexsec` imported from the environment, not the source tree; `release/smoke_test_wheel.py`; `cablexsec-batch --help` and a batch run on the `lw128` CableDyn output of the tests; the README quick start, with output identical to the README; all twelve examples from a separate folder; the four tutorial and ten how-to scripts of the manual |
 
 Under NumPy 2.5.5 (the Python 3.12 environment), mypy reports 40 errors in 14 files, all from
 the NumPy 2.5 type stubs (argument-free `ndarray.min`/`max` and `ufunc.reduce` overloads); the
