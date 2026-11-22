@@ -65,8 +65,8 @@ afterwards: a comparison that misses its target is reported as failed.
 | **BM1** | Full-slip bending stiffness EI_min, no calibration | Ménard and Cartraud (2023), Table 3 | 0.6 % (3571 N·m²) | <15 % | Pass |
 | **BM1-loop** | ±0.10 m⁻¹ moment–curvature loop predicted with the clamping identified on the measured ±0.05 cycle work (190 kPa), four-point arrangement | Ménard and Cartraud (2023), Fig. 16 | ordered RMSE 5.45 %; cycle work 44.4 vs 62.3 J/m (−28.8 %) | RMSE <5 %; work within 10 % | Fail |
 | **BM1-ID** | Laid cores, wedged trefoil and filler profiles: initial pressure identified on range (b), five ranges predicted | Ménard and Cartraud (2023), Fig. 16 | (a) +28.5 %, (c) +26.2 %, (d)–(f) within 16 % | work ±20 %, RMSE <10 % | Fail |
-| **Z-EI** | Measured stick secant against the no-slip EI_max; slip slope against EI_min, 112 mm three-core cable, zero tension | Zeidan (2025), thesis Figs 5.5–5.6 | stick 141–240 kN·m² vs EI_max 311.1 kN·m² (plane-section 335); diagnosed on for the shear-stack rule | stick ≤ EI_max; slip ≥ EI_min | Pass |
-| **Z-ID** | Four-point loops at 30–60 mm in the test arrangement: pressure identified on 40 mm, three amplitudes predicted | Zeidan (2025), Fig. 5.6 | P0 760 kPa; work +10.4 to −9.6 %, RMSE 13.7–15.4 %, moment range −33 to −46 % | work ±20 %, RMSE <10 %, range ±10 % | **Fail** |
+| **Z-EI** | Measured stick secant against the no-slip EI_max; slip slope against EI_min, 112 mm three-core cable, zero tension | Zeidan (2025), thesis Figs 5.5–5.6 | stick 141–240 kN·m² vs EI_max 311.1 kN·m² (plane-section 335); slip 8.65–9.70 (plotted curvature) vs EI_min 10.09 kN·m² with the bonded outer face (2.72 without) | stick ≤ EI_max; slip ≥ EI_min | **Fail** |
+| **Z-ID** | Four-point loops at 30–60 mm in the test arrangement: pressure identified on 40 mm, three amplitudes predicted; outer armour face bonded (identified input, gap G8) | Zeidan (2025), Fig. 5.6 | P0 1085.9 kPa; work +9.9 / −4.7 / −9.0 %, RMSE 6.4 / 4.3 / 4.4 %, moment range −4.4 / −8.5 / −8.0 % (30 / 50 / 60 mm; 40 mm RMSE 4.5 %). Both faces sliding: P0 760 kPa, range −33 to −46 % | work ±20 %, RMSE <10 %, range ±10 % | Pass |
 | **HU-3PB** | Conductor loop, third cycle, three-point arrangement | Hu et al. (2022) | loop area +36.7 % (Papailiou), +64.4 % (KH); transition share 32.8 % / 39.4 % | area ±15 %; share 34 ± 10 points | **Fail** |
 | **HU-uniform** | Same loop at uniform curvature | Hu et al. (2022) | area +4.9 % (Papailiou) | — | Not comparable |
 | **WITZ-EI** | Full-slip EI_min of a 2.5-inch flexible pipe, 0 bar, parameter-free | Witz (1996), measured gradients 1190 / 1014 N·m² | 1007 N·m² | 913–1309 N·m² | Pass |
@@ -107,20 +107,32 @@ quantities are those of the passing rows. In particular:
   (BM1-loop); identified on it, the small cycles are up to 29 % high (BM1-ID). The source's
   0.3 MPa is a tuning parameter of its own FE model and is not used as an input of the gated
   rows. The 300-bar Witz loop is too narrow after
-  identification at 0 bar. On the Zeidan (2025) cable the measured stick slope lies below the
-  no-slip bound since the armour shear stack stops at its support (Z-EI, diagnosed on), but the
-  identified loops miss the moment range by a third or more (Z-ID); absolute dissipation
-  predictions therefore carry the uncertainty shown by WITZ-ID and Z-ID.
-- **Known limitation (gap G8, closed for 0.2.0).**
-  - On a compact, solid-filler three-core cable (Zeidan 2025), the slip-branch tangent is
-    about 3.5 times softer than measured (Z-ID: 2.5–2.6 against 8.65–9.70 kN·m²).
-  - With rope fillers (Ménard and Cartraud 2023), the full-slip stiffness is right (BM1).
-  - Eight mechanisms, each registered and tested with source inputs, were ruled out:
-    stick-support compliance, residual pressure, neighbour-wire contact, a compacted bundle,
-    end anchorage, conductor compaction, the metric, and the insulation modulus
-    (doc/benchmarks.md, "Known limitation: slip-branch stiffness of compact sections").
-  - Direction of the error: conservative for curvature-driven quantities, not conservative
-    for the section moment and the interface loads.
+  identification at 0 bar. On the Zeidan (2025) cable the identified loops now meet the
+  registered bands (Z-ID) with the outer armour face bonded; absolute dissipation predictions
+  carry the uncertainty shown by WITZ-ID and Z-ID.
+- **Gap G8 (slip-branch stiffness of compact sections): a bonded outer armour face.**
+  - With both armour faces sliding, the Zeidan (2025) slip branch is about 3.5 times softer
+    than measured (2.5–2.6 against 8.65–9.70 kN·m²) and the identified loops miss the moment
+    range by a third or more.
+  - The measured loops themselves show what is missing: their dissipation grows linearly with
+    the amplitude (a friction moment mobilised early and then constant), while their range
+    grows at 8–11 kN·m², an elastic, non-dissipative stiffness after slip.
+  - Its source is an armour face that does not slip. Zeidan's sheath sits on the outer armour
+    with no tape (thesis Table 5.2, Fig. 5.2); with `bonded_face: outer` (an identified input)
+    the full-slip stiffness is 10.09 kN·m² and Z-ID passes. The rope-filler and taped
+    constructions (Ménard and Cartraud 2023; Witz 1996) keep both faces sliding and need no
+    change (BM1, WITZ-EI). Full-scale tests of dynamic cables with bitumen-coated armour
+    report bending stiffness beyond the stick–slip law and attribute it to the bitumen and to
+    bonded layers (doc/benchmarks.md); keying by a sheath extruded onto the wires is the
+    construction identified here for Zeidan's cable.
+  - Remaining: the bond is about 4–17 % stiffer than the measured slip slope in the plotted
+    curvature, so the bound row Z-EI fails. The source's own optical deflection profiles
+    (paper Fig. 18) put the central curvature at 0.78 of the plotted one, which would place
+    the measured slope above EI_min; the registered row keeps the plotted reading.
+  - The bonded face is used by the bending law and `compute_stiffness`. The wire-stress,
+    fatigue and capacity routes refuse it until the bond's share of the wire force is in them.
+  - The eight mechanisms ruled out earlier are recorded in doc/benchmarks.md ("Known
+    limitation: slip-branch stiffness of compact sections").
 - The termination-corrected (anchored-wire) armour stress is an upper estimate that the
   published near-termination measurements do not support (SV11-PLANE, SV11-GJ); the sectional
   result is the one closest to them (median 1.19, 12 of 14 in band, against the 1.18 bound). At

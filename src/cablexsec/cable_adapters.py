@@ -582,6 +582,7 @@ def cable_to_mkappa_specs(
     section_state: SectionState | None = None,
     radial_state: CableRadialState | None = None,
     stick_support: str = "yun_stack",
+    bonded_faces: bool = False,
 ) -> list[HelicalLayerSpec]:
     r"""Build frozen M-κ specs for a cable's structural armour layers.
 
@@ -598,14 +599,61 @@ def cable_to_mkappa_specs(
     :func:`~cablexsec.mechanics.stiffness.xi_for_layer` (``"yun_stack"``,
     the default, or the opt-in ``"annulus"``).
 
+    A layer with ``bonded_face="outer"`` (gap G8) slides on its inner face
+    only: its friction-setting pressure and normal load keep the inner face's
+    share ``P_inner / (P_inner + P_outer)`` of the bounded radial chain, and
+    its stick coefficient is the slider's share ``xi_tot - xi_bond`` of
+    :func:`~cablexsec.mechanics.stiffness.bonded_face_terms`. The bond's
+    elastic share is not in these specs: the bending law adds
+    :func:`~cablexsec.mechanics.stiffness.bonded_face_ei` to its parallel
+    EI. Only callers that do so pass ``bonded_faces=True``; any other route
+    (wire stress, fatigue, capacity) would miss the bond's share of the wire
+    force and is refused for such a cable.
+
     Raises
     ------
     CableSchemaError
-        If the cable has no fully-specified structural armour layer.
+        If the cable has no fully-specified structural armour layer, or
+        declares a bonded face on a route that does not support it.
     """
-    from cablexsec.mechanics.stiffness import xi_for_layer  # noqa: PLC0415
+    from cablexsec.mechanics.stiffness import (  # noqa: PLC0415
+        bonded_face_terms,
+        xi_for_layer,
+    )
 
     require_fully_specified(cable, "cable_to_mkappa_specs")
+    bonded = [
+        lyr for lyr in structural_armour_layers(cable) if lyr.bonded_face == "outer"
+    ]
+    face_split: dict[str, tuple[float, float]] = {}
+    if bonded:
+        names = ", ".join(lyr.name for lyr in bonded)
+        if not bonded_faces:
+            raise CableSchemaError(
+                f"{names}: bonded_face='outer' is implemented for the bending law "
+                "(compute_mkappa, SectionLaw, the exported law) and "
+                "compute_stiffness; this route would miss the bond's share of the "
+                "wire force"
+            )
+        if (
+            contact_model != "bounded"
+            or section_state is not None
+            or radial_state is not None
+        ):
+            raise CableSchemaError(
+                f"{names}: bonded_face='outer' is implemented with the bounded "
+                "contact model, without a section or radial state"
+            )
+        if any(
+            lyr.winding_stress_Pa or lyr.pretension_Pa for lyr in cable.helical_layers
+        ):
+            raise CableSchemaError(
+                f"{names}: bonded_face='outer' with a declared winding stress or "
+                "pretension is not implemented (the face split of the pressure jump)"
+            )
+        p_ext = cable.initial_state.external_pressure_Pa
+        loaded = compute_contact_forces(cable, tension_N, p_ext_Pa=p_ext)
+        face_split = _bounded_face_pressures(cable, loaded.interface_pressure_Pa, p_ext)
     if contact_model == "solved" and radial_state is None:
         radial_state = solve_cable_radial_state(cable, tension_N)
     fn_map = _normal_force_map(
@@ -629,6 +677,20 @@ def cable_to_mkappa_specs(
         mu_eff = (
             mu if mu is not None else library.get_property(lyr.material, "mu_on_hdpe")
         )
+        xi = xi_for_layer(
+            cable,
+            lyr.name,
+            youngs_modulus_Pa=section_state.youngs_modulus_Pa
+            if section_state is not None
+            else None,
+            stick_support=stick_support,
+        )
+        f_n, pressure = fn_map[lyr.name], pressure_map[lyr.name]
+        if lyr.bonded_face == "outer":
+            below, above = face_split[lyr.name]
+            share = below / (below + above) if below + above > 0.0 else 0.0
+            f_n, pressure = f_n * share, pressure * share
+            xi = bonded_face_terms(cable, lyr.name, xi).xi_slider
         specs.append(
             HelicalLayerSpec(
                 n_wires=lyr.n_wires,
@@ -640,18 +702,11 @@ def cable_to_mkappa_specs(
                 A_wire_m2=math.pi * lyr.d_wire_m**2 / 4.0
                 if lyr.wire_shape == "round"
                 else lyr.wire_section.area,
-                xi=xi_for_layer(
-                    cable,
-                    lyr.name,
-                    youngs_modulus_Pa=section_state.youngs_modulus_Pa
-                    if section_state is not None
-                    else None,
-                    stick_support=stick_support,
-                ),
+                xi=xi,
                 mu=mu_eff,
-                F_n_axi_N=fn_map[lyr.name],
+                F_n_axi_N=f_n,
                 shape_g=None,
-                contact_pressure_Pa=pressure_map[lyr.name],
+                contact_pressure_Pa=pressure,
                 normal_load_is_line=True,
                 section=None if lyr.wire_shape == "round" else lyr.wire_section,
             )

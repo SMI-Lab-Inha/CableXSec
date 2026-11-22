@@ -10,6 +10,27 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Added
 
+- `bonded_face: outer` on the outermost helical layer (gap G8): the outer face
+  of the armour is bonded to the polymer outside it (a sheath extruded onto the
+  wires with no tape, or a bitumen or compound bond) and does not slip.
+  - The wires slide on their inner face only: the friction-setting pressure
+    keeps the inner face's share of the bounded radial chain.
+  - The bond is an elastic spring through the polymer outside, an inner-loaded
+    layered annulus free at the cable surface
+    (`annulus_mode1_compliance_inner`) plus the strip concentration. It keeps
+    `xi_bond = K_b / (K_b + EA_w sin^2(a) / r_h^2)` of the layer's
+    plane-section stiffness in full slip (`bonded_face_terms`,
+    `bonded_face_ei`). The stuck layer is unchanged.
+  - Used by the bending law (`compute_mkappa`, `SectionLaw`, the exported law)
+    and `compute_stiffness` (whose `ei_min_Nm2` then includes the bond). The
+    wire-stress, fatigue and capacity routes refuse such a cable, because they
+    would miss the bond's share of the wire force. Bounded contact model only,
+    without winding stress or pretension.
+  - The Zeidan (2025) input declares it. Its construction shows no tape between
+    the outer armour and the sheath, and the bonded state is the one that
+    matches the measured post-slip slope of the stabilised loops. It is an
+    identified input, not a published one.
+
 - `CoreFrictionSpec(core_core_coupling="relative")`: a coupled intralayer slip
   model of laid cores. Neighbouring cores touch at the same axial position, so
   the friction between them acts on their relative slip, while the filler and
