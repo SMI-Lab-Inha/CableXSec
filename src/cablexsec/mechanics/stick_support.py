@@ -48,6 +48,7 @@ from cablexsec.cables.schema import _radial_tol
 __all__ = [
     "SupportCondition",
     "annulus_mode1_compliance",
+    "annulus_mode1_compliance_inner",
     "strip_concentration_compliance",
 ]
 
@@ -120,6 +121,54 @@ def annulus_mode1_compliance(
         w, sigma = _propagate(w, sigma, r_in, r_out, g)
         r_prev = r_out
     return w / sigma
+
+
+def annulus_mode1_compliance_inner(
+    layers: Sequence[tuple[float, float, float]],
+) -> float:
+    """Inner-surface compliance ``w(r_i) / tau_z`` [m/Pa] with a free outer surface.
+
+    The mode-1 antiplane problem of :func:`annulus_mode1_compliance`, loaded
+    on the INNER surface of the stack and free of shear stress on its outer
+    surface: the polymer outside a helical layer whose outer face is bonded to
+    it (a sheath extruded onto the wires). For one layer it is
+    ``r_i (r_i^2 + r_o^2) / (G (r_o^2 - r_i^2))``.
+
+    Parameters
+    ----------
+    layers : sequence of (r_inner, r_outer, G)
+        Layers from the inside out: radii [m], shear modulus [Pa]. A radial
+        gap between consecutive layers is rigid (it keeps the displacement and
+        the shear flow ``sigma r``); an overlap within the cable schema's
+        radial tolerance is a touching interface, a larger one is refused.
+
+    Returns
+    -------
+    float
+        Axial surface displacement amplitude per unit axial traction
+        amplitude at the inner radius; ``0`` for an empty stack.
+    """
+    if not layers:
+        return 0.0
+    seq = list(layers)
+    for r_in, r_out, g in seq:
+        if not (math.isfinite(r_in) and math.isfinite(r_out) and math.isfinite(g)):
+            raise ValueError("layer radii and shear modulus must be finite")
+        if r_out <= r_in or r_in <= 0.0 or g <= 0.0:
+            raise ValueError("each layer needs 0 < r_inner < r_outer and G > 0")
+    for (_, r_out_a, _), (r_in_b, _, _) in zip(seq[:-1], seq[1:], strict=True):
+        if r_out_a - r_in_b > _radial_tol(r_out_a):
+            raise ValueError("layers must not overlap")
+    # Free outer surface (w = 1, zero shear stress); carry the field inward.
+    w, sigma = 1.0, 0.0
+    r_prev = seq[-1][1]
+    for r_in, r_out, g in reversed(seq):
+        r_out = min(r_out, r_prev)  # a touching interface starts at r_prev
+        if r_out < r_prev:
+            sigma *= r_prev / r_out  # rigid gap: shear flow sigma r is kept
+        w, sigma = _propagate(w, sigma, r_out, r_in, g)
+        r_prev = r_in
+    return abs(w / sigma)
 
 
 def strip_concentration_compliance(

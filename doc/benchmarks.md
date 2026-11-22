@@ -1553,10 +1553,74 @@ geodesic) and of tension-coupled re-sticking (Kim 2020).
 Interlocked carcass and Zeta layer types (G2), orthotropic tapes (G3)
 and an asymmetric, non-Masing loop law (G8) are open.
 
-### Known limitation: slip-branch stiffness of compact sections
+### Gap G8 after 0.2.0: a bonded outer armour face
 
-Gap G8 is closed for release 0.2.0 as a documented known limitation. No
-mechanism tested with source inputs closes it. Every candidate below was
+**What the measured loops say, without a model.** On the stabilised Zeidan
+(2025) loops (thesis Fig. 5.6) the cycle work grows linearly with the
+amplitude: 300, 456, 601 and 763 J/m at 30, 40, 50 and 60 mm, a constant
+5.1 / 4.7 / 5.2 kJ/m per 1/m. A friction moment that is mobilised early and
+then stays constant does this. The moment range grows at 11.2 / 8.7 /
+8.1 kN·m² between the same amplitudes: an elastic stiffness after slip that
+does not dissipate. With both faces sliding, the full-slip stiffness is
+2.72 kN·m², and a law calibrated to the loop height puts all of that height
+into friction and dissipates about twice the measured work.
+
+**Model.** `bonded_face: outer` on the outermost helical layer:
+
+- the outer face carries no slip, so the friction-setting pressure keeps only
+  the inner face's share of the bounded radial chain;
+- the bond is an elastic spring through the polymer outside the wires, an
+  inner-loaded layered annulus free at the cable surface plus the strip
+  concentration (`annulus_mode1_compliance_inner`, `bonded_face_terms`);
+- the stuck layer is unchanged;
+- in full slip the bond keeps `xi_bond` of the layer's plane-section
+  stiffness, added in parallel to the law (`bonded_face_ei`).
+
+**Zeidan.** The sheath sits on the outer armour with no tape (Table 5.2,
+Fig. 5.2). With the outer face bonded:
+
+- `xi_bond` 0.0395, and the full-slip stiffness goes from 2.72 to
+  10.09 kN·m²;
+- Z-ID passes: P0 1085.9 kPa identified on the 40 mm work; at 30 / 50 /
+  60 mm, work +9.9 / −4.7 / −9.0 %, branch RMSE 6.4 / 4.3 / 4.4 %, moment
+  range −4.4 / −8.5 / −8.0 %.
+
+The bonded state is an identified input: it is the one that matches the
+measured post-slip slope, and the source does not state the interface.
+
+**The other measured loops keep both faces sliding**, and their slip slopes
+already match:
+
+- Ménard and Cartraud (2023): range growth 3.67 kN·m² between the ±0.045 and
+  ±0.096 1/m loops, against EI_min 3.57. The paper mentions absorbent tapes.
+- Witz (1996), a flexible pipe with anti-wear and outer tapes: 1014–1190
+  against 1007 N·m².
+
+**The same mechanism in full-scale tests.** Dynamic cables with
+bitumen-coated armour show bending stiffness beyond the stick–slip law, which
+depends on temperature, frequency and cycling, and which the authors attribute
+to the bitumen and to bonded layers:
+
+- Stamelos et al. (2026), Marine Structures 109, 104062;
+- Komperød et al. (2017), OMAE2017-61103;
+- Mackay and Thies (2026), OMAE2026-175041.
+
+**Remaining.**
+
+- The bond is 4–17 % stiffer than the measured slip slope in the plotted
+  curvature, so the bound row Z-EI fails (8.65–9.70 against 10.09 kN·m²). The
+  source's optical deflection profiles (paper Fig. 18) give a central
+  curvature of 0.78 times the plotted one, which would put the measured slope
+  above EI_min; the registered row keeps the plotted reading.
+- The bond enters the bending law and `compute_stiffness` only. The
+  wire-stress, fatigue and capacity routes refuse a bonded face until they
+  carry the bond's share of the wire force.
+
+### Known limitation: slip-branch stiffness of compact sections (0.2.0)
+
+Gap G8 was closed for release 0.2.0 as a documented known limitation; the
+section above supersedes it. No mechanism tested with source inputs closed it
+then. Every candidate below was
 registered (formulation, predictions and pass rules) before it was run, with
 held-out rows chosen in advance. No band, target or source input was changed.
 

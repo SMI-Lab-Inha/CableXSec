@@ -587,6 +587,16 @@ class HelicalLayer(_LayerBase):
     # curvature of the wire's individual bending in the full-slip bending
     # stiffness (cablexsec.mechanics.tendon_bending.curvature_coefficients).
     transverse_slip_fraction: float = 0.0
+    # Interface condition of the layer's outer face (gap G8). "none" (default):
+    # both faces slide by Coulomb friction. "outer": the outer face is bonded,
+    # for example a sheath extruded directly onto the wires (no tape between)
+    # or a bitumen or compound bond; it carries no slip, only the elastic
+    # coupling of the polymer outside (cablexsec.mechanics.stiffness
+    # .bonded_face_terms). Allowed on the outermost helical layer with
+    # cylindrical polymer layers outside it. Used by the bending law
+    # (compute_mkappa, SectionLaw, the exported law) and compute_stiffness;
+    # the wire-stress routes refuse it.
+    bonded_face: Literal["none", "outer"] = "none"
     # Declared manufacturing clamping state (value, basis, source); see
     # ManufacturingClamping and cablexsec.clamping. When given it sets the
     # equivalent legacy field below, which every contact route reads.
