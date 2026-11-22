@@ -27,7 +27,9 @@ entries under Changed for the normal wire curvature and under Added for the Zeid
     (`annulus_mode1_compliance_inner`) plus the strip concentration. It keeps
     `xi_bond = K_b / (K_b + EA_w sin^2(a) / r_h^2)` of the layer's
     plane-section stiffness in full slip (`bonded_face_terms`,
-    `bonded_face_ei`). The stuck layer is unchanged.
+    `bonded_face_ei`). The stuck layer is unchanged. At a zero lay angle the bond
+    carries the whole layer: the slider has no stick stiffness and is elastic-only
+    (no stress, slip or friction work; `elastic_only_history`).
   - Used by the bending law (`compute_mkappa`, `SectionLaw`, the exported law)
     and `compute_stiffness` (whose `ei_min_Nm2` then includes the bond). The
     wire-stress, fatigue and capacity routes refuse such a cable, because they
