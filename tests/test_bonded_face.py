@@ -211,3 +211,34 @@ def test_exported_law_carries_the_bond_and_runs_outside_a_scope() -> None:
     bond = bonded_face_ei(cable)  # decorated: its own material scope
     np.testing.assert_allclose(out.ei_slip_Nm2, sliding + bond, rtol=1e-12)
     assert bond > 1e3
+
+
+def test_tension_history_keeps_the_inner_face_share() -> None:
+    """A constant tension history gives the fixed-tension law: the history's
+    P1+P2 is split into the inner face's share at every sample, as the specs
+    are at a fixed tension."""
+    cable = _zeidan()
+    kappa = np.r_[np.linspace(0.0, 0.1, 51), np.linspace(0.1, -0.1, 101)[1:]]
+    fixed = cx.compute_mkappa(cable, kappa, tension_N=50e3, mu=0.2)
+    history = cx.compute_mkappa(
+        cable,
+        kappa,
+        mu=0.2,
+        contact_tension_history_N=np.full(kappa.shape, 50e3),
+    )
+    np.testing.assert_allclose(history.moment_Nm, fixed.moment_Nm, rtol=1e-9, atol=1e-9)
+    unsplit = cx.compute_mkappa(
+        _bond(cable, face="none"),
+        kappa,
+        mu=0.2,
+        contact_tension_history_N=np.full(kappa.shape, 50e3),
+    )
+    assert np.max(np.abs(history.moment_Nm - unsplit.moment_Nm)) > 1.0
+
+
+def test_a_pressure_history_is_refused_for_a_bonded_face() -> None:
+    cable = _zeidan()
+    kappa = np.linspace(0.0, 0.1, 11)
+    pressure = {lyr.name: np.full(kappa.shape, 1e6) for lyr in cable.helical_layers}
+    with pytest.raises(CableSchemaError, match="contact_tension_history_N"):
+        cx.compute_mkappa(cable, kappa, mu=0.2, contact_pressure_Pa=pressure)

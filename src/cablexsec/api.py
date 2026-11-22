@@ -988,8 +988,21 @@ def compute_mkappa(
         raise CableSchemaError("contact_model must be 'bounded', 'qp' or 'solved'.")
     # Armour layers in the order of the law's specifications.
     names = [layer.name for layer in structural_armour_layers(cable)]
+    bonded = [
+        layer.name
+        for layer in structural_armour_layers(cable)
+        if layer.bonded_face == "outer"
+    ]
     pressure_history: dict[str, FloatArray] | None = None
     if contact_pressure_Pa is not None:
+        if bonded:
+            # A P1+P2 history cannot be split into its faces without the
+            # contact state that produced it (gap G8).
+            raise CableSchemaError(
+                f"{', '.join(bonded)}: contact_pressure_Pa gives P1+P2, which a "
+                "bonded outer face cannot split into its sliding share; give "
+                "contact_tension_history_N instead"
+            )
         pressure_history = _mkappa_pressure_history(
             contact_pressure_Pa, names, kappa.shape
         )
@@ -1011,6 +1024,37 @@ def compute_mkappa(
             cable, tension_history, contact_model, crossing_loads=False
         )
         pressure_history = {name: histories[name] for name in names}
+        if bonded:
+            # A bonded outer face slides on its inner face only (gap G8): keep
+            # that face's share at every sample, as the specs do at a fixed
+            # tension. The bounded chain is affine in tension.
+            from cablexsec.cable_adapters import (  # noqa: PLC0415
+                _bounded_face_pressures,
+            )
+            from cablexsec.mechanics.axisymmetric import (  # noqa: PLC0415
+                compute_contact_forces,
+            )
+
+            p_ext = cable.initial_state.external_pressure_Pa
+            scale = max(float(np.max(tension_history)), 1.0)
+            ends = [
+                _bounded_face_pressures(
+                    cable,
+                    compute_contact_forces(
+                        cable, t, p_ext_Pa=p_ext
+                    ).interface_pressure_Pa,
+                    p_ext,
+                )
+                for t in (0.0, scale)
+            ]
+            for name in bonded:
+                (below0, above0), (below1, above1) = ends[0][name], ends[1][name]
+                below = below0 + (below1 - below0) * tension_history / scale
+                total = below + above0 + (above1 - above0) * tension_history / scale
+                share = np.divide(
+                    below, total, out=np.zeros_like(total), where=total > 0.0
+                )
+                pressure_history[name] = pressure_history[name] * share
 
     # Soft guard: the linear-elastic wire-stress assumption holds below the
     # armour yield curvature (where the capacity envelope's wire-yield mechanism
