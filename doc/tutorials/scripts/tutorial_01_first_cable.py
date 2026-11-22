@@ -23,7 +23,9 @@ from cablexsec.mechanics.papailiou import (
     slip_onset_curvature,
 )
 from cablexsec.mechanics.radial_cable import solve_cable_radial_states
+from cablexsec.plotting.style import COLORS, LABELS, apply_style
 
+apply_style()  # the MATLAB-style figures of every CableXSec plot
 FIGURES = (
     Path(sys.argv[1])
     if len(sys.argv) > 1
@@ -97,33 +99,48 @@ bounded = [cx.cable_to_mkappa_specs(cable, t, contact_model="bounded") for t in 
 radial = solve_cable_radial_states(cable, sweep)
 fig, (ax_contact, ax_bending) = plt.subplots(1, 2, figsize=(9.0, 3.8))
 for i, (layer, colour) in enumerate(
-    zip(cable.helical_layers, ("C0", "C1"), strict=True)
+    zip(cable.helical_layers, (COLORS["BLUE"], COLORS["ORANGE"]), strict=True)
 ):
     p_bounded = [specs[i].contact_pressure_Pa / 1e6 for specs in bounded]
     p_solved = [s.armour_contact_pressure()[layer.name] / 1e6 for s in radial]
-    ax_contact.plot(sweep / 1e3, p_bounded, "-", c=colour, label=f"{layer.name}")
+    label = layer.name.replace("_", " ")
+    ax_contact.plot(sweep / 1e3, p_bounded, "-", c=colour, label=label)
     ax_contact.plot(sweep / 1e3, p_solved, "--", c=colour)
-ax_contact.set_xlabel("tension [kN]")
-ax_contact.set_ylabel("armour contact pressure P1 + P2 [MPa]")
+ax_contact.set_xlabel(LABELS["tension_kN"])
+ax_contact.set_ylabel(r"Armour contact pressure $P_\mathrm{1} + P_\mathrm{2}$ [MPa]")
 ax_contact.set_title("Solid: bounded chain; dashed: solved")
 ax_contact.legend(loc="upper left")
 kappa = np.linspace(0.0, 0.02, 401)
-for tension, colour in ((0.0, "black"), (100e3, "tab:red")):
+for tension, colour in ((0.0, COLORS["BLUE"]), (100e3, COLORS["ORANGE"])):
     loop = cx.compute_mkappa(cable, kappa, tension_N=tension)
     ax_bending.plot(
-        kappa, loop.moment_Nm, color=colour, label=f"T = {tension / 1e3:.0f} kN"
+        kappa, loop.moment_Nm, color=colour, label=rf"$T$ = {tension / 1e3:.0f} kN"
     )
     for spec in cx.cable_to_mkappa_specs(cable, tension, contact_model="bounded"):
         onset = slip_onset_curvature(spec)
         ax_bending.plot(onset, np.interp(onset, kappa, loop.moment_Nm), "o", c=colour)
-ax_bending.plot(kappa, stiffness.ei_min_Nm2 * kappa, "--", c="grey", label="full slip")
-ax_bending.plot(kappa, stiffness.ei_max_Nm2 * kappa, ":", c="grey", label="no slip")
+ax_bending.plot(
+    kappa,
+    stiffness.ei_min_Nm2 * kappa,
+    "--",
+    c=COLORS["GREY"],
+    lw=1.0,
+    label=r"full slip, $EI_\mathrm{min}$",
+)
+ax_bending.plot(
+    kappa,
+    stiffness.ei_max_Nm2 * kappa,
+    ":",
+    c=COLORS["GREY"],
+    lw=1.0,
+    label=r"no slip, $EI_\mathrm{max}$",
+)
 ax_bending.set_ylim(0.0, 700.0)
-ax_bending.set_xlabel("curvature [1/m]")
-ax_bending.set_ylabel("bending moment [N m]")
+ax_bending.set_xlabel(LABELS["curvature"])
+ax_bending.set_ylabel(LABELS["moment_Nm"])
 ax_bending.set_title("First loading; dots: slip onset")
 ax_bending.legend(loc="lower right")
 fig.tight_layout()
 FIGURES.mkdir(parents=True, exist_ok=True)
-fig.savefig(FIGURES / "tutorial_01_first_cable.png", dpi=150)
+fig.savefig(FIGURES / "tutorial_01_first_cable.png")
 print(f"wrote {(FIGURES / 'tutorial_01_first_cable.png').name}")

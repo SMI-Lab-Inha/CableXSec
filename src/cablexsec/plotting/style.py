@@ -1,11 +1,22 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 Jae Hoon Seo, SMI Lab, Inha University
-"""Publication-ready MATLAB-style plotting settings.
+"""MATLAB-style plotting settings for every CableXSec figure.
 
-All CableXSec figures share one visual style: a fixed six-colour palette,
-Times New Roman serif at 11 pt, inward ticks, light grid, and 300 DPI output.
-Apply it once at the top of a figure script with :func:`apply_style`, or scope
-it to a block with :func:`use_style`.
+The style follows MATLAB's default axes (R2014b and later):
+
+- the seven-colour ``lines`` order (blue, orange, yellow, purple, green, cyan,
+  dark red) as the line cycle;
+- a sans-serif face (Helvetica, Arial or their metric clones) at 10 pt, axis
+  labels and titles at 11 pt;
+- a closed box with inward ticks on all four sides, dark-grey axes, no grid;
+- a square-cornered, opaque legend box.
+
+Symbols are typeset with matplotlib's mathtext in the same sans-serif face, so
+labels carry Greek letters and true sub- and superscripts (``$\\kappa$``,
+``$EI_\\mathrm{min}$``, ``m$^{\\mathrm{-1}}$``). Numerals inside math are
+set upright with ``\\mathrm``, variables in italic. :data:`LABELS` holds the
+standard axis labels. Apply the style once with :func:`apply_style`, or scope it with
+:func:`use_style`.
 
 Examples
 --------
@@ -35,7 +46,9 @@ if TYPE_CHECKING:
 __all__ = [
     "COLORS",
     "FIGSIZE",
+    "LABELS",
     "MATERIAL_COLORS",
+    "MATLAB_ORDER",
     "SIGNED_CMAP",
     "STYLE",
     "annotate_provenance",
@@ -46,17 +59,35 @@ __all__ = [
     "use_style",
 ]
 
-# Standard colour palette. Use these names, never ad-hoc hex codes.
+#: MATLAB's default ``lines`` colour order (R2014b and later), in cycle order.
+MATLAB_ORDER: tuple[str, ...] = (
+    "#0072BD",  # blue
+    "#D95319",  # orange
+    "#EDB120",  # yellow
+    "#7E2F8E",  # purple
+    "#77AC30",  # green
+    "#4DBEEE",  # cyan
+    "#A2142F",  # dark red
+)
+
+# Named colours. Use these names, never ad-hoc hex codes. The hues are those of
+# MATLAB_ORDER; BLACK and GREY are for references, data markers and outlines.
 COLORS: dict[str, str] = {
-    "BLACK": "#000000",  # primary lines, critical results
-    "RED": "#CC0000",  # warning, critical, threshold, hot
-    "BLUE": "#0000CC",  # primary data, reference, cold
-    "GREEN": "#006600",  # safe, secondary data
-    "GREY": "#666666",  # reference lines, minor data
-    "ORANGE": "#CC6600",  # tertiary data
+    "BLUE": MATLAB_ORDER[0],  # primary model result
+    "ORANGE": MATLAB_ORDER[1],  # second series, measured data
+    "YELLOW": MATLAB_ORDER[2],
+    "PURPLE": MATLAB_ORDER[3],
+    "GREEN": MATLAB_ORDER[4],  # safe, secondary data
+    "CYAN": MATLAB_ORDER[5],
+    "RED": MATLAB_ORDER[6],  # warning, critical, threshold, hot
+    "BLACK": "#000000",  # measured markers, outlines
+    "GREY": "#808080",  # reference lines, minor data
 }
 
-# Canonical figure sizes [inches] — one width language across the paper.
+#: MATLAB's axes and text colour, ``[0.15 0.15 0.15]``.
+_AXES_GREY = "#262626"
+
+# Canonical figure sizes [inches].
 FIGSIZE: dict[str, tuple[float, float]] = {
     "single": (5.0, 4.2),  # one-panel figure
     "wide": (7.0, 3.6),  # time-series / wide aspect
@@ -65,8 +96,28 @@ FIGSIZE: dict[str, tuple[float, float]] = {
     "suite": (9.0, 6.5),  # validation-suite grid
 }
 
-# The ONE signed-field colormap: blue (-) -> white (0) -> red (+), built from
-# the house palette. Diverging fields use THIS, never rainbow/jet (which encodes
+#: Standard axis labels, with symbols and SI units.
+LABELS: dict[str, str] = {
+    "curvature": r"Curvature $\kappa$ [m$^{\mathrm{-1}}$]",
+    "curvature_milli": r"Curvature $\kappa$ [$10^{\mathrm{-3}}$ m$^{\mathrm{-1}}$]",
+    "moment_Nm": r"Bending moment $M$ [N$\cdot$m]",
+    "moment_kNm": r"Bending moment $M$ [kN$\cdot$m]",
+    "tension_kN": r"Tension $T$ [kN]",
+    "time": r"Time $t$ [s]",
+    "azimuth": r"Wire azimuth $\varphi$ [$^\circ$]",
+    "radius_mm": r"Radius $r$ [mm]",
+    "temperature": r"Temperature $T$ [$^\circ$C]",
+    "stress": r"Stress $\sigma$ [MPa]",
+    "x_mm": r"$x$ [mm]",
+    "y_mm": r"$y$ [mm]",
+    "x_m": r"$x$ [m]",
+    "y_m": r"$y$ [m]",
+    "damage": r"Miner damage $D$ [–]",
+    "slip_um": r"Slip amplitude $\delta$ [$\mu$m]",
+}
+
+# The ONE signed-field colormap: blue (-) -> white (0) -> dark red (+), from the
+# MATLAB hues. Diverging fields use THIS, never rainbow/jet (which encodes
 # magnitude as hue and is unreadable for sign).
 SIGNED_CMAP: Colormap = LinearSegmentedColormap.from_list(
     "cablexsec_signed", [COLORS["BLUE"], "#FFFFFF", COLORS["RED"]], N=256
@@ -74,63 +125,95 @@ SIGNED_CMAP: Colormap = LinearSegmentedColormap.from_list(
 
 # Material -> fill colour for the by-material cross-section view.
 MATERIAL_COLORS: dict[str, str] = {
-    "steel": COLORS["GREY"],
-    "copper": COLORS["ORANGE"],
-    "cu": COLORS["ORANGE"],
-    "xlpe": COLORS["BLUE"],
-    "hdpe": "#BBBBBB",
-    "pp": "#DDDDDD",
-    "lead": "#444444",
-    "aluminium": "#AAAAAA",
-    "al": "#AAAAAA",
+    "steel": "#8C8C8C",
+    "copper": "#D9874A",
+    "cu": "#D9874A",
+    "xlpe": "#9CC3E4",
+    "epr": "#9CC3E4",
+    "hdpe": "#BFBFBF",
+    "mdpe": "#CFCFCF",
+    "ldpe": "#DCDCDC",
+    "pp": "#E6E6E6",
+    "lead": "#4D4D4D",
+    "aluminium": "#A6A6A6",
+    "al": "#A6A6A6",
 }
 
 # Matplotlib rcParams for the house style.
 STYLE: dict[str, object] = {
-    "font.family": "serif",
-    "font.serif": ["Times New Roman", "DejaVu Serif"],
-    "font.size": 11,
+    # Text: MATLAB's Helvetica, with Arial and metric clones as fallbacks.
+    "font.family": "sans-serif",
+    "font.sans-serif": [
+        "Helvetica",
+        "Arial",
+        "Liberation Sans",
+        "Nimbus Sans",
+        "DejaVu Sans",
+    ],
+    "font.size": 10,
     "axes.labelsize": 11,
     "axes.titlesize": 11,
+    "axes.titleweight": "bold",
     "xtick.labelsize": 10,
     "ytick.labelsize": 10,
-    "legend.fontsize": 10,
-    "figure.dpi": 300,
+    "legend.fontsize": 9,
+    "text.color": _AXES_GREY,
+    "text.usetex": False,
+    # Symbols in the same sans-serif face as the text.
+    "mathtext.fontset": "custom",
+    "mathtext.rm": "sans",
+    "mathtext.it": "sans:italic",
+    "mathtext.bf": "sans:bold",
+    "mathtext.sf": "sans",
+    "mathtext.default": "it",
+    "axes.unicode_minus": True,
+    # Axes: closed box, inward ticks on all sides, no grid.
+    "axes.linewidth": 0.6,
+    "axes.edgecolor": _AXES_GREY,
+    "axes.labelcolor": _AXES_GREY,
+    "axes.spines.top": True,
+    "axes.spines.right": True,
+    "axes.grid": False,
+    "grid.color": _AXES_GREY,
+    "grid.alpha": 0.15,
+    "grid.linewidth": 0.5,
+    "axes.prop_cycle": cycler(color=list(MATLAB_ORDER)),
+    "axes.facecolor": "white",
+    "xtick.direction": "in",
+    "ytick.direction": "in",
+    "xtick.top": True,
+    "ytick.right": True,
+    "xtick.color": _AXES_GREY,
+    "ytick.color": _AXES_GREY,
+    "xtick.major.size": 4,
+    "ytick.major.size": 4,
+    "xtick.major.width": 0.6,
+    "ytick.major.width": 0.6,
+    "xtick.minor.visible": False,
+    "ytick.minor.visible": False,
+    # Lines and markers.
+    "lines.linewidth": 1.5,
+    "lines.markersize": 6,
+    "lines.markeredgewidth": 0.8,
+    "patch.linewidth": 0.6,
+    # Legend: square, opaque, thin dark edge.
+    "legend.frameon": True,
+    "legend.fancybox": False,
+    "legend.framealpha": 1.0,
+    "legend.edgecolor": _AXES_GREY,
+    "legend.shadow": False,
+    # Figure and output.
+    "figure.facecolor": "white",
+    "figure.dpi": 150,
     "savefig.dpi": 300,
     "savefig.bbox": "tight",
     "savefig.pad_inches": 0.05,
-    "lines.linewidth": 1.5,
-    "lines.markersize": 6,
-    "axes.linewidth": 0.8,
-    "xtick.direction": "in",
-    "ytick.direction": "in",
-    "xtick.major.size": 4,
-    "ytick.major.size": 4,
-    "axes.grid": True,
-    "grid.alpha": 0.3,
-    "grid.linewidth": 0.5,
-    "grid.color": "#999999",
-    "axes.spines.top": True,
-    "axes.spines.right": True,
-    "figure.facecolor": "white",
-    "axes.facecolor": "white",
-    "text.usetex": False,
-    # Default colour cycle follows the house palette.
-    "axes.prop_cycle": cycler(
-        color=[
-            COLORS["BLACK"],
-            COLORS["RED"],
-            COLORS["BLUE"],
-            COLORS["GREEN"],
-            COLORS["GREY"],
-            COLORS["ORANGE"],
-        ]
-    ),
+    "savefig.facecolor": "white",
 }
 
 
 def apply_style() -> None:
-    """Apply the CableXSec house style to the global matplotlib rcParams."""
+    """Apply the CableXSec MATLAB-style settings to the global rcParams."""
     cast(Any, mpl.rcParams).update(STYLE)
 
 
@@ -219,7 +302,7 @@ def annotate_provenance(
         bbox={
             "facecolor": "white",
             "edgecolor": COLORS["GREY"],
-            "boxstyle": "round,pad=0.25",
+            "boxstyle": "square,pad=0.25",
             "alpha": 0.92,
             "linewidth": 0.5,
         },

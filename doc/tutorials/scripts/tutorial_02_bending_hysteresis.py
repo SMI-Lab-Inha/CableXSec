@@ -22,7 +22,9 @@ import numpy as np
 import cablexsec as cx
 from cablexsec.analysis.curve_comparison import cycle_work, insert_cycle_crossings
 from cablexsec.mechanics.papailiou import slip_onset_curvature
+from cablexsec.plotting.style import COLORS, LABELS, apply_style
 
+apply_style()  # the MATLAB-style figures of every CableXSec plot
 REPOSITORY = Path(__file__).resolve().parents[3]
 MEASURED = REPOSITORY / "validation" / "paper_data" / "menard_fig16b_ordered.csv"
 FIGURES = (
@@ -97,30 +99,39 @@ for pressure in (0.15e6, 0.3e6, 0.6e6):
 # [step-figures]
 FIGURES.mkdir(parents=True, exist_ok=True)
 fig, ax = plt.subplots(figsize=(5.0, 4.0))
-ax.plot(kappa_test, moment_test, "o", ms=3, mfc="none", c="grey", label="measured")
-ax.plot(path, loop.moment_Nm[second], c="black", label="CableXSec")
-ax.set_xlabel("curvature [1/m]")
+ax.plot(
+    kappa_test,
+    moment_test,
+    "o",
+    ms=3,
+    mfc="none",
+    c=COLORS["BLACK"],
+    mew=0.6,
+    label="measured",
+)
+ax.plot(path, loop.moment_Nm[second], c=COLORS["BLUE"], label="CableXSec")
+ax.set_xlabel(LABELS["curvature"])
 ax.set_xticks([-0.1, -0.05, 0.0, 0.05, 0.1])
-ax.set_ylabel("bending moment [N m]")
+ax.set_ylabel(LABELS["moment_Nm"])
 ax.set_title("Ménard and Cartraud (2023), range (b)")
 ax.legend(loc="upper left")
 fig.tight_layout()
-fig.savefig(FIGURES / "tutorial_02_measured_loop.png", dpi=150)
+fig.savefig(FIGURES / "tutorial_02_measured_loop.png")
 print(f"wrote {(FIGURES / 'tutorial_02_measured_loop.png').name}")
 
 fig, (ax_mu, ax_p) = plt.subplots(1, 2, figsize=(9.0, 3.8), sharey=True)
 for mu, result in friction_loops.items():
-    ax_mu.plot(kappa[cycle], result.moment_Nm[cycle], label=f"mu = {mu}")
+    ax_mu.plot(kappa[cycle], result.moment_Nm[cycle], label=rf"$\mu$ = {mu}")
 for pressure, result in clamping_loops.items():
-    label = f"p0 = {pressure / 1e6:.2f} MPa"
+    label = rf"$p_\mathrm{{0}}$ = {pressure / 1e6:.2f} MPa"
     ax_p.plot(kappa[cycle], result.moment_Nm[cycle], label=label)
-ax_mu.set_title("Friction coefficient (p0 = 0.30 MPa)")
-ax_p.set_title("Initial pressure p0 (mu = 0.2)")
-ax_mu.set_ylabel("bending moment [N m]")
+ax_mu.set_title(r"Friction coefficient ($p_\mathrm{0}$ = 0.30 MPa)")
+ax_p.set_title(r"Initial pressure $p_\mathrm{0}$ ($\mu$ = 0.2)")
+ax_mu.set_ylabel(LABELS["moment_Nm"])
 for axis in (ax_mu, ax_p):
-    axis.set_xlabel("curvature [1/m]")
+    axis.set_xlabel(LABELS["curvature"])
     axis.set_xticks([-0.1, -0.05, 0.0, 0.05, 0.1])
     axis.legend(loc="upper left")
 fig.tight_layout()
-fig.savefig(FIGURES / "tutorial_02_sensitivity.png", dpi=150)
+fig.savefig(FIGURES / "tutorial_02_sensitivity.png")
 print(f"wrote {(FIGURES / 'tutorial_02_sensitivity.png').name}")

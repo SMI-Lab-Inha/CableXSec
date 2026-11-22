@@ -14,6 +14,7 @@ from numpy.typing import NDArray
 from cablexsec.plotting.style import (
     COLORS,
     FIGSIZE,
+    LABELS,
     SIGNED_CMAP,
     annotate_provenance,
     signed_norm,
@@ -33,11 +34,11 @@ FloatArray = NDArray[np.float64]
 
 # (field, label, signed?) for the six panels, in reading order.
 _PANELS = [
-    ("sigma_A_Pa", r"$\sigma_A$ (tension)", True),
-    ("sigma_B_Pa", r"$\sigma_B$ (bending)", True),
-    ("sigma_f_Pa", r"$\sigma_f$ (friction)", True),
-    ("sigma_T_Pa", r"$\sigma_T$ (thermal)", True),
-    ("sigma_total_Pa", r"$\sigma_{total}$", True),
+    ("sigma_A_Pa", r"$\sigma_\mathrm{A}$ (tension)", True),
+    ("sigma_B_Pa", r"$\sigma_\mathrm{B}$ (bending)", True),
+    ("sigma_f_Pa", r"$\sigma_\mathrm{f}$ (friction)", True),
+    ("sigma_T_Pa", r"$\sigma_\mathrm{T}$ (thermal)", True),
+    ("sigma_total_Pa", r"$\sigma_\mathrm{total}$", True),
     ("sigma_vm_Pa", "Axial/contact indicator", False),
 ]
 
@@ -160,7 +161,7 @@ def _panel(
         ax.axhline(0.0, color=COLORS["GREY"], lw=0.5)
     ax.set_xlim(0, 360)
     ax.set_xticks([0, 90, 180, 270, 360])
-    ax.set_xlabel(r"azimuth $\varphi$ [deg]", fontsize=9)
+    ax.set_xlabel(LABELS["azimuth"], fontsize=9)
     ax.set_ylabel(f"{label} [MPa]", fontsize=9)
 
 
@@ -199,7 +200,7 @@ def plot_stress_timeseries(
         col[i].plot(
             t,
             series.curvature_x_1_m,
-            color=COLORS["BLACK"],
+            color=COLORS["BLUE"],
             lw=1.0,
             label=r"$\kappa_x$",
         )
@@ -207,37 +208,39 @@ def plot_stress_timeseries(
             col[i].plot(
                 t,
                 series.curvature_y_1_m,
-                color=COLORS["RED"],
+                color=COLORS["ORANGE"],
                 lw=1.0,
                 label=r"$\kappa_y$",
             )
-        col[i].set_ylabel(r"$\kappa$ [1/m]", fontsize=9)
+        col[i].set_ylabel(r"$\kappa$ [m$^{\mathrm{-1}}$]", fontsize=9)
         col[i].legend(loc="upper right", fontsize=8)
         i += 1
 
         if have_sig:
             assert sigma_crit_Pa is not None
-            col[i].plot(t, sigma_crit_Pa / 1e6, color=COLORS["BLACK"], lw=1.0)
+            col[i].plot(t, sigma_crit_Pa / 1e6, color=COLORS["BLUE"], lw=1.0)
             if sigma_y_Pa is not None:
                 for s in (sigma_y_Pa, -sigma_y_Pa):
                     col[i].axhline(s / 1e6, color=COLORS["RED"], ls="--", lw=0.8)
-            col[i].set_ylabel(r"$\sigma_{total}$ [MPa]", fontsize=9)
+            col[i].set_ylabel(r"$\sigma_\mathrm{total}$ [MPa]", fontsize=9)
             i += 1
 
         if have_del:
             assert delta_star_um is not None
             col[i].plot(t, delta_star_um, color=COLORS["BLUE"], lw=1.0)
-            col[i].axhline(3.0, color=COLORS["GREEN"], ls="--", lw=0.8, label="3 µm Cu")
             col[i].axhline(
-                5.0, color=COLORS["RED"], ls="--", lw=0.8, label="5 µm steel"
+                3.0, color=COLORS["GREEN"], ls="--", lw=0.8, label=r"3 $\mu$m (Cu)"
             )
-            col[i].set_ylabel(r"$\delta^*$ [µm]", fontsize=9)
+            col[i].axhline(
+                5.0, color=COLORS["RED"], ls="--", lw=0.8, label=r"5 $\mu$m (steel)"
+            )
+            col[i].set_ylabel(r"$\delta^*$ [$\mu$m]", fontsize=9)
             col[i].legend(loc="upper right", fontsize=8)
             i += 1
 
-        col[i].plot(t, series.tension_N / 1e3, color=COLORS["GREEN"], lw=1.0)
-        col[i].set_ylabel("tension [kN]", fontsize=9)
-        col[-1].set_xlabel("time [s]")
+        col[i].plot(t, series.tension_N / 1e3, color=COLORS["PURPLE"], lw=1.0)
+        col[i].set_ylabel(r"$T$ [kN]", fontsize=9)
+        col[-1].set_xlabel(LABELS["time"])
         annotate_provenance(col[0], series.provenance, loc="upper left", max_items=2)
         fig.tight_layout()
     return fig

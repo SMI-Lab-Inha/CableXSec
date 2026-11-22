@@ -146,6 +146,29 @@ for screening.
 `cablexsec.plotting.build_dashboard` writes a standalone HTML viewer of
 stress, moment–curvature, capacity and fatigue results.
 
+### 2.8 Figures
+
+`cablexsec.plotting` draws the standard figures from result objects:
+
+- `plot_mkappa` and `plot_mkappa_validation_suite`: moment–curvature loops;
+- `plot_cross_section`: the section, by material or coloured by a stress component;
+- `plot_stress_distribution` and `plot_stress_timeseries`: per-wire stress;
+- `plot_damage_split` and `plot_fretting_polar`: fatigue;
+- `plot_capacity_envelope` and `plot_temperature_gradient`: capacity and temperature.
+
+Every figure uses one MATLAB-style look (`cablexsec.plotting.style`):
+
+- MATLAB's default line colours, in MATLAB's order (`MATLAB_ORDER`; named in `COLORS`);
+- a Helvetica or Arial face;
+- a closed box with inward ticks and no grid;
+- symbols with true Greek letters and sub- and superscripts, such as κ, EI_min and m⁻¹.
+
+`style.LABELS` holds the standard axis labels, for example
+`LABELS["curvature"]` and `LABELS["moment_kNm"]`. Use them in your own scripts
+too. Apply the look to your own figures with `style.apply_style()`, or for
+one block with `with style.use_style():`. The limitations of a result are
+printed on its figure verbatim.
+
 ## 3. Reading results
 
 - **{term}`Provenance <provenance>`.** Every result keeps its `provenance`: method, citations,

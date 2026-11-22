@@ -10,6 +10,7 @@ import numpy as np
 
 from cablexsec.plotting.style import (
     COLORS,
+    LABELS,
     annotate_provenance,
     use_style,
 )
@@ -23,9 +24,9 @@ __all__ = ["plot_capacity_envelope"]
 
 # Mechanism -> house colour (the shared plotting convention).
 _MECH_COLOR = {
-    "wire_yield": COLORS["BLACK"],
-    "bird_caging": COLORS["RED"],
-    "polymer_crush": COLORS["BLUE"],
+    "wire_yield": COLORS["BLUE"],
+    "bird_caging": COLORS["ORANGE"],
+    "polymer_crush": COLORS["PURPLE"],
     "conductor": COLORS["GREEN"],
 }
 
@@ -36,8 +37,8 @@ def plot_capacity_envelope(result: CapacityResult) -> Figure:
     Panel (a): the curvature capacity ``κ_max`` vs tension — the operating
     envelope — with each segment coloured by its governing mechanism. Panel (b):
     the tension-driven usage factors (bird-caging, polymer crush, conductor) vs
-    tension, with the UF = 1.0 (thick black) and UF = 0.8 (green dashed)
-    reference lines. The result's limitations are annotated verbatim.
+    tension, with the U = 1.0 (black) and U = 0.8 (grey dashed) reference
+    lines. The result's limitations are annotated verbatim.
 
     Returns
     -------
@@ -54,7 +55,6 @@ def plot_capacity_envelope(result: CapacityResult) -> Figure:
             t_kN,
             result.kappa_max_1_m,
             color=COLORS["BLACK"],
-            lw=1.6,
             zorder=2,
             label="capacity boundary",
         )
@@ -70,25 +70,23 @@ def plot_capacity_envelope(result: CapacityResult) -> Figure:
                     label=mech.replace("_", " "),
                     zorder=3,
                 )
-        axa.set_xlabel("tension [kN]")
-        axa.set_ylabel(r"curvature capacity $\kappa_{max}$ [1/m]")
-        axa.set_title("(a) capacity envelope")
+        axa.set_xlabel(LABELS["tension_kN"])
+        axa.set_ylabel(r"Curvature capacity $\kappa_\mathrm{max}$ [m$^{\mathrm{-1}}$]")
+        axa.set_title("(a) Capacity envelope")
         axa.legend(loc="best", fontsize=8)
 
         # (b) tension-driven usage factors.
         axb.plot(
             t_kN,
             result.uf_bird_caging,
-            color=COLORS["RED"],
-            lw=1.3,
+            color=COLORS["ORANGE"],
             label="bird-caging",
         )
         if np.any(np.isfinite(result.uf_polymer_crush)):
             axb.plot(
                 t_kN,
                 result.uf_polymer_crush,
-                color=COLORS["BLUE"],
-                lw=1.3,
+                color=COLORS["PURPLE"],
                 label="polymer crush",
             )
         else:
@@ -100,16 +98,14 @@ def plot_capacity_envelope(result: CapacityResult) -> Figure:
                 ha="right",
                 va="bottom",
                 fontsize=7,
-                color=COLORS["BLUE"],
+                color=COLORS["PURPLE"],
             )
-        axb.plot(
-            t_kN, result.uf_conductor, color=COLORS["GREEN"], lw=1.3, label="conductor"
-        )
-        axb.axhline(1.0, color=COLORS["BLACK"], lw=1.6, label="UF = 1.0")
-        axb.axhline(0.8, color=COLORS["GREEN"], ls="--", lw=0.9, label="UF = 0.8")
-        axb.set_xlabel("tension [kN]")
-        axb.set_ylabel("usage factor [-]")
-        axb.set_title("(b) tension-driven usage factors")
+        axb.plot(t_kN, result.uf_conductor, color=COLORS["GREEN"], label="conductor")
+        axb.axhline(1.0, color=COLORS["BLACK"], lw=1.0, label=r"$U$ = 1.0")
+        axb.axhline(0.8, color=COLORS["GREY"], ls="--", lw=1.0, label=r"$U$ = 0.8")
+        axb.set_xlabel(LABELS["tension_kN"])
+        axb.set_ylabel(r"Usage factor $U$ [–]")
+        axb.set_title("(b) Tension-driven usage factors")
         axb.legend(loc="best", fontsize=8)
 
         annotate_provenance(axb, result.provenance, loc="lower right", max_items=2)

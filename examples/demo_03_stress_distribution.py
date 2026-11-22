@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 from _console import configure_console
 
 import cablexsec as cx
-from cablexsec.plotting.style import COLORS, apply_style
+from cablexsec.plotting.style import COLORS, LABELS, apply_style
 
 configure_console()
 
@@ -51,14 +51,14 @@ def main() -> None:
     phi = sr.phi_deg[name]
     fig, ax = plt.subplots(figsize=(6, 4))
     for comp, col, lab in [
-        (sr.sigma_A_Pa, COLORS["GREEN"], r"$\sigma_A$"),
-        (sr.sigma_B_Pa, COLORS["BLUE"], r"$\sigma_B$"),
-        (sr.sigma_f_Pa, COLORS["ORANGE"], r"$\sigma_f$"),
-        (sr.sigma_total_Pa, COLORS["BLACK"], r"$\sigma_{total}$"),
+        (sr.sigma_A_Pa, COLORS["BLUE"], r"$\sigma_\mathrm{A}$"),
+        (sr.sigma_B_Pa, COLORS["ORANGE"], r"$\sigma_\mathrm{B}$"),
+        (sr.sigma_f_Pa, COLORS["YELLOW"], r"$\sigma_\mathrm{f}$"),
+        (sr.sigma_total_Pa, COLORS["PURPLE"], r"$\sigma_\mathrm{total}$"),
     ]:
         ax.plot(phi, comp[name] / mpa, color=col, label=lab)
-    ax.set_xlabel(r"wire azimuth $\varphi$ [deg]")
-    ax.set_ylabel("stress [MPa]")
+    ax.set_xlabel(LABELS["azimuth"])
+    ax.set_ylabel(LABELS["stress"])
     ax.set_title(f"Per-wire stress — {name} (analytically verified)")
     ax.legend(ncol=2)
     fig.savefig(OUT / "demo_03_stress_distribution.png")
