@@ -12,6 +12,7 @@ from numpy.typing import NDArray
 from cablexsec.plotting.style import (
     COLORS,
     FIGSIZE,
+    LABELS,
     annotate_provenance,
     use_style,
 )
@@ -38,9 +39,10 @@ def plot_mkappa(
 ) -> Axes:
     """Plot a model M-κ loop (public ``MkappaResult``), optionally vs experiment.
 
-    Solid black model loop; grey EI_max (dotted) / EI_min (dashed) reference
-    slopes; red open circles for experiment. The result's limitations are
-    annotated verbatim (e.g. the Papailiou-vs-Coulomb engine caveat).
+    Model loop in the first MATLAB colour; grey EI_max (dotted) / EI_min
+    (dashed) reference slopes; black open circles for experiment. The
+    result's limitations are annotated verbatim (e.g. the Papailiou-vs-Coulomb
+    engine caveat).
 
     Parameters
     ----------
@@ -69,8 +71,7 @@ def plot_mkappa(
         ax.plot(
             kappa,
             moment_kNm,
-            color=COLORS["BLACK"],
-            lw=1.6,
+            color=COLORS["BLUE"],
             label="CableXSec model",
             zorder=3,
         )
@@ -82,7 +83,7 @@ def plot_mkappa(
             color=COLORS["GREY"],
             ls=":",
             lw=1.0,
-            label=r"EI$_{max}$ (stuck)",
+            label=r"$EI_\mathrm{max}$ (stuck)",
         )
         ax.plot(
             k_line,
@@ -90,7 +91,7 @@ def plot_mkappa(
             color=COLORS["GREY"],
             ls="--",
             lw=1.0,
-            label=r"EI$_{min}$ (slip)",
+            label=r"$EI_\mathrm{min}$ (full slip)",
         )
 
         if exp_kappa is not None and exp_moment_kNm is not None:
@@ -101,7 +102,7 @@ def plot_mkappa(
                 marker="o",
                 ms=3.0,
                 mfc="none",
-                mec=COLORS["RED"],
+                mec=COLORS["BLACK"],
                 mew=0.7,
                 label="Experiment",
                 zorder=2,
@@ -114,15 +115,16 @@ def plot_mkappa(
 
         ax.axhline(0.0, color=COLORS["GREY"], lw=0.5)
         ax.axvline(0.0, color=COLORS["GREY"], lw=0.5)
-        ax.set_xlabel(r"Curvature $\kappa$ [1/m]")
-        ax.set_ylabel(r"Bending moment $M$ [kN$\cdot$m]")
+        ax.set_xlabel(LABELS["curvature"])
+        ax.set_ylabel(LABELS["moment_kNm"])
         if title:
             ax.set_title(title)
-        ax.legend(loc="upper left", frameon=True, framealpha=0.9, fontsize=8)
+        ax.legend(loc="upper left", fontsize=8)
 
         txt = (
-            f"$W_{{diss}}$ = {result.W_diss_J_per_m:.0f} J/m\n"
-            f"EI$_{{app}}$ = {result.EI_apparent_Nm2 / 1e3:.0f} kN$\\cdot$m$^2$"
+            rf"$W_\mathrm{{diss}}$ = {result.W_diss_J_per_m:.0f} J/m" + "\n"
+            rf"$EI_\mathrm{{app}}$ = {result.EI_apparent_Nm2 / 1e3:.0f} "
+            r"kN$\cdot$m$^\mathrm{2}$"
         )
         ax.text(
             0.97,
@@ -135,7 +137,7 @@ def plot_mkappa(
             bbox={
                 "facecolor": "white",
                 "edgecolor": COLORS["GREY"],
-                "boxstyle": "round,pad=0.3",
+                "boxstyle": "square,pad=0.3",
             },
         )
         if annotate:
@@ -147,7 +149,7 @@ def plot_mkappa_validation_suite(
     results: dict[str, MkappaResult],
     *,
     experiments: dict[str, tuple[FloatArray, FloatArray]] | None = None,
-    suptitle: str = "M-κ validation suite",
+    suptitle: str = r"$M$–$\kappa$ validation suite",
 ) -> Figure:
     """Grid of M-κ loops (one per benchmark) with an error/summary table.
 

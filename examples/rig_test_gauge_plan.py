@@ -21,7 +21,7 @@ import matplotlib.pyplot as plt
 from _console import configure_console
 
 import cablexsec as cx
-from cablexsec.plotting.style import apply_style
+from cablexsec.plotting.style import LABELS, apply_style
 
 configure_console()
 
@@ -69,20 +69,23 @@ def main() -> None:
         axes[0].plot(
             res.time_s,
             g.total,
-            label=f"{g.location.layer} {g.angle_deg:.0f} deg, x={g.location.x_m:.2f} m",
+            label=(
+                f"{g.location.layer.replace('_', ' ')} {g.angle_deg:.0f}$^\\circ$, "
+                f"$x$ = {g.location.x_m:.2f} m"
+            ),
         )
-    axes[0].set_xlabel("time [s]")
-    axes[0].set_ylabel("wire strain [microstrain]")
+    axes[0].set_xlabel(LABELS["time"])
+    axes[0].set_ylabel(r"Wire strain $\varepsilon$ [$\mu\varepsilon$]")
     axes[0].legend(fontsize=7)
     for station in res.stations:
         r = res.retained
         axes[1].plot(
             station.kappa_1_m[r],
             station.moment_Nm[r] / 1e3,
-            label=f"x = {station.x_m:.1f} m",
+            label=f"$x$ = {station.x_m:.1f} m",
         )
-    axes[1].set_xlabel("curvature [1/m]")
-    axes[1].set_ylabel("moment [kN m]")
+    axes[1].set_xlabel(LABELS["curvature"])
+    axes[1].set_ylabel(LABELS["moment_kNm"])
     axes[1].legend()
     fig.tight_layout()
     path = OUT / "rig_test_gauge_plan.png"

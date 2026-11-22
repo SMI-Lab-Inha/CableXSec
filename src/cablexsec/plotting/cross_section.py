@@ -18,6 +18,7 @@ from cablexsec.cables.schema import (
 from cablexsec.plotting.style import (
     COLORS,
     FIGSIZE,
+    LABELS,
     SIGNED_CMAP,
     annotate_provenance,
     material_color,
@@ -97,8 +98,8 @@ def plot_cross_section(
         ax.set_xlim(-lim, lim)
         ax.set_ylim(-lim, lim)
         ax.set_aspect("equal")
-        ax.set_xlabel("x [m]")
-        ax.set_ylabel("y [m]")
+        ax.set_xlabel(LABELS["x_m"])
+        ax.set_ylabel(LABELS["y_m"])
         ax.set_title(title or f"{cable.cable.name} — cross-section")
         # Legend for the marker convention only when stress-coloured.
         if stress_result is not None:
@@ -106,7 +107,7 @@ def plot_cross_section(
                 [], [], facecolors=COLORS["GREY"], edgecolors="k", label="stuck wire"
             )
             ax.scatter([], [], facecolors="none", edgecolors="k", label="slipping wire")
-            ax.legend(loc="upper right", fontsize=8, frameon=True, framealpha=0.9)
+            ax.legend(loc="upper right", fontsize=8)
             annotate_provenance(ax, stress_result.provenance, loc="lower left")
         # keep the unused import referenced for static checkers
         _ = (Circle, Annulus)
@@ -223,10 +224,10 @@ def _draw_layer(
 def _component_label(component: str) -> str:
     """Pretty label for a stress component field name."""
     names = {
-        "sigma_total_Pa": r"$\sigma_{total}$ [MPa]",
-        "sigma_A_Pa": r"$\sigma_A$ [MPa]",
-        "sigma_B_Pa": r"$\sigma_B$ [MPa]",
-        "sigma_f_Pa": r"$\sigma_f$ [MPa]",
+        "sigma_total_Pa": r"$\sigma_\mathrm{total}$ [MPa]",
+        "sigma_A_Pa": r"$\sigma_\mathrm{A}$ [MPa]",
+        "sigma_B_Pa": r"$\sigma_\mathrm{B}$ [MPa]",
+        "sigma_f_Pa": r"$\sigma_\mathrm{f}$ [MPa]",
         "sigma_vm_Pa": "Axial/contact indicator [MPa]",
     }
     return names.get(component, component)

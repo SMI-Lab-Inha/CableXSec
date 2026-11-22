@@ -27,7 +27,9 @@ import cablexsec as cx
 from cablexsec.analysis.fast_rainflow import fibre_fatigue
 from cablexsec.analysis.fatigue import rainflow_cycles, wire_stress_field
 from cablexsec.cable_adapters import cable_to_fatigue_layers
+from cablexsec.plotting.style import COLORS, LABELS, apply_style
 
+apply_style()  # the MATLAB-style figures of every CableXSec plot
 REPOSITORY = Path(__file__).resolve().parents[3]
 FIGURES = (
     Path(sys.argv[1])
@@ -208,29 +210,34 @@ fig, ax = plt.subplots(figsize=(6.4, 3.4), layout="constrained")
 for name, damage in fatigue.D_total_per_wire.items():
     count = damage.size
     ax.plot(360.0 * np.arange(count) / count, damage, label=name.replace("_", " "))
-ax.axvline(fatigue.phi_critical_deg, color="0.5", linewidth=0.8, linestyle="--")
-ax.set_xlabel("wire azimuth from e1 [deg]")
-ax.set_ylabel("Miner damage over the record")
+ax.axvline(
+    fatigue.phi_critical_deg, color=COLORS["GREY"], linewidth=1.0, linestyle="--"
+)
+ax.set_xlabel(r"Wire azimuth from $\mathbf{e}_\mathrm{1}$, $\varphi$ [$^\circ$]")
+ax.set_ylabel(r"Miner damage over the record, $D$ [–]")
 ax.set_xlim(0.0, 360.0)
 ax.set_xticks(np.arange(0, 361, 45))
 ax.set_ylim(bottom=0.0)
 ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
-ax.legend(frameon=False, loc="lower center")
-fig.savefig(FIGURES / "tutorial_03_damage_circumference.png", dpi=150)
+ax.legend(loc="lower center")
+fig.savefig(FIGURES / "tutorial_03_damage_circumference.png", dpi=200)
 plt.close(fig)
 print("wrote tutorial_03_damage_circumference.png")
 
 fig, ax = plt.subplots(figsize=(6.4, 3.0), layout="constrained")
 window = series.time_s <= 120.0
-ax.plot(series.time_s[window], stress[window] / 1e6, linewidth=0.9)
-ax.set_xlabel("time [s]")
-ax.set_ylabel("fibre stress [MPa]")
+ax.plot(
+    series.time_s[window], stress[window] / 1e6, color=COLORS["BLUE"], linewidth=1.0
+)
+ax.set_xlabel(LABELS["time"])
+ax.set_ylabel(r"Fibre stress $\sigma$ [MPa]")
 ax.set_xlim(0.0, 120.0)
 ax.set_title(
-    f"{fatigue.critical_layer.replace('_', ' ')}, wire at "
-    f"{fatigue.phi_critical_deg:.0f} deg, fibre {fatigue.fibre_critical_deg:.0f} deg",
+    rf"{fatigue.critical_layer.replace('_', ' ')}, wire at "
+    rf"{fatigue.phi_critical_deg:.0f}$^\circ$, "
+    rf"fibre {fatigue.fibre_critical_deg:.0f}$^\circ$",
     fontsize=10,
 )
-fig.savefig(FIGURES / "tutorial_03_governing_fibre_stress.png", dpi=150)
+fig.savefig(FIGURES / "tutorial_03_governing_fibre_stress.png", dpi=200)
 plt.close(fig)
 print("wrote tutorial_03_governing_fibre_stress.png")

@@ -16,7 +16,7 @@ import numpy as np
 from _console import configure_console
 
 import cablexsec as cx
-from cablexsec.plotting.style import COLORS, apply_style
+from cablexsec.plotting.style import COLORS, LABELS, apply_style
 
 configure_console()
 
@@ -48,10 +48,10 @@ def main() -> None:
 
     apply_style()
     fig, ax = plt.subplots(figsize=(5, 4))
-    ax.plot(mk.kappa_1_m * 1e3, mk.moment_Nm, color=COLORS["BLACK"], label="CableXSec")
-    ax.set_xlabel(r"curvature $\kappa$ [$10^{-3}$ m$^{-1}$]")
-    ax.set_ylabel("moment [N·m]")
-    ax.set_title("Ménard cable — M–κ loop (EI_min comparison, A11)")
+    ax.plot(mk.kappa_1_m * 1e3, mk.moment_Nm, color=COLORS["BLUE"], label="CableXSec")
+    ax.set_xlabel(LABELS["curvature_milli"])
+    ax.set_ylabel(LABELS["moment_Nm"])
+    ax.set_title(r"Ménard cable — $M$–$\kappa$ loop ($EI_\mathrm{min}$ check, A11)")
     ax.legend()
     fig.savefig(OUT / "demo_02_mkappa.png")
     print(f"saved {OUT / 'demo_02_mkappa.png'}")
