@@ -12,7 +12,7 @@ Software release
 ----------------
 
 Seo, J. H. (2026). *CableXSec: Component-resolved local cross-section mechanics of dynamic
-power cables* (version 0.2.0) [Computer software]. https://github.com/SMI-Lab-Inha/CableXSec
+power cables* (version 0.2.1) [Computer software]. https://github.com/SMI-Lab-Inha/CableXSec
 
 .. code-block:: bibtex
 
@@ -20,7 +20,7 @@ power cables* (version 0.2.0) [Computer software]. https://github.com/SMI-Lab-In
      author  = {Seo, Jae Hoon},
      title   = {{CableXSec}: Component-resolved local cross-section mechanics of
                 dynamic power cables},
-     version = {0.2.0},
+     version = {0.2.1},
      year    = {2026},
      url     = {https://github.com/SMI-Lab-Inha/CableXSec},
      license = {Apache-2.0}
