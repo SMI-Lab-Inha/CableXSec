@@ -16,7 +16,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import cablexsec as cx
+from cablexsec.plotting.style import LABELS, SIGNED_CMAP, apply_style
 
+apply_style()  # the MATLAB-style figures of every CableXSec plot
 FIGURES = (
     Path(sys.argv[1])
     if len(sys.argv) > 1
@@ -62,15 +64,15 @@ for layer in field.layers:
         xy[:, 1],
         c=layer.sigma_Pa.reshape(-1) / 1e6,
         s=4 if layer.kind != "wires" else 10,
-        cmap="coolwarm",
+        cmap=SIGNED_CMAP,
         vmin=-300,
         vmax=300,
     )
-fig.colorbar(marks, ax=ax, label="longitudinal stress [MPa]")
+fig.colorbar(marks, ax=ax, label=r"Longitudinal stress $\sigma_{zz}$ [MPa]")
 ax.set_aspect("equal")
-ax.set_xlabel("x [mm]")
-ax.set_ylabel("y [mm]")
-ax.set_title("T = 100 kN, curvature 0.1 1/m towards +y", fontsize=9)
+ax.set_xlabel(LABELS["x_mm"])
+ax.set_ylabel(LABELS["y_mm"])
+ax.set_title(r"$T$ = 100 kN, $\kappa$ = 0.1 m$^{\mathrm{-1}}$ towards $+y$", fontsize=9)
 fig.tight_layout()
 FIGURES.mkdir(parents=True, exist_ok=True)
-fig.savefig(FIGURES / "howto_04_section_stress.png", dpi=150)
+fig.savefig(FIGURES / "howto_04_section_stress.png", dpi=200)

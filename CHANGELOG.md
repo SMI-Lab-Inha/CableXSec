@@ -8,6 +8,16 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **Figures use a MATLAB-style look** (`cablexsec.plotting.style`):
+  - MATLAB's default line colours in MATLAB's order (`MATLAB_ORDER`; `COLORS` maps the names to those hues);
+  - a Helvetica or Arial face at 10 pt;
+  - a closed box with inward ticks on all sides and no grid;
+  - a square, opaque legend.
+- **Labels carry true Greek letters and sub- and superscripts** in the same face (κ, EI_min, σ_A, m⁻¹), with numerals upright. The new `style.LABELS` holds the standard axis labels.
+- **The tutorial and how-to scripts apply the style.** Their figures were plain matplotlib defaults before; they are regenerated. The examples follow the same labels.
+
 ### Added
 
 - `bonded_face: outer` on the outermost helical layer (gap G8): the outer face

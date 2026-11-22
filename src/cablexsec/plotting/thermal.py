@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from cablexsec.plotting.style import (
     COLORS,
     FIGSIZE,
+    LABELS,
     annotate_provenance,
     use_style,
 )
@@ -47,9 +48,7 @@ def plot_temperature_gradient(
             _, ax = plt.subplots(figsize=FIGSIZE["single"])
 
         r_mm = result.r_m * 1e3
-        ax.plot(
-            r_mm, result.T_C, color=COLORS["BLACK"], lw=1.6, zorder=3, label=r"$T(r)$"
-        )
+        ax.plot(r_mm, result.T_C, color=COLORS["BLUE"], zorder=3, label=r"$T(r)$")
 
         if cable is not None:
             for lyr in cable.layers:
@@ -63,25 +62,25 @@ def plot_temperature_gradient(
             result.T_conductor_C,
             color=COLORS["RED"],
             ls="--",
-            lw=0.9,
-            label=f"conductor {result.T_conductor_C:.1f} °C",
+            lw=1.0,
+            label=rf"conductor {result.T_conductor_C:.1f} $^\circ$C",
         )
         ax.axhline(
             result.T_armour_C,
-            color=COLORS["BLUE"],
+            color=COLORS["ORANGE"],
             ls="--",
-            lw=0.9,
-            label=f"armour {result.T_armour_C:.1f} °C",
+            lw=1.0,
+            label=rf"armour {result.T_armour_C:.1f} $^\circ$C",
         )
 
-        ax.set_xlabel("radius [mm]")
-        ax.set_ylabel("temperature [°C]")
+        ax.set_xlabel(LABELS["radius_mm"])
+        ax.set_ylabel(LABELS["temperature"])
         ax.set_title("Radial temperature gradient")
         ax.legend(loc="upper right", fontsize=8)
 
         lines = [
             f"$P$ = {result.P_total_W_m:.1f} W/m",
-            f"$T_{{cond}}$ = {result.T_conductor_C:.1f} °C",
+            rf"$T_\mathrm{{cond}}$ = {result.T_conductor_C:.1f} $^\circ$C",
         ]
         if current_A is not None:
             lines.insert(0, f"$I$ = {current_A:.0f} A")
@@ -96,7 +95,7 @@ def plot_temperature_gradient(
             bbox={
                 "facecolor": "white",
                 "edgecolor": COLORS["GREY"],
-                "boxstyle": "round,pad=0.3",
+                "boxstyle": "square,pad=0.3",
             },
         )
         annotate_provenance(ax, result.provenance, loc="upper left", max_items=2)

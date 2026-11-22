@@ -33,6 +33,7 @@ from cablexsec.mechanics.hertz_contact import (
     reduced_shear_modulus,
     solve_contact,
 )
+from cablexsec.plotting.style import COLORS, LABELS, apply_style
 
 FIGURES = (
     Path(sys.argv[1])
@@ -274,8 +275,12 @@ for z_over_b in depths:
         f"plane normal {tilt:.0f} deg from the wire axis"
     )
 # [step-figures]
+apply_style()  # the MATLAB-style figures of every CableXSec plot
 fig, ax = plt.subplots(figsize=(6.4, 4.0), layout="constrained")
-for name, colour in (("inner_armour", "C0"), ("outer_armour", "C1")):
+for name, colour in (
+    ("inner_armour", COLORS["BLUE"]),
+    ("outer_armour", COLORS["ORANGE"]),
+):
     face_name = faces[name]
     full = fretting.faces[face_name]
     label = name.replace("_", " ")
@@ -288,24 +293,36 @@ for name, colour in (("inner_armour", "C0"), ("outer_armour", "C1")):
     )
     stations, amplitude = friction_slip[name]
     ax.plot(stations, amplitude * 1e6, color=colour, label=f"{label}, friction law")
-ax.set_xlabel("wire azimuth from e1 [deg]")
-ax.set_ylabel("slip amplitude [µm]")
+ax.set_xlabel(r"Wire azimuth from $\mathbf{e}_\mathrm{1}$, $\varphi$ [$^\circ$]")
+ax.set_ylabel(LABELS["slip_um"])
 ax.set_xlim(0.0, 360.0)
 ax.set_xticks(np.arange(0, 361, 45))
 ax.set_ylim(bottom=0.0)
-fig.legend(frameon=False, fontsize=8, ncols=2, loc="outside lower center")
-fig.savefig(FIGURES / "tutorial_04_slip_amplitude.png", dpi=150)
+fig.legend(fontsize=8, ncols=2, loc="outside lower center")
+fig.savefig(FIGURES / "tutorial_04_slip_amplitude.png", dpi=200)
 plt.close(fig)
 print("wrote tutorial_04_slip_amplitude.png")
 
 fig, ax = plt.subplots(figsize=(6.4, 3.2), layout="constrained")
-ax.plot(depths, np.array(profile) / 1e6, marker="o", label="next to the crossing")
-ax.axhline(bulk_only / 1e6, color="0.4", linestyle="--", label="bulk cycle alone")
-ax.set_xlabel("depth z / b at x = -1.1 a")
-ax.set_ylabel("SWT indicator [MPa]")
+ax.plot(
+    depths,
+    np.array(profile) / 1e6,
+    marker="o",
+    color=COLORS["BLUE"],
+    label="next to the crossing",
+)
+ax.axhline(
+    bulk_only / 1e6,
+    color=COLORS["GREY"],
+    linestyle="--",
+    linewidth=1.0,
+    label="bulk cycle alone",
+)
+ax.set_xlabel(r"Depth $z/b$ at $x = -1.1\,a$ [–]")
+ax.set_ylabel(r"SWT indicator $\sigma_\mathrm{max}\,\varepsilon_\mathrm{a}$ [MPa]")
 ax.set_xlim(0.0, 1.05)
 ax.set_ylim(bottom=0.0)
-ax.legend(frameon=False)
-fig.savefig(FIGURES / "tutorial_04_swt_depth.png", dpi=150)
+ax.legend()
+fig.savefig(FIGURES / "tutorial_04_swt_depth.png", dpi=200)
 plt.close(fig)
 print("wrote tutorial_04_swt_depth.png")

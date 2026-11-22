@@ -16,7 +16,7 @@ import numpy as np
 from _console import configure_console
 
 import cablexsec as cx
-from cablexsec.plotting.style import COLORS, apply_style
+from cablexsec.plotting.style import COLORS, LABELS, apply_style
 
 configure_console()
 
@@ -58,11 +58,11 @@ def main() -> None:
         phi,
         fat.D_bulk_per_wire[crit],
         width=360 / n,
-        color=COLORS["BLACK"],
-        label="D_bulk",
+        color=COLORS["BLUE"],
+        label=r"$D_\mathrm{bulk}$",
     )
-    ax.set_xlabel(r"wire azimuth $\varphi$ [deg]")
-    ax.set_ylabel("Miner damage (history)")
+    ax.set_xlabel(LABELS["azimuth"])
+    ax.set_ylabel(r"Miner damage over the history, $D$ [–]")
     ax.set_title(f"Fatigue damage per wire — {crit}")
     ax.legend()
     fig.savefig(OUT / "demo_05_fatigue_damage.png")
