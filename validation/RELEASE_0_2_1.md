@@ -32,7 +32,7 @@ Each environment is a new conda environment (conda-forge Python) into which the 
 
 | Gate | Result |
 | --- | --- |
-| Test suite, Python 3.12 (`python -m pytest -n 6`) | 5021 passed, 3 skipped (kernel-replacement tests that need the kernels as Python; they run in the `NUMBA_DISABLE_JIT=1` pass of the coverage gate) |
+| Test suite, Python 3.12 (`python -m pytest -n 6`) | 5023 passed, 3 skipped (kernel-replacement tests that need the kernels as Python; they run in the `NUMBA_DISABLE_JIT=1` pass of the coverage gate) |
 | Line and branch coverage of `cablexsec`, Python 3.11 (`release/check_coverage.py`: whole suite, then the kernel tests with `NUMBA_DISABLE_JIT=1`) | 96.60 %; gate 95 % |
 | Ruff lint and format check (`src`, `tests`, `examples`, `validation`, `release`, `doc`) | clean on Python 3.11 and 3.12 |
 | mypy, strict, package `cablexsec` (the CI configuration, Python 3.11 with NumPy 2.4.6) | no issues in 122 source files |
@@ -51,6 +51,14 @@ rows keep their 0.2.0 status.
 Under NumPy 2.5.5 (the Python 3.12 environment), mypy reports 40 errors in 14 files, all from
 the NumPy 2.5 type stubs (argument-free `ndarray.min`/`max` and `ufunc.reduce` overloads), as
 for 0.2.0; CI type-checks against the Python 3.11 wheels.
+
+The review of the release pull request found that a bonded layer at a zero lay angle (no
+slider stiffness) was refused by the slip integrators; it is now elastic-only (commit
+`fix: a bonded layer at a zero lay angle is elastic-only`). The test suite above is that of the
+final tree. The coverage and validation-report gates ran before this fix and before the
+quick-start correction of the README; the documentation and distribution gates ran after the
+correction and before this fix. Neither change moves a validation row, and CI repeats every gate
+on the release pull request.
 
 The CI matrix (`.github/workflows/python.yml`: Ubuntu, Windows and macOS with Python 3.11 and
 3.12, a run without numba, coverage, the validation report, distributions and documentation)
