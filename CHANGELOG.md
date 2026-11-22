@@ -105,8 +105,9 @@ entries under Changed for the normal wire curvature and under Added for the Zeid
     doc/template_66kv.md Section 4 the largest wire damage rises 0.23–0.27 % (inner
     armour) and 0.05–0.06 % (outer armour) in all four model combinations; tutorial 3
     moves by −0.1 % (the governing inner face takes the term with the opposite sign) and
-    the tutorial and how-to outputs are regenerated. Riser armour at 35° in stick takes
-    nearly twice the earlier weak-axis bending stress.
+    the tutorial and how-to outputs are regenerated. The largest damage of the README quick
+    start (the Ménard cable at 100 kN) rises 2.0 % (inner) and 1.5 % (outer armour). Riser
+    armour at 35° in stick takes nearly twice the earlier weak-axis bending stress.
 
 - **Figures use a MATLAB-style look** (`cablexsec.plotting.style`):
   - MATLAB's default line colours in MATLAB's order (`MATLAB_ORDER`; `COLORS` maps the names to those hues);
