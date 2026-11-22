@@ -106,8 +106,8 @@ for layer, damage in fatigue.D_total_per_wire.items():
 ```text
 EA = 280 MN, EI full slip = 3571 N m^2, EI no slip = 189.8 kN m^2
 peak moment 541 N m, friction work 218.0 J/m over the history
-inner_armour: largest Miner damage 1.774e-06 over the record
-outer_armour: largest Miner damage 3.005e-07 over the record
+inner_armour: largest Miner damage 1.809e-06 over the record
+outer_armour: largest Miner damage 3.050e-07 over the record
 ```
 
 For a set of CableDyn sea-state runs, `cablexsec-batch batch.json --output-directory results`
