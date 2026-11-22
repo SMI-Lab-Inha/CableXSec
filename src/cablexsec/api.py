@@ -212,6 +212,8 @@ from cablexsec.mechanics.stiffness import (
     STICK_SUPPORTS,
     axial_torsional_matrix,
     bending_stiffness_by_layer,
+    bonded_face_ei,
+    bonded_face_terms,
     ea_fixed,
     ea_free,
     ei_max_stuck,
@@ -345,7 +347,8 @@ class StiffnessResult:
     ea_free_N : float
         Free-end (Schur-reduced) axial stiffness ``K_ee − K_et²/K_tt`` [N].
     ei_min_Nm2 : float
-        Full-slip bending stiffness (individual-wire bending) [N·m²].
+        Full-slip bending stiffness (individual-wire bending) [N·m²], plus the
+        elastic share of any bonded outer armour face (``bonded_face``, gap G8).
     ei_max_Nm2 : float
         No-slip bending stiffness with the selected shear compliance [N·m²].
         This is not the component-axis plane-section limit when xi < 1.
@@ -436,12 +439,18 @@ def compute_stiffness(
         lyr.name: xi_for_layer(cable, lyr.name, stick_support=stick_support)
         for lyr in cable.helical_layers
     }
+    for lyr in cable.helical_layers:
+        if lyr.bonded_face == "outer" and lyr.structural:
+            # Stuck, the support and the bond act in parallel (gap G8), as in
+            # the bending law: report that stick coefficient.
+            terms = bonded_face_terms(cable, lyr.name, xi_map[lyr.name])
+            xi_map[lyr.name] = terms.xi_slider + terms.xi_bond
     bending = bending_stiffness_by_layer(cable, xi_map)
     return StiffnessResult(
         cable_name=cable.cable.name,
         ea_fixed_N=ea_fixed(cable),
         ea_free_N=ea_free(cable),
-        ei_min_Nm2=ei_min_slip(cable),
+        ei_min_Nm2=ei_min_slip(cable) + bonded_face_ei(cable),
         ei_max_Nm2=ei_max_stuck(cable, xi_map),
         gj_Nm2=at.K_tt,
         axial_torsion_coupling_Nm=at.K_et,
@@ -663,13 +672,14 @@ def _prepare_mkappa_law(
         section_state=section_state,
         radial_state=radial_state,
         stick_support=stick_support,
+        bonded_faces=True,
     )
     ei_min = ei_min_slip(
         cable,
         modulus_scale=section_state.modulus_scale
         if section_state is not None
         else None,
-    )
+    ) + bonded_face_ei(cable)  # the bonds' elastic share (gap G8); 0 without
     model = (
         None
         if core_spec is None

@@ -55,6 +55,7 @@ from cablexsec.cables.schema import (
     _radial_tol,
     is_serving,
     layer_stiffness,
+    uses_cable_materials,
 )
 from cablexsec.exceptions import CableInputError
 from cablexsec.materials import library
@@ -93,6 +94,11 @@ __all__ = [
     "require_stick_support",
     "xi_for_layer",
     "yun_shear_stack",
+    "BondedFaceTerms",
+    "bonded_face_stack",
+    "bonded_face_stiffness",
+    "bonded_face_terms",
+    "bonded_face_ei",
     "BendingStiffnessContribution",
     "bending_stiffness_by_layer",
 ]
@@ -734,6 +740,202 @@ def xi_for_layer(
     )
     ea_w = e_wire * _wire_area(layer)
     return yun_xi(k_g, ea_w, layer.lay_angle_rad, layer.r_helix_m)
+
+
+# --------------------------------------------------------------------------- #
+# Bonded outer armour face (gap G8)                                           #
+# --------------------------------------------------------------------------- #
+@dataclass(frozen=True)
+class BondedFaceTerms:
+    """Terms of a helical layer whose outer face is bonded (``bonded_face="outer"``).
+
+    Attributes
+    ----------
+    stiffness_N_m2 : float
+        Per-wire, per-length stiffness ``K_b`` of the bond through the polymer
+        outside the wires [N/m²].
+    xi_bond : float
+        ``K_b / (K_b + EA_w sin^2(a) / r_h^2)``: the elastic share the bond keeps
+        in full slip.
+    xi_slider : float
+        Stick coefficient left to the friction slider: ``xi_tot - xi_bond``,
+        with ``xi_tot`` the support and the bond in parallel. The stuck layer
+        is then unchanged, and full slip leaves exactly ``xi_bond``.
+    ei_bond_Nm2 : float
+        ``xi_bond * 1/2 n_w E_w A_w r_h^2 cos^3(a)``: the bond's bending
+        stiffness, elastic and history-free, in parallel with the law.
+    """
+
+    stiffness_N_m2: float
+    xi_bond: float
+    xi_slider: float
+    ei_bond_Nm2: float
+
+
+@uses_cable_materials
+def bonded_face_stack(
+    cable: CableData, layer_name: str
+) -> tuple[CylindricalLayer, ...]:
+    """Polymer layers outside a helical layer with a bonded outer face (inside out).
+
+    The layer must be the outermost helical layer, and a cylindrical layer
+    with an isotropic modulus must touch its wires; every cylindrical layer
+    outside it with a modulus and a positive thickness is in the stack, which
+    is free of shear stress at the cable surface.
+    """
+    layer = cable.get_layer(layer_name)
+    if not isinstance(layer, HelicalLayer) or layer.r_helix_m is None:
+        raise CableInputError(f"{layer_name}: bonded_face needs a helical layer")
+    if any(
+        (h.r_helix_m or 0.0) > layer.r_helix_m
+        for h in cable.helical_layers
+        if h.name != layer.name
+    ):
+        raise CableInputError(
+            f"{layer_name}: bonded_face='outer' is implemented for the outermost "
+            "helical layer only"
+        )
+    r_face = layer.r_helix_m + 0.5 * layer.wire_radial_thickness_m
+    stack = sorted(
+        (
+            lyr
+            for lyr in cable.layers
+            if isinstance(lyr, CylindricalLayer)
+            and lyr.r_inner_m is not None
+            and lyr.r_outer_m is not None
+            and lyr.r_outer_m > lyr.r_inner_m
+            and lyr.r_inner_m >= r_face - _radial_tol(r_face)
+            and _has_modulus(lyr.material)
+        ),
+        key=lambda lyr: lyr.r_inner_m or 0.0,
+    )
+    if not stack or (stack[0].r_inner_m or 0.0) - r_face > _radial_tol(r_face):
+        raise CableInputError(
+            f"{layer_name}: bonded_face='outer' needs a cylindrical polymer layer "
+            "on the wires (no gap)"
+        )
+    return tuple(stack)
+
+
+@uses_cable_materials
+def bonded_face_stiffness(
+    cable: CableData,
+    layer_name: str,
+    *,
+    youngs_modulus_Pa: Mapping[str, float] | None = None,
+) -> float:
+    """Per-wire bond stiffness ``K_b`` [N/m²] of a bonded outer face.
+
+    The polymer outside the wires as a layered annulus loaded on its inner
+    surface and free at the cable surface
+    (:func:`~cablexsec.mechanics.stick_support.annulus_mode1_compliance_inner`),
+    with the axial and circumferential shares of the wire direction as in the
+    ``"annulus"`` stick support, spread over the wire spacing, plus the
+    concentration of the load on the wire's own width.
+    """
+    from cablexsec.mechanics.stick_support import (  # noqa: PLC0415
+        annulus_mode1_compliance_inner,
+        strip_concentration_compliance,
+    )
+
+    layer = cable.get_layer(layer_name)
+    assert isinstance(layer, HelicalLayer)
+    assert layer.lay_angle_rad is not None and layer.r_helix_m is not None
+    assert layer.n_wires is not None
+    rows: list[tuple[float, float, float]] = []
+    local = 0.0
+    for lyr in bonded_face_stack(cable, layer_name):
+        e = (
+            youngs_modulus_Pa[lyr.name]
+            if youngs_modulus_Pa is not None
+            else _E(lyr.material)
+        )
+        g = shear_modulus(e, library.get_property(lyr.material, "nu"))
+        r_in, r_out = lyr.r_inner_m or 0.0, lyr.r_outer_m or 0.0
+        rows.append((r_in, r_out, g))
+        local += (r_out - r_in) / g
+    alpha = abs(layer.lay_angle_rad)
+    r_contact = rows[0][0]
+    alpha_c = math.atan(math.tan(alpha) * r_contact / layer.r_helix_m)
+    spacing = 2.0 * math.pi * r_contact * math.cos(alpha_c) / layer.n_wires
+    try:
+        compliance = (
+            math.cos(alpha) ** 2 * annulus_mode1_compliance_inner(rows)
+            + math.sin(alpha) ** 2 * local
+        ) / spacing + strip_concentration_compliance(
+            spacing,
+            min(0.5 * layer.wire_surface_width_m, 0.5 * spacing),
+            rows[0][1] - rows[0][0],
+            rows[0][2],
+        )
+    except ValueError as error:
+        raise CableInputError(
+            f"{layer_name}: the bonded-face stiffness cannot be evaluated: {error}"
+        ) from error
+    return math.inf if compliance <= 0.0 else 1.0 / compliance
+
+
+@uses_cable_materials
+def bonded_face_terms(
+    cable: CableData,
+    layer_name: str,
+    xi_support: float,
+    *,
+    youngs_modulus_Pa: Mapping[str, float] | None = None,
+) -> BondedFaceTerms:
+    """Bond terms of a helical layer with a bonded outer face (gap G8).
+
+    The wires slide only on their inner face. The bond is a spring ``K_b``
+    (:func:`bonded_face_stiffness`) in parallel with the inner support
+    ``K_s = xi_support k2 / (1 - xi_support)``, ``k2 = EA_w sin^2(a)/r_h^2``.
+    Stuck, the layer has ``xi_tot = (K_s + K_b) / (K_s + K_b + k2)``
+    (``1`` for a rigid support); in full slip the bond keeps
+    ``xi_bond = K_b / (K_b + k2)``. The friction slider is given
+    ``xi_tot - xi_bond`` and the bond's ``xi_bond`` share of the
+    plane-section stiffness is added to the parallel EI of the law.
+    """
+    layer = cable.get_layer(layer_name)
+    assert isinstance(layer, HelicalLayer)
+    assert layer.lay_angle_rad is not None and layer.r_helix_m is not None
+    assert layer.n_wires is not None
+    if not (0.0 < xi_support <= 1.0):
+        raise CableInputError(f"{layer_name}: xi_support must lie in (0, 1]")
+    k_b = bonded_face_stiffness(cable, layer_name, youngs_modulus_Pa=youngs_modulus_Pa)
+    e_wire = (
+        youngs_modulus_Pa[layer.name]
+        if youngs_modulus_Pa is not None
+        else _E(layer.material)
+    )
+    ea_w = e_wire * _wire_area(layer)
+    alpha = layer.lay_angle_rad
+    k2 = ea_w * math.sin(alpha) ** 2 / layer.r_helix_m**2
+    xi_bond = yun_xi(k_b, ea_w, alpha, layer.r_helix_m)
+    if xi_support >= 1.0 or math.isinf(k_b):
+        xi_tot = 1.0
+    else:
+        k_s = xi_support * k2 / (1.0 - xi_support)
+        xi_tot = (k_s + k_b) / (k_s + k_b + k2)
+    ei_plane = 0.5 * layer.n_wires * ea_w * layer.r_helix_m**2 * math.cos(alpha) ** 3
+    return BondedFaceTerms(k_b, xi_bond, xi_tot - xi_bond, xi_bond * ei_plane)
+
+
+@uses_cable_materials
+def bonded_face_ei(
+    cable: CableData, *, youngs_modulus_Pa: Mapping[str, float] | None = None
+) -> float:
+    """Sum of the bonds' bending stiffness ``ei_bond_Nm2`` over the cable [N·m²].
+
+    Zero when no structural helical layer declares ``bonded_face="outer"``.
+    The bond's share does not depend on the inner support, so
+    ``xi_support = 1`` is used.
+    """
+    return sum(
+        bonded_face_terms(
+            cable, lyr.name, 1.0, youngs_modulus_Pa=youngs_modulus_Pa
+        ).ei_bond_Nm2
+        for lyr in cable.helical_layers
+        if lyr.bonded_face == "outer" and lyr.structural
+    )
 
 
 # --------------------------------------------------------------------------- #

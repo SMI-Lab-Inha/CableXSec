@@ -161,6 +161,12 @@ layers:
     lay_angle_deg: 14.23       # atan(2 pi r / 1233 mm)
     lay_direction: left_hand   # pitch -1233 mm
     bulk_sn: saevik_2011_flat_steel
+    # Outer face bonded to the sheath (gap G8). Not published: the sheath sits
+    # on the wires with no tape in [Zeidan2025] Table 5.2 and Fig. 5.2, and the
+    # bonded state is the one that matches the measured post-slip slope of the
+    # stabilised loops (range growth 11.2 / 8.7 / 8.1 kN m2 between 30 and
+    # 60 mm against 2.7 kN m2 with both faces sliding). An identified input.
+    bonded_face: outer
     source: "[Zeidan2026] Table 3 (armouring exterior OD 103 mm, 82 x 3.5 mm, pitch -1233 mm)"
 
   - name: outer_sheath

@@ -55,8 +55,8 @@ Every row is computed from published data or closed-form references in this repo
 | 2 | BM1 | Ménard full-slip EI_min (calibration-free) | < 15% | 0.6% (EI_min 3571 N·m²) | PASS |
 | 2 | BM1-loop | Ménard +/-0.10 M-kappa (range b), clamping identified on the measured +/-0.05 cycle work (range a), four-point test arrangement (Sec. 3: M = Fa L1, LVDT parabola) | ordered RMSE < 5%; matched experimental cycle work within 10% | P0 190.1 kPa; model -474/474 N·m and W=44.4 J/m vs measured 62.3 J/m; measured -502/526 N·m; ordered RMSE 5.45%; matched experimental work difference -28.8% | FAIL |
 | 2 | BM1-ID | Ménard laid cores, wedged trefoil and filler profiles (mu 0.2): P0 identified on range (b) cycle work, ranges (a), (c)-(f) predicted | (b) ordered RMSE < 5%; (a), (c)-(f) cycle work within 20% and ordered RMSE < 10% | P0 215.9 kPa; (a) +28.5% / 5.85%; (b) +0.0% / 2.75%; (c) +26.2% / 6.47%; (d) +15.2% / 4.96%; (e) -6.5% / 4.59%; (f) -11.7% / 4.43% | FAIL |
-| 2 | Z-EI | Zeidan (2025) four-point test, 112 mm three-core cable: measured stick secant (x1.425, reading R2) vs the no-slip EI_max; measured slip slope vs EI_min (parameter-free) | stick secant <= EI_max and slip slope >= EI_min at 30-60 mm | stick 141-240 kN·m² vs EI_max 311.1 kN·m² (xi 0.832/1.000; plane-section 335 kN·m²); slip 8.65-9.70 vs EI_min 2.72 kN·m² | PASS |
-| 2 | Z-ID | Zeidan (2025) loops at 30-60 mm in the four-point arrangement (reading R2), laid cores with wedge and filler profiles (mu 0.2): P0 identified on the 40 mm work, 30, 50, 60 mm predicted | 40 mm branch RMSE < 5%; 30, 50, 60 mm work within 20%, RMSE < 10%, moment range within 10% | P0 759.8 kPa; 30 mm +10.4% / 14.2% / -32.6%; 40 mm -0.0% / 13.7% / -39.5%; 50 mm -5.1% / 14.7% / -43.2%; 60 mm -9.6% / 15.4% / -45.5% | FAIL |
+| 2 | Z-EI | Zeidan (2025) four-point test, 112 mm three-core cable: measured stick secant (x1.425, reading R2) vs the no-slip EI_max; measured slip slope vs EI_min (parameter-free) | stick secant <= EI_max and slip slope >= EI_min at 30-60 mm | stick 141-240 kN·m² vs EI_max 311.1 kN·m² (xi 0.832/1.000; plane-section 335 kN·m²); slip 8.65-9.70 vs EI_min 10.09 kN·m² | FAIL |
+| 2 | Z-ID | Zeidan (2025) loops at 30-60 mm in the four-point arrangement (reading R2), laid cores with wedge and filler profiles (mu 0.2): P0 identified on the 40 mm work, 30, 50, 60 mm predicted | 40 mm branch RMSE < 5%; 30, 50, 60 mm work within 20%, RMSE < 10%, moment range within 10% | P0 1085.9 kPa; 30 mm +9.9% / 6.4% / -4.4%; 40 mm +0.0% / 4.5% / -8.0%; 50 mm -4.7% / 4.3% / -8.5%; 60 mm -9.0% / 4.4% / -8.0% | PASS (identified, then predicted) |
 | 2 | HU-3PB | Hu et al. (2022) conductor loop, third cycle, in its three-point arrangement (440 mm, ±6 mm; M = FL/4, kappa = 12w/L²) | loop area 3.185 N·m/m ±15% and transition share 34% ±10 points | KH: area 5.236 N·m/m (+64.4%), share 39.4%, M_max 8.83 N·m; Papailiou: area 4.354 N·m/m (+36.7%), share 32.8%, M_max 8.11 N·m | FAIL |
 | 2 | HU-uniform | Hu et al. (2022) conductor loop at uniform curvature (pre-T1 basis, kept for continuity) | loop area 3.185 N·m/m ±15% and transition share 34% ±10 points | KH: area 4.084 N·m/m (+28.2%), share 1.7%, M_max 7.58 N·m; Papailiou: area 3.340 N·m/m (+4.9%), share 1.7%, M_max 7.07 N·m | NOT COMPARABLE (the test does not impose uniform curvature) |
 | 2 | WITZ-EI | Witz (1996) pipe full-slip EI_min, 0 bar, vs measured gradients 1190 / 1014 N·m² (parameter-free) | within [913, 1309] N·m² (gradients ±10%) | 1007 N·m² (-15.4% / -0.7%) | PASS |
@@ -79,7 +79,7 @@ Every row is computed from published data or closed-form references in this repo
 
 ## Test taxonomy (full gate suite)
 
-- analytical_sanity: `1316 passed`
+- analytical_sanity: `1318 passed`
 - independent_method: `92 passed`
 - full_scale: `59 passed`
 
