@@ -12,7 +12,8 @@ global simulation files are not redistributed.
 | Path | Contents |
 | --- | --- |
 | [`validation_report.md`](validation_report.md) | The generated table of every analytical gate and benchmark, with targets, values and status |
-| [`RELEASE_0_2_0.md`](RELEASE_0_2_0.md) | Environment, test results, gate results and distribution hashes for v0.2.0 |
+| [`RELEASE_0_2_1.md`](RELEASE_0_2_1.md) | Environment, test results, gate results and distribution hashes for v0.2.1 |
+| [`RELEASE_0_2_0.md`](RELEASE_0_2_0.md) | The same record for the 0.2.0 release |
 | [`RELEASE_0_1_0.md`](RELEASE_0_1_0.md) | The same record for the 0.1.0 release |
 | [`paper_data/`](paper_data/README.md) | Digitised published measurements and the results of the companion article's calculations |
 | `scripts/` | The report generator, benchmark harnesses and reproduction scripts listed below |

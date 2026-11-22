@@ -9,21 +9,21 @@ is distributed through its GitHub repository; it is not published on a package i
 From a release
 --------------
 
-Download ``cablexsec-0.2.0-py3-none-any.whl`` and ``SHA256SUMS.txt`` from the
-`v0.2.0 release <https://github.com/SMI-Lab-Inha/CableXSec/releases/tag/v0.2.0>`_, compare
+Download ``cablexsec-0.2.1-py3-none-any.whl`` and ``SHA256SUMS.txt`` from the
+`v0.2.1 release <https://github.com/SMI-Lab-Inha/CableXSec/releases/tag/v0.2.1>`_, compare
 the checksum, and install the wheel with its optional extras:
 
 .. code-block:: powershell
 
-   Get-FileHash cablexsec-0.2.0-py3-none-any.whl -Algorithm SHA256
-   python -m pip install "cablexsec-0.2.0-py3-none-any.whl[fast]"
+   Get-FileHash cablexsec-0.2.1-py3-none-any.whl -Algorithm SHA256
+   python -m pip install "cablexsec-0.2.1-py3-none-any.whl[fast]"
 
 From the repository
 -------------------
 
 .. code-block:: powershell
 
-   python -m pip install "cablexsec[fast] @ git+https://github.com/SMI-Lab-Inha/CableXSec.git@v0.2.0"
+   python -m pip install "cablexsec[fast] @ git+https://github.com/SMI-Lab-Inha/CableXSec.git@v0.2.1"
 
 or, for development, clone the repository and install it in editable mode (see
 :doc:`development`):
