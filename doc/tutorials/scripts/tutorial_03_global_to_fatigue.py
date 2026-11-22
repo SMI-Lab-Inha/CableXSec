@@ -213,14 +213,14 @@ for name, damage in fatigue.D_total_per_wire.items():
 ax.axvline(
     fatigue.phi_critical_deg, color=COLORS["GREY"], linewidth=1.0, linestyle="--"
 )
-ax.set_xlabel(r"Wire azimuth from $\mathbf{e}_1$, $\varphi$ [$^\circ$]")
+ax.set_xlabel(r"Wire azimuth from $\mathbf{e}_\mathrm{1}$, $\varphi$ [$^\circ$]")
 ax.set_ylabel(r"Miner damage over the record, $D$ [–]")
 ax.set_xlim(0.0, 360.0)
 ax.set_xticks(np.arange(0, 361, 45))
 ax.set_ylim(bottom=0.0)
 ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
 ax.legend(loc="lower center")
-fig.savefig(FIGURES / "tutorial_03_damage_circumference.png")
+fig.savefig(FIGURES / "tutorial_03_damage_circumference.png", dpi=200)
 plt.close(fig)
 print("wrote tutorial_03_damage_circumference.png")
 
@@ -238,6 +238,6 @@ ax.set_title(
     rf"fibre {fatigue.fibre_critical_deg:.0f}$^\circ$",
     fontsize=10,
 )
-fig.savefig(FIGURES / "tutorial_03_governing_fibre_stress.png")
+fig.savefig(FIGURES / "tutorial_03_governing_fibre_stress.png", dpi=200)
 plt.close(fig)
 print("wrote tutorial_03_governing_fibre_stress.png")

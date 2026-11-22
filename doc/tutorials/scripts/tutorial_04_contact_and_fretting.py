@@ -293,13 +293,13 @@ for name, colour in (
     )
     stations, amplitude = friction_slip[name]
     ax.plot(stations, amplitude * 1e6, color=colour, label=f"{label}, friction law")
-ax.set_xlabel(r"Wire azimuth from $\mathbf{e}_1$, $\varphi$ [$^\circ$]")
+ax.set_xlabel(r"Wire azimuth from $\mathbf{e}_\mathrm{1}$, $\varphi$ [$^\circ$]")
 ax.set_ylabel(LABELS["slip_um"])
 ax.set_xlim(0.0, 360.0)
 ax.set_xticks(np.arange(0, 361, 45))
 ax.set_ylim(bottom=0.0)
 fig.legend(fontsize=8, ncols=2, loc="outside lower center")
-fig.savefig(FIGURES / "tutorial_04_slip_amplitude.png")
+fig.savefig(FIGURES / "tutorial_04_slip_amplitude.png", dpi=200)
 plt.close(fig)
 print("wrote tutorial_04_slip_amplitude.png")
 
@@ -323,6 +323,6 @@ ax.set_ylabel(r"SWT indicator $\sigma_\mathrm{max}\,\varepsilon_\mathrm{a}$ [MPa
 ax.set_xlim(0.0, 1.05)
 ax.set_ylim(bottom=0.0)
 ax.legend()
-fig.savefig(FIGURES / "tutorial_04_swt_depth.png")
+fig.savefig(FIGURES / "tutorial_04_swt_depth.png", dpi=200)
 plt.close(fig)
 print("wrote tutorial_04_swt_depth.png")

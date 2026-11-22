@@ -229,12 +229,12 @@ def plot_stress_timeseries(
             assert delta_star_um is not None
             col[i].plot(t, delta_star_um, color=COLORS["BLUE"], lw=1.0)
             col[i].axhline(
-                3.0, color=COLORS["GREEN"], ls="--", lw=0.8, label=r"3 $\mu$m (Cu)"
+                3.0, color=COLORS["GREEN"], ls="--", lw=0.8, label="3 µm (Cu)"
             )
             col[i].axhline(
-                5.0, color=COLORS["RED"], ls="--", lw=0.8, label=r"5 $\mu$m (steel)"
+                5.0, color=COLORS["RED"], ls="--", lw=0.8, label="5 µm (steel)"
             )
-            col[i].set_ylabel(r"$\delta^*$ [$\mu$m]", fontsize=9)
+            col[i].set_ylabel(r"$\delta^*$ [µm]", fontsize=9)
             col[i].legend(loc="upper right", fontsize=8)
             i += 1
 

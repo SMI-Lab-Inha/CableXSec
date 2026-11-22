@@ -136,11 +136,12 @@ ax_bending.plot(
     label=r"no slip, $EI_\mathrm{max}$",
 )
 ax_bending.set_ylim(0.0, 700.0)
+ax_bending.set_xticks(np.linspace(0.0, 0.02, 5))
 ax_bending.set_xlabel(LABELS["curvature"])
 ax_bending.set_ylabel(LABELS["moment_Nm"])
 ax_bending.set_title("First loading; dots: slip onset")
 ax_bending.legend(loc="lower right")
 fig.tight_layout()
 FIGURES.mkdir(parents=True, exist_ok=True)
-fig.savefig(FIGURES / "tutorial_01_first_cable.png")
+fig.savefig(FIGURES / "tutorial_01_first_cable.png", dpi=200)
 print(f"wrote {(FIGURES / 'tutorial_01_first_cable.png').name}")

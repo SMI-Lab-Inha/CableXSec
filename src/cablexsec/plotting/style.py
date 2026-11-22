@@ -113,7 +113,7 @@ LABELS: dict[str, str] = {
     "x_m": r"$x$ [m]",
     "y_m": r"$y$ [m]",
     "damage": r"Miner damage $D$ [–]",
-    "slip_um": r"Slip amplitude $\delta$ [$\mu$m]",
+    "slip_um": r"Slip amplitude $\delta$ [µm]",
 }
 
 # The ONE signed-field colormap: blue (-) -> white (0) -> dark red (+), from the
@@ -167,6 +167,8 @@ STYLE: dict[str, object] = {
     "mathtext.sf": "sans",
     "mathtext.default": "it",
     "axes.unicode_minus": True,
+    # an axis offset reads x10^-8, as in MATLAB, not 1e-8
+    "axes.formatter.use_mathtext": True,
     # Axes: closed box, inward ticks on all sides, no grid.
     "axes.linewidth": 0.6,
     "axes.edgecolor": _AXES_GREY,
