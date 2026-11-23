@@ -14,8 +14,8 @@
 # 0.5 % of the axis span); NOT experimental uncertainty.
 # Load case 4: Table 2 prints 34 MPa, Table 3 and the Fig. 19(b) caption 17 MPa (17 used).
 # Normalisation: 'with respect to the static stress level' (Sec. 7.4); its value is not
-# printed. Whether the measured value is the tendon axial stress or one side of the
-# tendon is not stated (one side was lost at stations 2.1-2.5, Sec. 7.4).
+# printed. The quantity is not stated (one side was lost at stations 2.1-2.5, p. 2289);
+# at LC 14, 3.1-3.5 it matches the larger side range of Lukassen (2019) (row SV11-SIDE).
 figure,load_case,angle_range_deg,tension_kN,pressure_MPa,station,tendon,azimuth_deg,x_mm,measured,mm_model,sbm_model,reading_resolution
 17a,7,0.5,500,34,1.1,1,0,-570,0.0693,0.0482,0.0760,0.0088
 17a,7,0.5,500,34,1.2,1,45,-343,0.0274,0.0551,0.0658,0.0088

@@ -140,6 +140,56 @@ def test_registered_targets_and_results_are_pinned(rows):
     assert gj.status == "FAIL"
 
 
+def test_lukassen_records_are_complete_and_two_sided():
+    # Lukassen (2019) Figs 2.7-2.11: both narrow sides at 3.1-3.5, LC 14 at
+    # +-8 deg, five legs after the first reversal on every panel.
+    rec = sv.measured_lukassen()
+    assert set(rec) == set(sv.LK_STATIONS)
+    for sides in rec.values():
+        assert set(sides) == {"a", "b"}
+        for theta, _stress in sides.values():
+            assert theta.min() == pytest.approx(-8.0, abs=0.1)
+            assert theta.max() == pytest.approx(8.0, abs=0.25)
+            assert len(sv._legs(theta, _stress)) == 5
+    meas = sv.lukassen_measured_ranges()
+    # Gjosteen et al. (2027) plot side b: their ranges at 3.1 and 3.5.
+    assert meas["3.1"]["b"] == pytest.approx(186.6, rel=0.03)
+    assert meas["3.5"]["b"] == pytest.approx(77.5, rel=0.03)
+    for v in meas.values():
+        assert v["axial"] <= v["larger"] + 1e-9
+
+
+def test_legs_split_a_record_at_its_reversals():
+    theta = np.array([0.0, 4.0, 8.0, 4.0, -8.0, 0.0, 8.0])
+    legs = sv._legs(theta, 2.0 * theta)
+    assert [list(t) for t, _s in legs] == [[8.0, 4.0, -8.0], [-8.0, 0.0, 8.0]]
+
+
+@needs_numba
+def test_quantity_rows_are_pinned(rows):
+    # Registered before the runs (doc/benchmarks.md, "Measured quantity and
+    # normaliser"); reported, not gated.
+    assert rows["SV11-LK"].value == (
+        "axial measured 139/77/19/69/64 MPa; sectional 207/103/0/103/144 "
+        "(1.72; 1.51); corrected 356/318/219/108/44 (1.97; 2.84); larger side: "
+        "sectional 1.35; 0.94, corrected 1.54; 1.61"
+    )
+    assert rows["SV11-SIDE"].value == (
+        "larger side 272-334 MPa (0.08); side a 0.30; side b 0.33; axial "
+        "51-254 MPa (0.45); model static 271 MPa"
+    )
+    assert rows["SV11-SUB"].value == (
+        "(a) median R 1.89 (3 of 14), sectional 1.12 (12); (b) 2.22 (3), "
+        "sectional 1.21 (12); (c) 1.51, sectional 1.33"
+    )
+    assert rows["SV11-NORM"].value == (
+        "median R 2.06 (3 of 14), sectional 1.07 (13 of 14); reference static 271 MPa"
+    )
+    for ident in ("SV11-LK", "SV11-SIDE", "SV11-SUB", "SV11-NORM"):
+        assert rows[ident].target == "stated, not gated"
+        assert rows[ident].status == "INFO"
+
+
 def test_rig_defaults_are_the_registered_rig():
     rig = sv.sv11_rig()
     assert (rig.x_anchor_m, rig.free_length_m, rig.rigid_right_m) == (
