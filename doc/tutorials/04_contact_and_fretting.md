@@ -234,7 +234,7 @@ fretting life.
 
 Nor is it the {term}`Ruiz parameter` (Ruiz et al. 1984), which is formed from the
 local surface shear traction and slip and, in its second form, the local
-tangential stress. CableXSec 0.2.0 does not compute Ruiz parameters.
+tangential stress. CableXSec 0.2.1 does not compute Ruiz parameters.
 
 ## 8. The SWT critical plane next to a crossing
 
@@ -298,7 +298,7 @@ Points nearer the surface at the edge itself need a higher quadrature order.
 converge; it never returns an unconverged stress.
 
 `compute_swt_cycle` also returns a formal life from a strain-life law
-(`SWTLifeConstants`). The SWT constants registered in CableXSec 0.2.0
+(`SWTLifeConstants`). The SWT constants registered in CableXSec 0.2.1
 (`sn_curves.SWT_LIFE`) are those of copper, and none are for armour steel, so
 the script passes a placeholder law and prints no life. With constants from a
 source, `result.life_cycles` gives it.

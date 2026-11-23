@@ -120,6 +120,7 @@ __all__ = [
     "compute_mkappa_wire_slip_front",
     "coupled_slip_stress_bounds",
     "direction_threshold_curvature",
+    "elastic_only_history",
     "full_slip_curvature",
     "slip_onset_curvature",
     "wire_slip_stress_bounds",
@@ -823,6 +824,31 @@ class WireSlipHistory:
     cap_Pa: FloatArray | None = None
 
 
+def _partly_zero(stiffness: FloatArray) -> bool:
+    """True if some but not all samples of a stick stiffness are zero."""
+    zero = stiffness == 0.0
+    return bool(np.any(zero) and not np.all(zero))
+
+
+def elastic_only_history(n_wires: int, count: int) -> WireSlipHistory:
+    """History of a wire population whose slider has zero stick stiffness.
+
+    Such a slider never carries stress, so it neither slips nor dissipates:
+    zero stress, moment and work, every wire stuck. It arises for a bonded
+    outer face (``bonded_face="outer"``, gap G8) at a zero lay angle, where
+    the bond carries the whole layer and ``xi_slider = 0``.
+    """
+    zeros = np.zeros(count)
+    return WireSlipHistory(
+        np.zeros((n_wires, count)),
+        np.zeros((count, 2)),
+        np.zeros(count, dtype=np.int64),
+        np.zeros(n_wires),
+        zeros.copy(),
+        BendingWork(zeros.copy(), zeros.copy(), zeros.copy(), zeros.copy(), zeros),
+    )
+
+
 def wire_slip_history(
     layer: HelicalLayerSpec,
     kappa_x: FloatArray,
@@ -986,10 +1012,17 @@ def wire_slip_history(
             raise CableInputError(
                 f"{label} must be finite and match curvature histories"
             )
-    if np.any(pressure < 0) or np.any(stiffness <= 0):
+    if np.any(pressure < 0) or np.any(stiffness < 0) or _partly_zero(stiffness):
         raise CableInputError(
             "nonnegative pressure and positive stiffness are required"
         )
+    if not np.any(stiffness):
+        if coupling is not None or keep_cap:
+            raise CableInputError(
+                "a zero stick stiffness (an elastic-only layer) is implemented "
+                "for the bending law only"
+            )
+        return elastic_only_history(layer.n_wires, count)
     if coupling is not None:
         if law is not None:
             raise CableInputError(

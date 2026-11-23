@@ -81,7 +81,9 @@ from cablexsec.mechanics.papailiou import (
     DIRECTION_HOLD_FRACTION,
     BendingWork,
     WireSlipHistory,
+    _partly_zero,
     _threshold_coefficient,
+    elastic_only_history,
 )
 
 if TYPE_CHECKING:
@@ -337,9 +339,22 @@ def progressive_wire_history(
             raise CableInputError(
                 f"{label} must be finite and match curvature histories"
             )
-    if np.any(pressure < 0) or np.any(stiffness <= 0):
+    if np.any(pressure < 0) or np.any(stiffness < 0) or _partly_zero(stiffness):
         raise CableInputError(
             "nonnegative pressure and positive stiffness are required"
+        )
+    if not np.any(stiffness):
+        # elastic-only layer (zero stick stiffness): no stress, slip or work
+        base = elastic_only_history(layer.n_wires, count)
+        return ProgressiveWireHistory(
+            base.stress_Pa,
+            base.moment_Nm,
+            base.slipping_count,
+            base.final_plastic_drive,
+            base.material_work_J_per_m,
+            base.work,
+            slipping_share=np.zeros(count),
+            settings=spec,
         )
     n_el = spec.n_elements
     share = 1.0 / n_el
