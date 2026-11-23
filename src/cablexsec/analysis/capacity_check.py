@@ -87,6 +87,7 @@ import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
 from cablexsec.cables.schema import CableData
+from cablexsec.cables.schema import scope_entry_points as _scope_entry_points
 from cablexsec.exceptions import CableInputError
 from cablexsec.provenance import Provenance
 
@@ -1390,3 +1391,7 @@ def capacity_extremes(
     if len(results) < 2:
         raise CableInputError("an extreme-value fit needs at least two seeds")
     return gumbel_fit([r.max_utilisation for r in results], fractile=fractile)
+
+
+# Public entry points read the cable's own materials when called directly.
+_scope_entry_points(globals(), __all__)

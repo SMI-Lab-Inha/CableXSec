@@ -25,6 +25,7 @@ import math
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from cablexsec.cables.schema import scope_entry_points as _scope_entry_points
 from cablexsec.plotting.style import COLORS
 
 if TYPE_CHECKING:
@@ -306,3 +307,6 @@ for(const pn of DATA.panels){
 </body>
 </html>
 """
+
+# Public entry points read the cable's own materials when called directly.
+_scope_entry_points(globals(), __all__)

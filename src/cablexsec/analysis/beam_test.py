@@ -81,6 +81,7 @@ from cablexsec.analysis.along_wire_test import (
 from cablexsec.api import _prepare_mkappa_law
 from cablexsec.cable_adapters import require_fully_specified
 from cablexsec.cables.schema import CableData, uses_cable_materials
+from cablexsec.cables.schema import scope_entry_points as _scope_entry_points
 from cablexsec.exceptions import CableInputError, CableSolverError
 from cablexsec.mechanics.bend_restrictor import ArticulatedRestrictor
 from cablexsec.mechanics.core_friction import (
@@ -1742,3 +1743,7 @@ def _simulate_along_wire(
         notes=tuple(notes),
         along_wire=aw_out,
     )
+
+
+# Public entry points read the cable's own materials when called directly.
+_scope_entry_points(globals(), __all__)

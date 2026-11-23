@@ -92,6 +92,7 @@ from cablexsec.cables.schema import (
     HelicalStrandedLayer,
     is_serving,
 )
+from cablexsec.cables.schema import scope_entry_points as _scope_entry_points
 from cablexsec.exceptions import CableInputError
 from cablexsec.mechanics.core_friction import CoreFrictionSpec
 from cablexsec.mechanics.core_kinematics import CoreSlipState
@@ -728,3 +729,7 @@ def _radial_field(
         basis="coupled normal section stress with superposed elastic bending "
         "about the cable axis",
     )
+
+
+# Public entry points read the cable's own materials when called directly.
+_scope_entry_points(globals(), __all__)

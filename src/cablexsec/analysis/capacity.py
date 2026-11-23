@@ -128,6 +128,7 @@ from cablexsec.cables.schema import (
     CylindricalShellLayer,
     HelicalLayer,
 )
+from cablexsec.cables.schema import scope_entry_points as _scope_entry_points
 from cablexsec.exceptions import CableInputError, CableSchemaError
 from cablexsec.materials import library
 from cablexsec.mechanics.axisymmetric import (
@@ -946,3 +947,7 @@ def compute_capacity(
             ),
         ),
     )
+
+
+# Public entry points read the cable's own materials when called directly.
+_scope_entry_points(globals(), __all__)

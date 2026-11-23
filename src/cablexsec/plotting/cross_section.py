@@ -15,6 +15,7 @@ from cablexsec.cables.schema import (
     CylindricalShellLayer,
     HelicalLayer,
 )
+from cablexsec.cables.schema import scope_entry_points as _scope_entry_points
 from cablexsec.plotting.style import (
     COLORS,
     FIGSIZE,
@@ -231,3 +232,7 @@ def _component_label(component: str) -> str:
         "sigma_vm_Pa": "Axial/contact indicator [MPa]",
     }
     return names.get(component, component)
+
+
+# Public entry points read the cable's own materials when called directly.
+_scope_entry_points(globals(), __all__)

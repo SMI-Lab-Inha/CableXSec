@@ -30,6 +30,7 @@ from numpy.typing import NDArray
 
 from cablexsec.cable_adapters import cable_to_mkappa_specs, structural_armour_layers
 from cablexsec.cables.schema import CableData
+from cablexsec.cables.schema import scope_entry_points as _scope_entry_points
 from cablexsec.exceptions import CableInputError
 from cablexsec.mechanics.papailiou import full_slip_curvature, slip_onset_curvature
 
@@ -88,3 +89,7 @@ def armour_slip_curvatures(
     return tuple(
         LayerSlipCurvatures(name, onset[i], full[i]) for i, name in enumerate(names)
     )
+
+
+# Public entry points read the cable's own materials when called directly.
+_scope_entry_points(globals(), __all__)

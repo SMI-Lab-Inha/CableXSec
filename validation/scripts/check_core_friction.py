@@ -516,3 +516,78 @@ if __name__ == "__main__":
             f"targets {'PASS' if out['pass'] else 'FAIL'}"
         )
     print("Janocha Fig. 6 half-height, code-to-code:", janocha_code_to_code())
+
+
+#: Skeie, Sødahl, Pettersen and Verde (2023, OMAE2023-104817), Sec. 4.2 and
+#: Table 1: three tubes in core-core contact only.
+SKEIE2023 = {
+    "r_helix_m": 5.37e-3,
+    "lay_angle_deg": 7.6,
+    "tube_outer_radius_m": 4.65e-3,
+    "tube_thickness_m": 0.1e-3,
+    "E_Pa": 2.1e11,
+    "mu": 0.2,
+    "contact_N_per_m": 4.44e3,  # per neighbour (Table 1 prints 4.44 "MPa")
+    "table1_onset_1_mm": 2.25e-5,
+    "table1_full_helica_1_mm": 2.36e-5,
+    "table1_full_abaqus_1_mm": 2.37e-5,
+}
+
+
+def skeie2023_table1(stations_per_core: int = 720) -> dict[str, float]:
+    """Skeie et al. (2023) Table 1 through the coupled stations of CableXSec.
+
+    Three tubes, core-core friction only (``StationCoupling`` with no
+    interlayer share), monotonic planar bending. Returns the onset curvature
+    (contact load per metre of cable, as CableXSec takes it, and per metre of
+    helix, as their Eq. 16 matches), the curvature at which the largest
+    friction stress stops growing, and the coalescence (every station
+    slipping), as ratios of the onset.
+    """
+    from cablexsec.mechanics.mkappa import HelicalLayerSpec  # noqa: PLC0415
+    from cablexsec.mechanics.papailiou import (  # noqa: PLC0415
+        slip_onset_curvature,
+        wire_slip_history,
+    )
+    from cablexsec.mechanics.station_coupling import StationCoupling  # noqa: PLC0415
+
+    sk = SKEIE2023
+    n = 3
+    ro, t = sk["tube_outer_radius_m"], sk["tube_thickness_m"]
+    area = math.pi * (ro**2 - (ro - t) ** 2)
+    q = 2.0 * sk["contact_N_per_m"]  # both neighbours of one core
+    r_c, beta = sk["r_helix_m"], math.radians(sk["lay_angle_deg"])
+    pressure = n * q / (2.0 * math.pi * r_c)
+    layer = HelicalLayerSpec(
+        n_wires=n * stations_per_core,
+        r_helix_m=r_c,
+        lay_angle_rad=beta,
+        E_wire_Pa=sk["E_Pa"],
+        A_wire_m2=area / stations_per_core,
+        xi=1.0,
+        mu=sk["mu"],
+        F_n_axi_N=q,
+        contact_pressure_Pa=pressure,
+        normal_load_is_line=True,
+    )
+    coupling = StationCoupling(n, 0.0, sk["mu"], pressure)
+    onset = slip_onset_curvature(layer)
+    a = np.linspace(0.0, 1.4, 14001)
+    history = wire_slip_history(
+        layer,
+        a * onset,
+        np.zeros_like(a),
+        coupling=coupling,
+        direction_hold_fraction=0.0,
+    )
+    peak = np.max(np.abs(history.stress_Pa), axis=0)
+    slipping = history.slipping_count
+    closed = sk["mu"] * q / (sk["E_Pa"] * area * math.cos(beta) ** 2 * math.sin(beta))
+    return {
+        "onset_1_mm": onset * 1e-3,
+        "onset_helix_1_mm": onset / math.cos(beta) * 1e-3,
+        "eq16_1_mm": closed * 1e-3,
+        "first_slip_ratio": float(a[np.argmax(slipping > 0)]),
+        "saturation_ratio": float(a[np.argmax(peak >= peak[-1] * (1.0 - 1e-9))]),
+        "coalescence_ratio": float(a[np.argmax(slipping == n * stations_per_core)]),
+    }

@@ -2,6 +2,12 @@
 # Copyright (c) 2026 Jae Hoon Seo, SMI Lab, Inha University
 r"""Coupled spring--slider stations of laid cores (relative intralayer slip).
 
+The relative slip of neighbouring cores, its onset and the coalescence of the
+slip zones at ``pi / 3`` follow Skeie, Sødahl, Pettersen and Verde (2023,
+OMAE2023-104817, doi:10.1115/OMAE2023-104817); the interlayer share, the
+direction-tied cap and the closest-point return map of a group are this
+module's.
+
 Used by :func:`cablexsec.mechanics.papailiou.wire_slip_history` when the
 laid-core law takes ``CoreFrictionSpec(core_core_coupling="relative")``
 (:mod:`cablexsec.mechanics.core_friction`). Neighbouring cores of one layer

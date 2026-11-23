@@ -55,8 +55,9 @@ import functools
 import inspect
 import math
 import warnings
-from collections.abc import Callable, Mapping, Sequence
-from contextlib import AbstractContextManager
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from contextlib import AbstractContextManager, contextmanager
+from contextvars import ContextVar
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Any, Literal, ParamSpec, Self, TypeVar
@@ -1874,9 +1875,7 @@ class CableData(_Frozen):
         the library alone answer, also inside the scope of another cable.
         The scope is local to the current thread (and task).
         """
-        return library.material_scope(
-            material_overlay(self.materials + self.stiffness_materials)
-        )
+        return _cable_scope(self)
 
     def get_material(self, name: str) -> CableMaterial:
         """Return the cable material ``name`` (or a stiffness-defined stand-in)."""
@@ -2240,6 +2239,34 @@ def _cable_argument(args: tuple[Any, ...], kwargs: Mapping[str, Any]) -> Any:
     return None
 
 
+#: The cable whose material scope this context entered last, with the overlay
+#: it set (``None``: none). A nested entry point that receives the same cable
+#: object, while that overlay is still the active one, skips re-entering.
+_SCOPE_OWNER: ContextVar[tuple[CableData, library.MaterialOverlay | None] | None] = (
+    ContextVar("cablexsec_material_scope_owner", default=None)
+)
+
+
+@contextmanager
+def _cable_scope(cable: CableData) -> Iterator[None]:
+    """The library scope of ``cable``'s materials, recording ``cable`` as owner."""
+    overlay = material_overlay(cable.materials + cable.stiffness_materials)
+    token = _SCOPE_OWNER.set((cable, overlay))
+    try:
+        with library.material_scope(overlay):
+            yield
+    finally:
+        _SCOPE_OWNER.reset(token)
+
+
+def _in_scope_of(cable: CableData) -> bool:
+    """True if ``cable``'s own scope is the active material scope."""
+    owner = _SCOPE_OWNER.get()
+    return (
+        owner is not None and owner[0] is cable and library.active_overlay() is owner[1]
+    )
+
+
 def uses_cable_materials(func: Callable[P, R]) -> Callable[P, R]:
     """Run ``func`` in the material scope of its first cable argument.
 
@@ -2253,7 +2280,8 @@ def uses_cable_materials(func: Callable[P, R]) -> Callable[P, R]:
     @functools.wraps(func)
     def run(*args: P.args, **kwargs: P.kwargs) -> R:
         cable = _cable_argument(args, kwargs)
-        if cable is None:
+        if cable is None or _in_scope_of(cable):
+            # no cable, or already inside this cable's scope (a nested call)
             return func(*args, **kwargs)
         with cable.material_scope():
             return func(*args, **kwargs)

@@ -56,6 +56,7 @@ from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 
+from cablexsec.cables.schema import scope_entry_points as _scope_entry_points
 from cablexsec.exceptions import CableInputError
 from cablexsec.provenance import Provenance, relayed_warnings
 
@@ -441,3 +442,7 @@ def compute_sheave(
             ),
         ),
     )
+
+
+# Public entry points read the cable's own materials when called directly.
+_scope_entry_points(globals(), __all__)

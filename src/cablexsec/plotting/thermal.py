@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from cablexsec.cables.schema import scope_entry_points as _scope_entry_points
 from cablexsec.plotting.style import (
     COLORS,
     FIGSIZE,
@@ -100,3 +101,7 @@ def plot_temperature_gradient(
         )
         annotate_provenance(ax, result.provenance, loc="upper left", max_items=2)
     return ax
+
+
+# Public entry points read the cable's own materials when called directly.
+_scope_entry_points(globals(), __all__)

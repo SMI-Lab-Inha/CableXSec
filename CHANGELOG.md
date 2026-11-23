@@ -24,6 +24,47 @@ All notable changes to CableXSec are recorded in this file. The format follows
   monotonic curves in plotted curvature (not loops), and the record zero and centre. No
   target, band, gated input or default changes; SV11-PLANE and SV11-GJ stay FAIL.
 
+### Fixed
+
+- Every public function of the submodules that takes a cable now reads the cable's own
+  materials when it is called directly, as the functions of `cablexsec` and
+  `cablexsec.api` already did. Before, `xi_for_layer`, `yun_shear_stack`, `ei_min_slip`
+  and 87 other functions of 36 modules (mechanics, analysis, adapters, plotting) used the
+  library values outside a material scope: Zeidan's inner armour gave ξ 1.000 instead of
+  0.832. Results through `cablexsec` and `cablexsec.api` do not change. A nested call
+  with the same cable object does not re-enter the scope (no measurable cost); a test
+  now checks every module.
+
+### Documentation
+
+- Credit: the coupled intralayer slip of laid cores (`core_core_coupling="relative"`, 0.2.1)
+  follows Skeie, Sødahl, Pettersen and Verde (2023, OMAE2023-104817,
+  doi:10.1115/OMAE2023-104817), who formulated the relative slip of three cores, its onset
+  and the coalescence of the slip zones; cited in `core_friction`, `station_coupling`, the
+  local analysis guide and doc/template_66kv.md. The largest friction stress saturates at
+  `π/3` times the onset, before the coalescence at `2π/(3√3) = 1.209`: the "full slip" of
+  their Table 1. New reported row SK23-T1: with the contact load per metre of helix the
+  onset is their Eq. 16 (2.2518e-5 1/mm against 2.25e-5), the saturation 1.0472 times the
+  onset against 1.049 (their model) and 1.053 (their FE).
+- The bonded outer face (0.2.1): stuck, the inner support and the bond act in parallel,
+  `xi_tot = (K_s + K_b) / (K_s + K_b + k2)`. The 0.2.1 entry's "the stuck layer is
+  unchanged" holds for a rigid support only (Zeidan's outer armour, ξ = 1); with ξ 0.5
+  the bond raises it to 0.510. The friction cap stays the inner face's: the bond is a
+  separate elastic shear flow, and scaling the cap by `1 - xi_bond` would count it twice
+  (doc/benchmarks.md).
+- The stuck-wire normal curvature `cos^4(a)` cites Sævik (2011) Eq. 50, the prescribed
+  normal curvature of the stuck helix.
+- Validation report cells escape a literal `|` (as in `|cos|`).
+- Version references of 0.2.1 in doc/template_66kv.md, doc/citing.rst (BibTeX key) and
+  DEVELOPMENT.md.
+
+### Tests
+
+- The CableDyn curvature-component test compares the strain gradient with a relative
+  tolerance of 1e-15 instead of exact equality.
+- The per-worker numba cache folders of the tests have short names, below the 260-character
+  path limit of Windows.
+
 ## [0.2.1] - 2026-11-23
 
 The Python interfaces are versioned but may change before `1.0.0`. The evidence for

@@ -100,6 +100,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
+from cablexsec.cables.schema import scope_entry_points as _scope_entry_points
 from cablexsec.exceptions import CableInputError
 from cablexsec.mechanics.friction_law import FrictionLaw
 from cablexsec.mechanics.papailiou import (
@@ -1821,3 +1822,7 @@ def _slip_scale_table(
         group_cap_dT_Nm_per_N=d_t,
         group_cap_dpe_Nm_per_Pa=d_p,
     )
+
+
+# Public entry points read the cable's own materials when called directly.
+_scope_entry_points(globals(), __all__)

@@ -76,6 +76,7 @@ import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
 from cablexsec.cables.schema import CableData, CylindricalOffsetLayer
+from cablexsec.cables.schema import scope_entry_points as _scope_entry_points
 from cablexsec.exceptions import CableInputError, CableSchemaError
 from cablexsec.mechanics.core_friction import (
     CoreFrictionModel,
@@ -333,3 +334,7 @@ def core_kinematics(
         slipping=slipping,
         model=model,
     )
+
+
+# Public entry points read the cable's own materials when called directly.
+_scope_entry_points(globals(), __all__)

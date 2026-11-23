@@ -16,7 +16,7 @@ power cables* (version 0.2.1) [Computer software]. https://github.com/SMI-Lab-In
 
 .. code-block:: bibtex
 
-   @software{CableXSec_0_2_0,
+   @software{CableXSec_0_2_1,
      author  = {Seo, Jae Hoon},
      title   = {{CableXSec}: Component-resolved local cross-section mechanics of
                 dynamic power cables},

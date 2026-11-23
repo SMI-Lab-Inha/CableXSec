@@ -44,6 +44,7 @@ import warnings
 from dataclasses import dataclass, field
 
 from cablexsec.cables.schema import CableData, CylindricalLayer, HelicalLayer
+from cablexsec.cables.schema import scope_entry_points as _scope_entry_points
 from cablexsec.exceptions import CableInputError
 from cablexsec.provenance import (
     ClampingCalibrationWarning,
@@ -340,3 +341,7 @@ def warn_if_unclamped(cable: CableData, *, stacklevel: int = 2) -> ClampingState
     if message is not None:
         warnings.warn(message, MissingClampingStateWarning, stacklevel=stacklevel + 1)
     return state
+
+
+# Public entry points read the cable's own materials when called directly.
+_scope_entry_points(globals(), __all__)

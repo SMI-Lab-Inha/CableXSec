@@ -80,6 +80,7 @@ from cablexsec.cables.schema import (
     Layer,
     uses_cable_materials,
 )
+from cablexsec.cables.schema import scope_entry_points as _scope_entry_points
 from cablexsec.clamping import ClampingState, clamping_state
 from cablexsec.exceptions import CableInputError, CableSchemaError
 from cablexsec.materials import library
@@ -1093,3 +1094,7 @@ def _integer_candidates(f: Callable[[float], float], lo: int, hi: int) -> list[i
         else:
             a = m1
     return list(range(a, b + 1))
+
+
+# Public entry points read the cable's own materials when called directly.
+_scope_entry_points(globals(), __all__)
