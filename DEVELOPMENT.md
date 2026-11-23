@@ -100,7 +100,7 @@ with absolute `https://github.com/SMI-Lab-Inha/CableXSec/blob/main/...` URLs.
 python -m build --outdir dist
 python -m twine check dist/*
 python -m venv wheel-test
-wheel-test\Scripts\python -m pip install dist\cablexsec-0.2.0-py3-none-any.whl
+wheel-test\Scripts\python -m pip install dist\cablexsec-0.2.1-py3-none-any.whl
 wheel-test\Scripts\python release\smoke_test_wheel.py --version 0.2.0
 ```
 

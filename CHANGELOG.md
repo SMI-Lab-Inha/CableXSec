@@ -8,15 +8,14 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ## [Unreleased]
 
-### Changed
+## [0.2.1] - 2026-11-23
 
-- **Figures use a MATLAB-style look** (`cablexsec.plotting.style`):
-  - MATLAB's default line colours in MATLAB's order (`MATLAB_ORDER`; `COLORS` maps the names to those hues);
-  - a Helvetica or Arial face at 10 pt;
-  - a closed box with inward ticks on all sides and no grid;
-  - a square, opaque legend.
-- **Labels carry true Greek letters and sub- and superscripts** in the same face (κ, EI_min, σ_A, m⁻¹), with numerals upright. The new `style.LABELS` holds the standard axis labels.
-- **The tutorial and how-to scripts apply the style.** Their figures were plain matplotlib defaults before; they are regenerated. The examples follow the same labels.
+The Python interfaces are versioned but may change before `1.0.0`. The evidence for
+every item below is in
+[VALIDATION.md](https://github.com/SMI-Lab-Inha/CableXSec/blob/main/VALIDATION.md); its
+generated table is reproduced by `python validation/scripts/run_validation.py`. The
+entries under Changed for the normal wire curvature and under Added for the Zeidan
+(2025) input change results; the new options default to the 0.2.0 behaviour.
 
 ### Added
 
@@ -30,7 +29,9 @@ All notable changes to CableXSec are recorded in this file. The format follows
     (`annulus_mode1_compliance_inner`) plus the strip concentration. It keeps
     `xi_bond = K_b / (K_b + EA_w sin^2(a) / r_h^2)` of the layer's
     plane-section stiffness in full slip (`bonded_face_terms`,
-    `bonded_face_ei`). The stuck layer is unchanged.
+    `bonded_face_ei`). The stuck layer is unchanged. At a zero lay angle the bond
+    carries the whole layer: the slider has no stick stiffness and is elastic-only
+    (no stress, slip or friction work; `elastic_only_history`).
   - Used by the bending law (`compute_mkappa`, `SectionLaw`, the exported law)
     and `compute_stiffness` (whose `ei_min_Nm2` then includes the bond). The
     wire-stress, fatigue and capacity routes refuse such a cable, because they
@@ -108,8 +109,30 @@ All notable changes to CableXSec are recorded in this file. The format follows
     doc/template_66kv.md Section 4 the largest wire damage rises 0.23–0.27 % (inner
     armour) and 0.05–0.06 % (outer armour) in all four model combinations; tutorial 3
     moves by −0.1 % (the governing inner face takes the term with the opposite sign) and
-    the tutorial and how-to outputs are regenerated. Riser armour at 35° in stick takes
-    nearly twice the earlier weak-axis bending stress.
+    the tutorial and how-to outputs are regenerated. The largest damage of the README quick
+    start (the Ménard cable at 100 kN) rises 2.0 % (inner) and 1.5 % (outer armour). Riser
+    armour at 35° in stick takes nearly twice the earlier weak-axis bending stress.
+
+- **Figures use a MATLAB-style look** (`cablexsec.plotting.style`):
+  - MATLAB's default line colours in MATLAB's order (`MATLAB_ORDER`; `COLORS` maps the names to those hues);
+  - a Helvetica or Arial face at 10 pt;
+  - a closed box with inward ticks on all sides and no grid;
+  - a square, opaque legend.
+- **Labels carry true Greek letters and sub- and superscripts** in the same face (κ, EI_min, σ_A, m⁻¹), with numerals upright. The new `style.LABELS` holds the standard axis labels.
+- **The tutorial and how-to scripts apply the style.** Their figures were plain matplotlib defaults before; they are regenerated. The examples follow the same labels.
+
+### Known limitations
+
+- A bonded outer face (`bonded_face: outer`) is supported by the bending law and
+  `compute_stiffness` only. The wire-stress, fatigue and capacity routes refuse such a
+  cable, so `compute_mkappa` cannot check its curvature history against the wire-yield
+  curvature and warns that it does not.
+- The bonded state of the Zeidan (2025) cable is identified from its measured loops, not
+  published. With it, Z-ID passes and Z-EI fails narrowly (`EI_min` 10.09 kN·m² against
+  a measured slip slope of 8.65–9.70 kN·m² in the plotted curvature). The predicted
+  cycle work differs from the measured by +9.9 / −4.7 / −9.0 % at 30 / 50 / 60 mm.
+- The measured comparisons that failed in 0.2.0, other than Z-ID, still fail; their
+  tolerances are not relaxed.
 
 ## [0.2.0] - 2026-11-21
 
@@ -1285,5 +1308,6 @@ generated table is reproduced by `python validation/scripts/run_validation.py`.
 - A passing test does not establish that the model predicts every physical cable
   construction or a validated service life.
 
+[0.2.1]: https://github.com/SMI-Lab-Inha/CableXSec/releases/tag/v0.2.1
 [0.2.0]: https://github.com/SMI-Lab-Inha/CableXSec/releases/tag/v0.2.0
 [0.1.0]: https://github.com/SMI-Lab-Inha/CableXSec/releases/tag/v0.1.0

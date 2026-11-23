@@ -17,7 +17,7 @@ damage of the armour, the conductor and the metallic sheaths.
 It reads the results of global analyses (CableDyn, RIFLEX, and time-history CSV exports such as
 those of OrcaFlex) and turns them into local stresses and damage, and it exports a hysteretic
 bending law for use in global analysis. The
-current release is `v0.2.0`; interfaces are versioned and may change before `1.0.0`.
+current release is `v0.2.1`; interfaces are versioned and may change before `1.0.0`.
 
 ## What CableXSec does
 
@@ -74,7 +74,7 @@ Install the release wheel from the
 3.12), or install straight from the repository:
 
 ```powershell
-python -m pip install "cablexsec[fast] @ git+https://github.com/SMI-Lab-Inha/CableXSec.git@v0.2.0"
+python -m pip install "cablexsec[fast] @ git+https://github.com/SMI-Lab-Inha/CableXSec.git@v0.2.1"
 ```
 
 The `fast` extra adds `numba` for the compiled slip-stress and rainflow kernels; without it the
@@ -106,8 +106,8 @@ for layer, damage in fatigue.D_total_per_wire.items():
 ```text
 EA = 280 MN, EI full slip = 3571 N m^2, EI no slip = 189.8 kN m^2
 peak moment 541 N m, friction work 218.0 J/m over the history
-inner_armour: largest Miner damage 1.774e-06 over the record
-outer_armour: largest Miner damage 3.005e-07 over the record
+inner_armour: largest Miner damage 1.809e-06 over the record
+outer_armour: largest Miner damage 3.050e-07 over the record
 ```
 
 For a set of CableDyn sea-state runs, `cablexsec-batch batch.json --output-directory results`
@@ -154,7 +154,7 @@ in [`validation/`](validation/README.md), including the data of the companion jo
 
 ## Citation
 
-If you use CableXSec in academic work, please cite the software release (CableXSec 0.2.0);
+If you use CableXSec in academic work, please cite the software release (CableXSec 0.2.1);
 [CITATION.cff](CITATION.cff) contains the entry (GitHub **Cite this repository**) and the
 manual's [How to cite](https://cablexsec.readthedocs.io/en/latest/citing.html) page gives
 BibTeX. The journal article that describes the method is under review; its reference will be

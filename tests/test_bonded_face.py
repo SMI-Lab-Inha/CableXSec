@@ -242,3 +242,49 @@ def test_a_pressure_history_is_refused_for_a_bonded_face() -> None:
     pressure = {lyr.name: np.full(kappa.shape, 1e6) for lyr in cable.helical_layers}
     with pytest.raises(CableSchemaError, match="contact_tension_history_N"):
         cx.compute_mkappa(cable, kappa, mu=0.2, contact_pressure_Pa=pressure)
+
+
+def test_a_straight_bonded_layer_is_elastic_only() -> None:
+    """At a zero lay angle the bond carries the whole layer (xi_slider = 0):
+    the slider is elastic-only, and the law is the small-angle limit."""
+
+    def straight(lay_deg: float) -> CableData:
+        cable = _zeidan()
+        layers = [
+            lyr.model_copy(update={"lay_angle_deg": lay_deg})
+            if lyr.name == "outer_armour"
+            else lyr
+            for lyr in cable.layers
+        ]
+        return cable.model_copy(update={"layers": layers})
+
+    zero, small = straight(0.0), straight(1e-4)
+    with zero.material_scope():
+        terms = bonded_face_terms(zero, "outer_armour", 1.0)
+    assert terms.xi_bond == 1.0 and terms.xi_slider == 0.0
+    kappa = np.r_[np.linspace(0.0, 0.1, 21), np.linspace(0.1, -0.1, 41)[1:]]
+    for options in ({}, {"friction_model": "progressive"}):
+        r0 = cx.compute_mkappa(zero, kappa, mu=0.2, **options)  # type: ignore[arg-type]
+        r1 = cx.compute_mkappa(small, kappa, mu=0.2, **options)  # type: ignore[arg-type]
+        scale = float(np.max(np.abs(r1.moment_Nm)))
+        np.testing.assert_allclose(r0.moment_Nm, r1.moment_Nm, atol=1e-9 * scale)
+        assert r0.EI_min_Nm2 == pytest.approx(r1.EI_min_Nm2, rel=1e-8)
+
+
+def test_a_zero_stick_stiffness_gives_an_elastic_only_history() -> None:
+    from cablexsec.mechanics.papailiou import wire_slip_history  # noqa: PLC0415
+
+    with _zeidan().material_scope():
+        spec = cable_to_mkappa_specs(_bond(_zeidan(), face="none"), mu=0.2)[0]
+    kappa = np.linspace(0.0, 0.1, 11)
+    zero = np.zeros_like(kappa)
+    history = wire_slip_history(spec, kappa, zero, stick_modulus_Pa=zero)
+    assert not np.any(history.stress_Pa) and not np.any(history.moment_Nm)
+    assert not np.any(history.slipping_count)
+    assert not np.any(history.work.friction_J_per_m)
+    partly = np.full_like(kappa, spec.k_f)
+    partly[3] = 0.0
+    with pytest.raises(CableInputError, match="positive stiffness"):
+        wire_slip_history(spec, kappa, zero, stick_modulus_Pa=partly)
+    with pytest.raises(CableInputError, match="elastic-only"):
+        wire_slip_history(spec, kappa, zero, stick_modulus_Pa=zero, keep_cap=True)
