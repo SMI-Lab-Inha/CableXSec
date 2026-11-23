@@ -31,6 +31,7 @@ from concurrent.futures import Future, ProcessPoolExecutor
 from dataclasses import astuple, dataclass
 from functools import partial
 from pathlib import Path
+from types import ModuleType
 from typing import IO
 
 import numpy as np
