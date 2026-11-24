@@ -752,8 +752,8 @@ def _anchored_wire_fe_rows() -> list[Row]:
             f"metre of helix; Eq. 16 {sk['eq16_1_mm']:.4e}) vs "
             f"{t1['table1_onset_1_mm']:.2e}; saturation {sk['saturation_ratio']:.4f} "
             f"x onset (pi/3) vs "
-            f"{t1['table1_full_helica_1_mm'] / t1['table1_onset_1_mm']:.3f} (model) / "
-            f"{t1['table1_full_abaqus_1_mm'] / t1['table1_onset_1_mm']:.3f} (FE); "
+            f"{t1['table1_full_model_1_mm'] / t1['table1_onset_1_mm']:.3f} (model) / "
+            f"{t1['table1_full_fe_1_mm'] / t1['table1_onset_1_mm']:.3f} (FE); "
             f"coalescence {sk['coalescence_ratio']:.4f} x onset (2 pi/(3 sqrt 3))",
             "INFO",
         ),

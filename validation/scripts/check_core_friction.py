@@ -529,8 +529,8 @@ SKEIE2023 = {
     "mu": 0.2,
     "contact_N_per_m": 4.44e3,  # per neighbour (Table 1 prints 4.44 "MPa")
     "table1_onset_1_mm": 2.25e-5,
-    "table1_full_helica_1_mm": 2.36e-5,
-    "table1_full_abaqus_1_mm": 2.37e-5,
+    "table1_full_model_1_mm": 2.36e-5,
+    "table1_full_fe_1_mm": 2.37e-5,
 }
 
 

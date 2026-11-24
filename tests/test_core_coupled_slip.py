@@ -723,5 +723,5 @@ def test_skeie2023_table1_is_the_saturation_of_the_peak_friction_stress() -> Non
     assert sk["first_slip_ratio"] == pytest.approx(1.0, abs=2e-4)
     assert sk["saturation_ratio"] == pytest.approx(math.pi / 3, abs=2e-4)
     assert sk["coalescence_ratio"] == pytest.approx(FULL_SLIP_RATIO, abs=2e-4)
-    table = SKEIE2023["table1_full_helica_1_mm"] / SKEIE2023["table1_onset_1_mm"]
+    table = SKEIE2023["table1_full_model_1_mm"] / SKEIE2023["table1_onset_1_mm"]
     assert sk["saturation_ratio"] == pytest.approx(table, rel=0.005)
