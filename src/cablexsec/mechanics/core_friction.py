@@ -154,7 +154,10 @@ core--core friction acts:
   field, like a helix on a fixed cylinder, with the load-weighted coefficient
   ``mu_eff``. Under planar bending full slip comes at ``pi / 2`` times the
   onset curvature.
-* ``"relative"``: a coupled intralayer slip model of laid cores. The
+* ``"relative"``: a coupled intralayer slip model of laid cores, after
+  Skeie, Sødahl, Pettersen and Verde (2023, OMAE2023-104817,
+  doi:10.1115/OMAE2023-104817), who formulated the relative slip of three
+  cores, its onset and the coalescence of the slip zones. The
   neighbouring cores of the layer touch at the same axial position, and the
   friction between two of them resists their relative slip ``u_i - u_j``; the
   filler and ring contacts (interlayer) keep the absolute slip. The stations
@@ -170,7 +173,10 @@ core--core friction acts:
   stress at full slip is ``2/3`` of the absolute value (the stress plateaus
   beyond ``pi / 3`` from the neutral axis), the full-slip moment is
   ``sqrt(3)/2`` of the absolute one and full slip comes at
-  ``2 pi / (3 sqrt 3) = 1.209`` times the onset curvature. These match an
+  ``2 pi / (3 sqrt 3) = 1.209`` times the onset curvature. The largest
+  friction stress saturates earlier, at ``pi / 3 = 1.047`` times the onset
+  (the slip front at ``pi / 3``): the "full slip" curvature of Skeie et al.'s
+  Table 1 (validation row SK23-T1). These match an
   independent field solver of the coupled axial equilibrium of the cores
   (``validation/scripts/coupled_core_slip_reference.py``) on monotonic and
   reversed planar paths, with and without interlayer friction. Two cores
@@ -248,6 +254,7 @@ from cablexsec.cables.schema import (
     CylindricalLayer,
     CylindricalOffsetLayer,
 )
+from cablexsec.cables.schema import scope_entry_points as _scope_entry_points
 from cablexsec.exceptions import CableInputError, CableSchemaError
 from cablexsec.materials import library
 from cablexsec.mechanics.axisymmetric import AxisymmetricResult, compute_contact_forces
@@ -1622,3 +1629,7 @@ def core_friction_history(
         friction_model=resolved,
         loads=loads,
     )
+
+
+# Public entry points read the cable's own materials when called directly.
+_scope_entry_points(globals(), __all__)

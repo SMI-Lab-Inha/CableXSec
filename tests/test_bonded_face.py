@@ -3,8 +3,8 @@
 """Bonded outer armour face (``bonded_face="outer"``, gap G8).
 
 Closed form of the inner-loaded annulus compliance; the default unchanged bit
-for bit; the stuck section unchanged and the full-slip tangent raised by the
-bond's share; the friction cap from the inner face only; energy balance; and
+for bit; the stuck section unchanged on a rigid support (raised by the bond in
+parallel otherwise) and the full-slip tangent raised by the bond's share; the friction cap from the inner face only; energy balance; and
 refusal on the routes that would miss the bond's share of the wire force.
 """
 
@@ -127,6 +127,8 @@ def test_bond_terms_keep_the_stuck_layer_and_add_the_bond_share() -> None:
 
 
 def test_law_stuck_stiffness_unchanged_and_full_slip_tangent_raised() -> None:
+    """Zeidan's outer armour has a rigid support (xi = 1), so the stuck
+    stiffness is unchanged; the bond adds only the full-slip share."""
     base, bonded = _bond(_zeidan(), face="none"), _zeidan()
     law0, law1 = _law(base), _law(bonded)
     with bonded.material_scope():

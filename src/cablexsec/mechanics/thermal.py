@@ -79,6 +79,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 from numpy.typing import NDArray
 
+from cablexsec.cables.schema import scope_entry_points as _scope_entry_points
 from cablexsec.cables.schema import uses_cable_materials
 from cablexsec.exceptions import CableInputError
 from cablexsec.materials.library import get_property
@@ -1148,3 +1149,7 @@ def _ladder_geometry(cable: CableData, n_cores: int | None) -> _LadderGeometry:
     return _LadderGeometry(
         path, in_t1, n, n_geo, multi_core, r_core, geometry_notes, sheath_found
     )
+
+
+# Public entry points read the cable's own materials when called directly.
+_scope_entry_points(globals(), __all__)

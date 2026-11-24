@@ -119,6 +119,7 @@ from cablexsec.cables.schema import (
     CylindricalOffsetLayer,
     TapeWinding,
 )
+from cablexsec.cables.schema import scope_entry_points as _scope_entry_points
 from cablexsec.exceptions import CableInputError, CableSchemaError
 from cablexsec.materials import library
 from cablexsec.materials.mean_stress import MeanStressSpec
@@ -722,3 +723,7 @@ def compute_tape_fatigue(
         D_sn=None if d_sn_map is None else float(np.max(d_sn_map)),
         sn_curve=None if curve is None else curve.name,
     )
+
+
+# Public entry points read the cable's own materials when called directly.
+_scope_entry_points(globals(), __all__)

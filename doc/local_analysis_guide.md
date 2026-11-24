@@ -1000,10 +1000,13 @@ print(core.loads, core.xi, core.mu_effective, core.stick_EI_Nm2)
   (`"absolute"`) every contact of a core, its neighbours included, resists the
   slip of that core against the plane section, as for a helix on a fixed
   cylinder: full slip at `π/2` times the onset curvature. `"relative"` is a
-  coupled intralayer slip model of laid cores: neighbouring cores touch at
-  the same axial position, so the friction between them resists their
-  relative slip `u_i − u_j`, while the filler and ring contacts keep the
-  absolute slip. The stations of the cores at one axial position form a
+  coupled intralayer slip model of laid cores after Skeie, Sødahl, Pettersen
+  and Verde (2023, OMAE2023-104817), who formulated the relative slip of
+  three cores, its onset and the coalescence of the slip zones at `π/3`:
+  neighbouring cores touch at the same axial position, so the friction
+  between them resists their relative slip `u_i − u_j`, while the filler and
+  ring contacts keep the absolute slip (the interlayer share and the
+  direction-tied cap are this library's). The stations of the cores at one axial position form a
   group whose intralayer friction shares sum to zero; the intralayer share of
   a station is bounded by `σ0 μ_cc (q_cc/q) |sin β| min(ψ, π/n)` (`ψ` from the
   neutral axis), the interlayer share by the Papailiou cap with
@@ -1012,6 +1015,11 @@ print(core.loads, core.xi, core.mu_effective, core.stick_EI_Nm2)
   contact only (three cores) slip starts at the same onset, the largest
   frozen friction stress is 2/3 and the full-slip moment `√3/2` of the
   absolute values, and full slip comes at `2π/(3√3) = 1.209` times the onset.
+  The largest friction stress stops growing earlier, at `π/3 = 1.047` times
+  the onset, when the slip front passes `π/3` from the neutral axis; beyond
+  it only the moment still grows. Skeie et al.'s Table 1 "full slip"
+  curvature (1.049 times the onset in their model, 1.053 in their FE) is this
+  saturation, not the coalescence at 1.209 (validation row SK23-T1).
   An independent field solver of the coupled axial equilibrium of the three
   cores (`validation/scripts/coupled_core_slip_reference.py`) gives the same
   onset, full-slip curvature, moment–curvature, friction-force distribution
@@ -1079,7 +1087,7 @@ print(core.loads, core.xi, core.mu_effective, core.stick_EI_Nm2)
   (Skeie and Sødahl 2012, Eq. 2.31) and all slip from
   `q expm1(μ sin β π/2) / (ξ EA_core sin² β cos β)` (Papailiou 1997, Eq. 15;
   with `core_core_coupling="relative"` the full-slip curvature of the coupled
-  stations, `core_full_slip_curvature`);
+  stations, `core_full_slip_curvature`, Skeie et al. 2023);
   both curvatures are reported per case and are nodes of the backbone grid.
   With `CoreFrictionSpec(core_shear=False, strand_slip=False)` the backbone
   starts on `compute_stiffness(cable).ei_max_Nm2`; with the core insulation

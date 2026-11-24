@@ -47,6 +47,7 @@ from cablexsec.cables.schema import (
     CylindricalOffsetLayer,
     CylindricalShellLayer,
 )
+from cablexsec.cables.schema import scope_entry_points as _scope_entry_points
 from cablexsec.exceptions import CableInputError, CableSchemaError
 from cablexsec.materials import library
 from cablexsec.materials.strain_life import (
@@ -385,3 +386,7 @@ def strain_life_sheath_fatigue(
         correction=correction,
         core_state=state,
     )
+
+
+# Public entry points read the cable's own materials when called directly.
+_scope_entry_points(globals(), __all__)

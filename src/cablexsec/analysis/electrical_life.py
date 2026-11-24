@@ -52,6 +52,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from cablexsec.cables.schema import CylindricalOffsetLayer
+from cablexsec.cables.schema import scope_entry_points as _scope_entry_points
 from cablexsec.exceptions import CableInputError
 from cablexsec.provenance import Provenance, ValidatedRange, check_range
 
@@ -261,3 +262,7 @@ def compute_electrical_life(
             limitations=tuple(limitations),
         ),
     )
+
+
+# Public entry points read the cable's own materials when called directly.
+_scope_entry_points(globals(), __all__)

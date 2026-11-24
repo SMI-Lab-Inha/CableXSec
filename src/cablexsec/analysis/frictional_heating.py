@@ -66,6 +66,7 @@ from cablexsec.analysis.thermal_coupling import ThermalState, thermal_section
 from cablexsec.api import compute_mkappa
 from cablexsec.cable_adapters import structural_armour_layers
 from cablexsec.cables.schema import CableData, CylindricalOffsetLayer
+from cablexsec.cables.schema import scope_entry_points as _scope_entry_points
 from cablexsec.exceptions import CableInputError
 from cablexsec.mechanics.clamp_layer import anchored_wire_node_dissipation
 from cablexsec.mechanics.papailiou import compute_mkappa_wire_slip_front
@@ -678,3 +679,7 @@ def simulate_frictional_heating(
         updates=updates,
         network=network,
     )
+
+
+# Public entry points read the cable's own materials when called directly.
+_scope_entry_points(globals(), __all__)

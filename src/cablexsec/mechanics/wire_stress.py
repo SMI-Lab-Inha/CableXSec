@@ -38,7 +38,8 @@ order
 
 with ``eps_w = sigma_f / E_w`` the bending-induced axial strain the wire
 carries (:func:`slip_state_normal_curvature`). A stuck wire with the full
-plane-section strain ``eps_w = r_h cos^2(a) p_n`` takes ``cos^4(a) p_n``;
+plane-section strain ``eps_w = r_h cos^2(a) p_n`` takes ``cos^4(a) p_n``
+(the prescribed normal curvature of the stuck helix, [Saevik2011] Eq. 50);
 with the shear-lag stick coefficient ``xi`` (``k_f = xi E_w cos^2 a``) it
 takes ``cos^2(a) cos(2a) + xi sin^2(a) cos^2(a)``; a wire sliding freely
 along its helix (``sigma_f = 0``) takes ``cos^2(a) cos(2a)``; a wire in

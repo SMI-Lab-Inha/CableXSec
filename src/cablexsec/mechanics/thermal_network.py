@@ -73,6 +73,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 from numpy.typing import NDArray
 
+from cablexsec.cables.schema import scope_entry_points as _scope_entry_points
 from cablexsec.exceptions import CableInputError, CableLookupError
 from cablexsec.materials.library import get_property
 from cablexsec.mechanics.thermal import (
@@ -818,3 +819,7 @@ def thermal_network(
         armour_source=armour_source,
         passive_cores=max(passive, 0),
     )
+
+
+# Public entry points read the cable's own materials when called directly.
+_scope_entry_points(globals(), __all__)

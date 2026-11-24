@@ -68,6 +68,7 @@ from cablexsec.cable_adapters import (
     structural_armour_layers,
 )
 from cablexsec.cables.schema import CableData
+from cablexsec.cables.schema import scope_entry_points as _scope_entry_points
 from cablexsec.exceptions import CableInputError, CableXSecError
 from cablexsec.materials import library
 from cablexsec.mechanics.bend_restrictor import CurvatureField
@@ -1713,3 +1714,7 @@ def _recommend(
             "where the sectional law alone applies.",
         )
     return tuple(out)
+
+
+# Public entry points read the cable's own materials when called directly.
+_scope_entry_points(globals(), __all__)

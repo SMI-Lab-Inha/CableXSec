@@ -1612,9 +1612,18 @@ into friction and dissipates about twice the measured work.
 - the bond is an elastic spring through the polymer outside the wires, an
   inner-loaded layered annulus free at the cable surface plus the strip
   concentration (`annulus_mode1_compliance_inner`, `bonded_face_terms`);
-- the stuck layer is unchanged;
+- stuck, the inner support `K_s` and the bond `K_b` act in parallel:
+  `xi_tot = (K_s + K_b) / (K_s + K_b + k2)`, `k2 = EA_w sin^2(a) / r_h^2`.
+  It equals the support's `xi` for a rigid support (`xi = 1`, Zeidan's outer
+  armour) and is higher otherwise (`xi` 0.50 becomes 0.510 and 0.90 becomes
+  0.9004 on the Zeidan layer);
 - in full slip the bond keeps `xi_bond` of the layer's plane-section
-  stiffness, added in parallel to the law (`bonded_face_ei`).
+  stiffness, added in parallel to the law (`bonded_face_ei`);
+- the friction cap is not reduced by the bond. The slider is the shear flow
+  of the inner face, bounded by mu times the inner-face pressure; the bond is
+  a separate elastic shear flow through the polymer outside, which adds wire
+  stress without sharing that bound. Scaling the cap by `1 - xi_bond` would
+  count the bond twice.
 
 **Zeidan.** The sheath sits on the outer armour with no tape (Table 5.2,
 Fig. 5.2). With the outer face bonded:

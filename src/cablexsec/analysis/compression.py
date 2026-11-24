@@ -97,6 +97,7 @@ from cablexsec.cables.schema import (
     HelicalLayer,
     HelicalStrandedLayer,
 )
+from cablexsec.cables.schema import scope_entry_points as _scope_entry_points
 from cablexsec.exceptions import CableInputError
 from cablexsec.materials import library
 from cablexsec.mechanics.stiffness import axial_stiffness_by_layer
@@ -1466,3 +1467,7 @@ def compute_compression_capacity(
         kappa_component_1_m=k_comp if component_limits else np.zeros(0),
         governing_component=tuple(comp_governing),
     )
+
+
+# Public entry points read the cable's own materials when called directly.
+_scope_entry_points(globals(), __all__)

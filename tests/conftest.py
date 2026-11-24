@@ -23,14 +23,16 @@ _NUMBA_CACHE: Path | None = None
 if _WORKER:
     _RUN = os.environ.get("PYTEST_XDIST_TESTRUNUID", "run")
     _ROOT = os.environ.get("NUMBA_CACHE_DIR") or tempfile.gettempdir()
-    _NUMBA_CACHE = Path(_ROOT) / f"cablexsec-numba-{_RUN}-{_WORKER}"
+    # Short: numba's cache file names repeat the source path, and a long folder
+    # name overflows the 260-character path limit of Windows.
+    _NUMBA_CACHE = Path(_ROOT) / f"cxnb-{_RUN[:8]}-{_WORKER}"
     os.environ["NUMBA_CACHE_DIR"] = str(_NUMBA_CACHE)
 
 # The sea-state batch workers keep persistent numba caches in the user cache
 # directory; the tests give them a folder of this process, removed at the end.
 _BATCH_CACHE: Path | None = None
 if "CABLEXSEC_BATCH_CACHE_DIR" not in os.environ:
-    _BATCH_CACHE = Path(tempfile.gettempdir()) / f"cablexsec-batch-{os.getpid()}"
+    _BATCH_CACHE = Path(tempfile.gettempdir()) / f"cxbt-{os.getpid()}"
     os.environ["CABLEXSEC_BATCH_CACHE_DIR"] = str(_BATCH_CACHE)
 
 _SCRIPTS = Path(__file__).resolve().parents[1] / "validation" / "scripts"

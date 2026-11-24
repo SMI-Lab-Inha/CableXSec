@@ -713,7 +713,7 @@ def test_components_route_takes_cabledyns_curvature_components():
         np.testing.assert_array_equal(history.rotation_curvature_x_1_m, -curv_y)
         np.testing.assert_array_equal(history.rotation_curvature_y_1_m, curv_x)
         gx, gy = history.strain_gradient()
-        np.testing.assert_array_equal(gx, -curv_x)
+        np.testing.assert_allclose(gx, -curv_x, rtol=1e-15, atol=0.0)
         assert history.twist_rad is not None
     with pytest.raises(CableSchemaError, match="already carry the hang-off"):
         read_cabledyn_sections(

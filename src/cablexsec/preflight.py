@@ -20,6 +20,7 @@ from typing import Literal
 import numpy as np
 
 from cablexsec.cables.schema import CableData, CylindricalOffsetLayer
+from cablexsec.cables.schema import scope_entry_points as _scope_entry_points
 from cablexsec.clamping import clamping_state
 from cablexsec.exceptions import CableSchemaError
 from cablexsec.io.series import LoadCaseSeries
@@ -333,3 +334,7 @@ def preflight(project: Project) -> PreflightReport:
         )
         issues.extend(preflight_request(model.definition, request, series))
     return PreflightReport(tuple(issues))
+
+
+# Public entry points read the cable's own materials when called directly.
+_scope_entry_points(globals(), __all__)

@@ -190,7 +190,7 @@ armour governs):
 | `distributed` | 1.30e-9 | 7.77e-10 |
 
 Since the normal local bending of the wires follows their slip state
-(CHANGELOG, Unreleased), the largest wire damage of this record (0.1 s
+(CHANGELOG, 0.2.1), the largest wire damage of this record (0.1 s
 sampling, noise 4e-4 1/m) is 0.23–0.27 % higher for the inner armour and
 0.05–0.06 % higher for the outer armour in all four columns, at the same
 wire and fibre; the table keeps its earlier values, like the other
@@ -267,8 +267,8 @@ What the comparison shows:
   raises the half-height by a further 0.03 kN·m.
 - **Core–core coupling.** With `CoreFrictionSpec(core_core_coupling="relative")`
   (the coupled intralayer slip model of the local analysis guide,
-  Section 6.1) the friction between neighbouring cores acts on their relative
-  slip. At 50 kN with the default coefficients (0.2) the bounded trefoil puts
+  Section 6.1, after Skeie et al. 2023, OMAE2023-104817) the friction between
+  neighbouring cores acts on their relative slip. At 50 kN with the default coefficients (0.2) the bounded trefoil puts
   67 % of the core contact load on the core–core contacts; the solved radial
   state has no core–core contact force at that tension (98 % of the load is
   on the filler), so the two options agree on it. On the bounded state the cores reach full slip at 1.22 instead of

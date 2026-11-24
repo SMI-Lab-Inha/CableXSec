@@ -95,6 +95,7 @@ from cablexsec.cables.schema import (
     Layer,
     is_serving,
 )
+from cablexsec.cables.schema import scope_entry_points as _scope_entry_points
 from cablexsec.exceptions import CableInputError, CableSchemaError
 from cablexsec.materials import library
 from cablexsec.mechanics.core_friction import (
@@ -1910,3 +1911,7 @@ def core_component_utilisation(
                 usage = np.maximum(usage, peak / modulus / limit.value)
         best = usage if best is None else np.maximum(best, usage)
     return best
+
+
+# Public entry points read the cable's own materials when called directly.
+_scope_entry_points(globals(), __all__)

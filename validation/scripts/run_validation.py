@@ -88,10 +88,23 @@ class Row:
     status: str
 
     def line(self) -> str:
-        return (
-            f"| {self.tier} | {self.ident} | {self.quantity} | {self.target} | "
-            f"{self.value} | {self.status} |"
-        )
+        return _prefix(self) + _cell(self.value) + _suffix(self)
+
+
+def _cell(text: str) -> str:
+    """A Markdown table cell: a literal ``|`` (as in ``|cos|``) is escaped."""
+    return text.replace("|", r"\|")
+
+
+def _prefix(row: Row) -> str:
+    return (
+        f"| {_cell(row.tier)} | {_cell(row.ident)} | {_cell(row.quantity)} | "
+        f"{_cell(row.target)} | "
+    )
+
+
+def _suffix(row: Row) -> str:
+    return f" | {_cell(row.status)} |"
 
 
 # Staleness check. A value far inside its own tolerance and below an absolute
@@ -154,14 +167,15 @@ def _row_recorded(row: Row, line: str) -> bool:
     """True if a recorded report line states this row up to round-off."""
     if line == row.line():
         return True
-    prefix = f"| {row.tier} | {row.ident} | {row.quantity} | {row.target} | "
-    suffix = f" | {row.status} |"
+    prefix, suffix = _prefix(row), _suffix(row)
     if not (line.startswith(prefix) and line.endswith(suffix)):
         return False
     if len(line) < len(prefix) + len(suffix):
         return False
     recorded = line[len(prefix) : len(line) - len(suffix)]
-    return _value_classes(recorded, row.target) == _value_classes(row.value, row.target)
+    return _value_classes(recorded, row.target) == _value_classes(
+        _cell(row.value), row.target
+    )
 
 
 def report_is_stale(
@@ -719,7 +733,30 @@ def _anchored_wire_fe_rows() -> list[Row]:
     z90, f90 = zt["cablexsec"][90.0], zt["fea"][90.0]
     z45, f45 = zt["cablexsec"][45.0], zt["fea"][45.0]
     rms = zt["fea_far_field_rms"]
+    from check_core_friction import SKEIE2023, skeie2023_table1  # noqa: PLC0415
+
+    sk = skeie2023_table1()
+    t1 = SKEIE2023
     return [
+        Row(
+            "2",
+            "SK23-T1",
+            "Skeie et al. (2023) Table 1: three tubes in core-core contact only "
+            "(R 5.37 mm, lay 7.6 deg, mu 0.2, 4.44 N/mm per neighbour), coupled "
+            "stations of core_core_coupling='relative' against the source's model "
+            "and FE: onset (contact load per metre of cable; per metre of helix as "
+            "their Eq. 16) and the curvature where the largest friction stress "
+            "stops growing, as a ratio of the onset; coalescence of the slip zones",
+            "stated, not gated (code-to-code)",
+            f"onset {sk['onset_1_mm']:.4e} 1/mm ({sk['onset_helix_1_mm']:.4e} per "
+            f"metre of helix; Eq. 16 {sk['eq16_1_mm']:.4e}) vs "
+            f"{t1['table1_onset_1_mm']:.2e}; saturation {sk['saturation_ratio']:.4f} "
+            f"x onset (pi/3) vs "
+            f"{t1['table1_full_model_1_mm'] / t1['table1_onset_1_mm']:.3f} (model) / "
+            f"{t1['table1_full_fe_1_mm'] / t1['table1_onset_1_mm']:.3f} (FE); "
+            f"coalescence {sk['coalescence_ratio']:.4f} x onset (2 pi/(3 sqrt 3))",
+            "INFO",
+        ),
         Row(
             "2",
             "AW-DONG25",

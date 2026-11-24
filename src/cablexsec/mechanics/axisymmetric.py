@@ -44,6 +44,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from cablexsec.cables.schema import CableData, CylindricalLayer, HelicalLayer
+from cablexsec.cables.schema import scope_entry_points as _scope_entry_points
 from cablexsec.exceptions import CableInputError
 from cablexsec.materials import library
 from cablexsec.mechanics.stiffness import load_sharing
@@ -407,3 +408,7 @@ def compute_winding_contact_pressure(
         p_above = float(p_iface[k + 1]) if k + 1 < n else p_ext_Pa
         out[lyr.name] = p_below + p_above  # P1 + P2 (both clamping faces)
     return out
+
+
+# Public entry points read the cable's own materials when called directly.
+_scope_entry_points(globals(), __all__)

@@ -62,6 +62,7 @@ from cablexsec.cables.schema import (
     is_serving,
     layer_stiffness,
 )
+from cablexsec.cables.schema import scope_entry_points as _scope_entry_points
 from cablexsec.exceptions import CableInputError, CableSchemaError
 from cablexsec.materials import library
 from cablexsec.mechanics.concentric_section import ElasticAnnulus, ElasticHelicalRing
@@ -819,3 +820,7 @@ def solve_cable_radial_states(
             )
         )
     return states
+
+
+# Public entry points read the cable's own materials when called directly.
+_scope_entry_points(globals(), __all__)

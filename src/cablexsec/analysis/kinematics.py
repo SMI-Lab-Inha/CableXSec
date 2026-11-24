@@ -107,6 +107,7 @@ from numpy.typing import NDArray
 
 from cablexsec._numba import HAVE_NUMBA
 from cablexsec.cables.schema import CableData, HelicalLayer
+from cablexsec.cables.schema import scope_entry_points as _scope_entry_points
 from cablexsec.exceptions import CableInputError, CableSchemaError
 from cablexsec.materials import library
 from cablexsec.mechanics.core_friction import (
@@ -1053,3 +1054,7 @@ def kinematic_history(
             limitations=tuple(limitations),
         ),
     )
+
+
+# Public entry points read the cable's own materials when called directly.
+_scope_entry_points(globals(), __all__)

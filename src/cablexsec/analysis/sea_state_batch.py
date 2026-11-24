@@ -95,6 +95,7 @@ from cablexsec.analysis.long_term import (
 from cablexsec.analysis.termination import TerminationSpec
 from cablexsec.analysis.thermal_coupling import ThermalHistory, ThermalState
 from cablexsec.cables.schema import CableData
+from cablexsec.cables.schema import scope_entry_points as _scope_entry_points
 from cablexsec.exceptions import CableInputError, CableSchemaError
 from cablexsec.io.cabledyn import (
     CableDynLineType,
@@ -1583,3 +1584,7 @@ def _json_default(value: Any) -> Any:
     if isinstance(value, Path):
         return str(value)
     raise TypeError(f"not JSON serialisable: {type(value).__name__}")
+
+
+# Public entry points read the cable's own materials when called directly.
+_scope_entry_points(globals(), __all__)

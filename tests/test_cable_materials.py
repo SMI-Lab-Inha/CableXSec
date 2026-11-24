@@ -14,6 +14,7 @@ import textwrap
 import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
@@ -337,6 +338,47 @@ def test_every_public_function_that_takes_a_cable_uses_its_materials() -> None:
             if inspect.isfunction(value) and takes_cable(value):
                 assert getattr(value, "__uses_cable_materials__", False), name
     assert cx.compute_stiffness is api.compute_stiffness
+
+
+def test_every_public_function_of_every_module_uses_the_cable_materials() -> None:
+    """Direct calls of submodule functions read the cable's materials too
+    (xi_for_layer gave the library's 1.000 for Zeidan's inner armour)."""
+    import importlib
+    import inspect
+    import pkgutil
+
+    import cablexsec
+
+    missing = []
+    for info in pkgutil.walk_packages(cablexsec.__path__, "cablexsec."):
+        if info.name.startswith("cablexsec.app"):
+            continue  # the desktop application is not part of the package
+        module = importlib.import_module(info.name)
+        for name in getattr(module, "__all__", ()):
+            value = getattr(module, name, None)
+            if (
+                inspect.isfunction(value)
+                and takes_cable(value)
+                and not getattr(value, "__uses_cable_materials__", False)
+            ):
+                missing.append(f"{info.name}.{name}")
+    assert not missing, missing
+
+
+def test_a_direct_call_reads_the_cable_materials_and_nests_cheaply() -> None:
+    from cablexsec.mechanics.stiffness import xi_for_layer
+
+    cable = cx.load_cable(
+        files("cablexsec.cables") / "zeidan2025.yaml", geometry_override=None
+    )
+    direct = xi_for_layer(cable, "inner_armour")
+    with cable.material_scope():
+        scoped = xi_for_layer(cable, "inner_armour")
+        # another scope inside: the nested call must not reuse the outer one
+        with library.material_scope(None):
+            library_only = xi_for_layer(cable, "inner_armour")
+    assert direct == scoped == pytest.approx(0.8321, abs=1e-4)
+    assert library_only == direct
 
 
 def test_cable_scope_decorator() -> None:

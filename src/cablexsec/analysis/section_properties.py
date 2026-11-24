@@ -82,6 +82,7 @@ from cablexsec.cable_adapters import (
     structural_armour_layers,
 )
 from cablexsec.cables.schema import CableData
+from cablexsec.cables.schema import scope_entry_points as _scope_entry_points
 from cablexsec.exceptions import CableInputError, CableSchemaError
 from cablexsec.materials import library
 from cablexsec.mechanics.core_friction import (
@@ -1691,3 +1692,7 @@ def compute_load_sharing(
             ),
         ),
     )
+
+
+# Public entry points read the cable's own materials when called directly.
+_scope_entry_points(globals(), __all__)

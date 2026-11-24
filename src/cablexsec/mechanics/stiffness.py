@@ -57,6 +57,7 @@ from cablexsec.cables.schema import (
     layer_stiffness,
     uses_cable_materials,
 )
+from cablexsec.cables.schema import scope_entry_points as _scope_entry_points
 from cablexsec.exceptions import CableInputError
 from cablexsec.materials import library
 from cablexsec.mechanics.core_lay import bending_factor, core_angle
@@ -982,3 +983,7 @@ def load_sharing(cable: CableData, T_N: float) -> dict[str, float]:
         return dict.fromkeys(ea, 0.0)
     eps = T_N / total
     return {name: eps * v for name, v in ea.items()}
+
+
+# Public entry points read the cable's own materials when called directly.
+_scope_entry_points(globals(), __all__)

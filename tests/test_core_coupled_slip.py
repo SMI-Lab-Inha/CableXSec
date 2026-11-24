@@ -704,3 +704,24 @@ def test_coupled_full_slip_curvature_inputs(cable):
     reference = wire_slip_stress_bounds(absolute.population, 0.2)
     np.testing.assert_array_equal(upper, reference[0])
     np.testing.assert_array_equal(lower, reference[1])
+
+
+@pytest.mark.independent_method
+def test_skeie2023_table1_is_the_saturation_of_the_peak_friction_stress() -> None:
+    """Skeie, Sødahl, Pettersen and Verde (2023) Table 1 (row SK23-T1): with
+    the contact load per metre of helix the onset is their Eq. 16; the largest
+    friction stress stops growing at pi/3 times the onset (their "full slip",
+    1.049 in their model, 1.053 in their FE), the slip zones coalesce at
+    2 pi / (3 sqrt 3)."""
+    from check_core_friction import SKEIE2023, skeie2023_table1
+
+    sk = skeie2023_table1()
+    assert sk["onset_helix_1_mm"] == pytest.approx(sk["eq16_1_mm"], rel=1e-12)
+    assert sk["onset_helix_1_mm"] == pytest.approx(
+        SKEIE2023["table1_onset_1_mm"], rel=0.01
+    )
+    assert sk["first_slip_ratio"] == pytest.approx(1.0, abs=2e-4)
+    assert sk["saturation_ratio"] == pytest.approx(math.pi / 3, abs=2e-4)
+    assert sk["coalescence_ratio"] == pytest.approx(FULL_SLIP_RATIO, abs=2e-4)
+    table = SKEIE2023["table1_full_model_1_mm"] / SKEIE2023["table1_onset_1_mm"]
+    assert sk["saturation_ratio"] == pytest.approx(table, rel=0.005)

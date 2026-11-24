@@ -32,6 +32,7 @@ from cablexsec.cables.schema import (
     HelicalLayer,
     Layer,
 )
+from cablexsec.cables.schema import scope_entry_points as _scope_entry_points
 from cablexsec.clamping import require_radial_shrinkage_route, warn_if_unclamped
 from cablexsec.exceptions import CableSchemaError
 from cablexsec.materials import library
@@ -1174,3 +1175,7 @@ def cable_to_fatigue_layers(
             )
         )
     return fatigue_layers
+
+
+# Public entry points read the cable's own materials when called directly.
+_scope_entry_points(globals(), __all__)

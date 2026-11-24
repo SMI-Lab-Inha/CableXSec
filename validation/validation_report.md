@@ -31,9 +31,9 @@ Every row is computed from published data or closed-form references in this repo
 | 1 | MK-Tcyc | compute_mkappa with a tension history cycling within the bending cycles vs the fatigue-path friction stress on the same history; work balance under the changing friction bound | < 1e-12 relative; < 1e-12 relative | 3.4e-16; 8.9e-16 | PASS |
 | 1 | MX-scale | Exported law with a slip scaling variable: compute_mkappa at T2 vs the T1 law with the bound scaled (66 kV, cores included); group elements at T2 vs the T1 elements with yield curvatures scaled (Menard, two layers); tension cycle inside the bending cycles, scaled law vs the contact-tension history over the fixed-tension Iwan residual | < 1e-12 relative; < 1e-9 relative; ratio <= 1.25 | 5.5e-16; 1.2e-13; 1.21 | PASS |
 | 1 | FL-P | Pressure-dependent friction coefficient (FrictionLaw.pressure_factor): spring-slider under pressure steps vs closed form; compiled vs NumPy direction-tied kernel under a pressure history (static/dynamic law, local pressures across the table); work balance | < 1e-9 relative; < 1e-9 relative; < 1e-9 relative | 3.0e-16; 8.7e-16; 2.5e-15 | PASS |
-| 1 | slip-onset | First-to-slip wire at the neutral axis (|cos| → 0, compression side at psi ≈ 3 lam/2; Raoof/Papailiou, not extreme-fibre loop) | |cos| < 0.2 | |cos|=0.156 | PASS |
+| 1 | slip-onset | First-to-slip wire at the neutral axis (\|cos\| → 0, compression side at psi ≈ 3 lam/2; Raoof/Papailiou, not extreme-fibre loop) | \|cos\| < 0.2 | \|cos\|=0.156 | PASS |
 | 1 | xsec-K | Coupling tangent bounds (κ→0=EI_max, κ→∞=EI_min); slip-front local slope | < 0.01% | κ0:1.91e-14% / κ∞:5.99e-13% | PASS |
-| 1 | QP-KKT | Concentric contact max|normal line force times gap| (common extension, twist and radial equilibrium) | < 1e-8 N | 1.1e-13 (q>=0: True) | PASS |
+| 1 | QP-KKT | Concentric contact max\|normal line force times gap\| (common extension, twist and radial equilibrium) | < 1e-8 N | 1.1e-13 (q>=0: True) | PASS |
 | 1 | QP-Lamé | Isolated cylinder surface compliances vs compound-cylinder shrink-fit closed form | < 1e-6 | 1.3e-16 | PASS |
 | 1 | COMP-T | Uniform free thermal expansion, all components | < 1e-6 Pa residual | 0.00e+00 Pa | PASS |
 | 1 | COMP-N | All-component axial-force equilibrium | < 1e-12 relative | 0.00e+00 | PASS |
@@ -70,6 +70,7 @@ Every row is computed from published data or closed-form references in this repo
 | 2 | SV11-SPLIT | Sævik (2011) termination increment by origin: (a) end-fitting anchor alone (the correction with uniform curvature from the end-fitting face), 14 load cases (SV11-PLANE) and LC 14 at +-8 deg (SV11-GJ); (b) no end fitting (armour anchored 20 m upstream of the face, bellmouth curvature profile unchanged), LC 14 (SV11-PLANE) and LC 14 at +-8 deg (SV11-GJ) | stated, not gated | (a) median R 1.23 (11 of 14 in band), GJ 1.36; (b) LC 14 R 2.09, GJ 2.07, largest change against the registered correction below 1e-12; registered 2.17 and 2.07, sectional 1.19 and 1.27 | INFO |
 | 2 | SV11-REACH | SV11-PLANE reach of any termination correction: largest slip demand a = kappa / kappa_c of the correction at 0.5 and 1 deg, and the load cases whose sectional R is outside [0.70, 1.43] | stated, not gated | a_max 0.37 and 0.64; R corrected 0.79 and 0.86 (sectional 0.79 and 0.86); sectional outside the band: LC 4 2.39, LC 6 1.48 | INFO |
 | 2 | SV11-EQ88 | Sævik (2011) Eq. 88, kappa = 0.067 + 0.11 s, at the two published bellmouth ends (Sævik 1.72 m; Gjøsteen et al. 1.79 m): radius and slope | Sævik's text: 3.9 m and 16 deg | 1.72 m: 3.90 m, 15.9 deg; 1.79 m: 3.79 m, 17.0 deg; 3.9 m at s = 1.722 m | INFO |
+| 2 | SK23-T1 | Skeie et al. (2023) Table 1: three tubes in core-core contact only (R 5.37 mm, lay 7.6 deg, mu 0.2, 4.44 N/mm per neighbour), coupled stations of core_core_coupling='relative' against the source's model and FE: onset (contact load per metre of cable; per metre of helix as their Eq. 16) and the curvature where the largest friction stress stops growing, as a ratio of the onset; coalescence of the slip zones | stated, not gated (code-to-code) | onset 2.2320e-05 1/mm (2.2518e-05 per metre of helix; Eq. 16 2.2518e-05) vs 2.25e-05; saturation 1.0472 x onset (pi/3) vs 1.049 (model) / 1.053 (FE); coalescence 1.2092 x onset (2 pi/(3 sqrt 3)) | INFO |
 | 2 | AW-DONG25 | Dong et al. (2025) Figs 14 and 25: armour wire anchored at both ends of one pitch, pipe bent to a uniform 0.005 1/m (a = 1.87), clamp-layer solver against the source's FE: neutral-axis wire (Fig. 14) and anchor stress for theta0 = 0, 45, 90, 135, 180 deg (Fig. 25) [MPa] | stated, not gated (code-to-code) | Fig. 14 anchor 156.4 vs FE 156.9 (source theory 147.8); peak 207.8 at X/P 0.217 vs 204.5 at 0.223; Fig. 25 anchors 81.8/117.6/156.4/191.9/200.0 vs 89.3/121.2/164.8/199.1/195.0 | INFO |
 | 2 | AW-ZT14 | Zhu and Tan (2014) Figs 4-8: normalised anchor / peak stress of an anchored wire at a = 4.92 (from their Table 2), clamp-layer solver against the source's FE, wires starting at 45 and 90 deg; FE far field against the full-slip triangle | stated, not gated (code-to-code) | 90 deg 1.19 / 1.70 vs FE 2.22 / 2.23; 45 deg 0.05 / 1.32 vs 0.97 / 1.59; FE far field RMS distance to a cosine 0.028, to the full-slip triangle 0.154 (the FE wire is not in slip) | INFO |
 | 2 | DAI20-KAPPA | Dai et al. (2020) Fig. 9: centre-tube curvature in a bellmouth (0.1 1/m, 3 m, 200 kN) at S2 and S3, rig beam with the bending stiffness identified on the S2 curvature at 4 deg (0.03995 1/m): angle where S2 reaches 90 % and S3 50 % of the bellmouth curvature | both within +-1.0 deg of the measured 7.03 and 14.57 deg | EI 59.1 kN m2; S2 6.16 deg (-0.87), S3 13.69 deg (-0.89); finer beam meshes S2/S3 error 10 mm -0.89/-0.89; 5 mm -0.91/-0.90; 2.5 mm -0.91/-0.90 deg | PASS |
@@ -83,8 +84,8 @@ Every row is computed from published data or closed-form references in this repo
 
 ## Test taxonomy (full gate suite)
 
-- analytical_sanity: `1319 passed`
-- independent_method: `92 passed`
+- analytical_sanity: `1321 passed`
+- independent_method: `93 passed`
 - full_scale: `62 passed`
 
 Run `pytest -m <marker>` to reproduce each group.

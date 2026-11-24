@@ -125,6 +125,7 @@ from cablexsec.cable_adapters import (
     structural_armour_layers,
 )
 from cablexsec.cables.schema import CableData, CylindricalOffsetLayer
+from cablexsec.cables.schema import scope_entry_points as _scope_entry_points
 from cablexsec.clamping import clamping_state
 from cablexsec.exceptions import CableInputError
 from cablexsec.materials import library
@@ -1734,3 +1735,7 @@ def compute_thermal_fatigue(
         relaxation_damage_ratio=MappingProxyType(relaxation_ratio),
         clamping=clamping,
     )
+
+
+# Public entry points read the cable's own materials when called directly.
+_scope_entry_points(globals(), __all__)
