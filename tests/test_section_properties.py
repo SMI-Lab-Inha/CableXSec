@@ -44,7 +44,7 @@ def single() -> cx.CableData:
 
 @pytest.fixture(scope="module")
 def cigre() -> cx.CableData:
-    return cx.load_cable(cx.cigre_tb880_yaml_path(), geometry_override=None)
+    return cx.load_cable(cx.poradowski2025_220kv_yaml_path(), geometry_override=None)
 
 
 def _spec(n: int = 36, mu: float = 0.2, pressure: float = 2.0e6) -> HelicalLayerSpec:
@@ -376,7 +376,9 @@ def test_fixed_radius_route_when_the_solved_section_refuses(
         result = compute_section_properties(cigre, [SectionLoadCase("A", 40e3)])
         case = result.cases[0]
         stiffness = cx.compute_stiffness(cigre)
-    assert case.route == "fixed_radius" and "radial bundle law" in case.route_reason
+    # The solved route refuses the corrugated sheath (and the stranded
+    # conductor, which it would meet next).
+    assert case.route == "fixed_radius" and "corrugated shells" in case.route_reason
     assert case.axial_stiffness_N == stiffness.ea_fixed_N
     assert (
         case.torsional_stiffness_positive_Nm2

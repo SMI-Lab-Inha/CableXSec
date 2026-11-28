@@ -4,8 +4,8 @@
 
 Gates:
 
-* thermal network: steady state equals ``compute_thermal`` (BM5 inputs,
-  136.06 deg C) and the 66 kV template; discrete energy balance; TR-BDF2
+* thermal network: steady state equals ``compute_thermal`` (BM5 inputs
+  and the 66 kV template); discrete energy balance; TR-BDF2
   order of accuracy; coupled ``R_ac(T)`` fixed point;
 * radial thermal mismatch: two-layer Lame closed forms (plane strain and
   generalised plane strain), unilateral opening on cooling;
@@ -65,7 +65,7 @@ RATED_A = 1093.0  # [IEATask49] Table 13, 630 mm2 (125 MW)
 
 @pytest.fixture(scope="module")
 def tb880() -> CableData:
-    return cx.load_cable(cx.cigre_tb880_yaml_path(), geometry_override=None)
+    return cx.load_cable(cx.poradowski2025_220kv_yaml_path(), geometry_override=None)
 
 
 @pytest.fixture(scope="module")
@@ -92,14 +92,16 @@ def _bm5_inputs() -> dict[str, float | int]:
 @pytest.mark.analytical_sanity
 @pytest.mark.parametrize("n_per_layer", [1, 3, 8])
 def test_network_steady_state_equals_compute_thermal_bm5(tb880, n_per_layer):
-    """BM5 inputs: the RC ladder's steady state is the IEC profile (136.06 C)."""
+    """BM5 inputs: the RC ladder's steady state is the IEC profile."""
     kw = _bm5_inputs()
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         ref = compute_thermal(tb880, 908.45, 1200e-6, **kw)
     net = thermal_network(tb880, 1200e-6, n_per_layer=n_per_layer, **kw)
     temps = net.steady_state(908.45, resistance_temperature_C=90.0)
-    assert ref.T_conductor_C == pytest.approx(136.06, abs=0.01)
+    # The packaged cable is a single-core-equivalent stack: with three loaded
+    # cores the ladder is a consistency case, not a benchmark (BM5 uses the
+    # source's tabulated network).
     assert temps[0] == pytest.approx(ref.T_conductor_C, rel=1e-12)
     # Annulus edges are nodes of both profiles: identical temperatures there.
     for r, t_ref in zip(ref.r_m, ref.T_C, strict=True):
@@ -121,7 +123,9 @@ def test_network_steady_state_equals_compute_thermal_66kv(t66):
         ref = compute_thermal(
             t66, RATED_A, 630e-6, conductor_material="copper_janocha2024"
         )
-    net = thermal_network(t66, 630e-6, conductor_material="copper_janocha2024")
+    net = thermal_network(
+        t66, 630e-6, conductor_material="copper_janocha2024", rating_current_A=RATED_A
+    )
     temps = net.steady_state(RATED_A, resistance_temperature_C=90.0)
     # The 0.10 mm copper tape screens make the chain stiff: agreement to its
     # conditioning.
@@ -507,9 +511,11 @@ def test_steady_currents_order_the_temperatures(t66):
     ]
     tc = [s.conductor_temperature_C for s in temps]
     assert tc[0] == pytest.approx(15.0, abs=1e-6)  # no current: ambient
-    # Rated current: 97 deg C with T_ref at the ambient; the semiconducting
-    # screens count with the insulation (doc/template_66kv.md Section 4).
-    assert tc[0] < tc[1] < tc[2] < 100.0
+    # Rated current 1093 A with R_ac(T) solved: 131.6 deg C, above the 90 deg C
+    # of XLPE under the template's assumed burial (doc/template_66kv.md
+    # Section 4.2 status note).
+    assert tc[0] < tc[1] < tc[2]
+    assert tc[2] == pytest.approx(131.6, abs=0.1)
     arm = [s.layer_temperature_C["inner_armour"] for s in temps]
     assert arm[0] < arm[1] < arm[2] < tc[2]
 
@@ -616,7 +622,7 @@ def test_input_validation(t66):
     with pytest.raises(CableInputError, match="increasing"):
         ThermalHistory.uniform(t66, [0.0, 0.0], 20.0)
     # Registered E(T) laws refuse to extrapolate beyond their source range.
-    tb = cx.load_cable(cx.cigre_tb880_yaml_path(), geometry_override=None)
+    tb = cx.load_cable(cx.poradowski2025_220kv_yaml_path(), geometry_override=None)
     hot = ThermalHistory.uniform(tb, [0.0], 120.0).blocks()[0].state
     with pytest.raises(CableInputError, match="outside the sourced"):
         thermal_material_state(tb, hot)

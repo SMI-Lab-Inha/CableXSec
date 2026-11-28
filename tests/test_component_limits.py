@@ -294,7 +294,7 @@ def test_iea_envelope_against_the_published_mbl_and_mbr(iea) -> None:
 
 def test_governing_switches_on_the_bundled_cables() -> None:
     grid = np.array([0.0, 50e3])
-    tb880 = bundled("cigre_tb880_220kv")
+    tb880 = bundled("poradowski2025_220kv")
     cover = cx.build_capacity_envelope(tb880, grid, utilisation_factor=1.0, mu=0.2)
     # The generic stranded copper takes its published 0.2 % proof stress: the
     # conductor now limits the cable before the outer cover reaches 7.7 % at

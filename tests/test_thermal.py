@@ -16,10 +16,14 @@ from cablexsec.mechanics.thermal import (
     ConductionLayer,
     ac_resistance,
     compute_thermal,
+    conductor_resistance_20C,
     dielectric_loss,
     iec_conductor_temperature,
+    lay_length_factor,
     proximity_effect_factor,
     sheath_circulating_loss_factor,
+    sheath_eddy_loss_factor,
+    sheath_reactance,
     skin_effect_factor,
     solve_crank_nicolson,
     steady_state_profile,
@@ -98,11 +102,129 @@ def test_ac_resistance_temperature_dependence() -> None:
     assert r90_skin == pytest.approx(r90 * 1.15, rel=1e-12)
 
 
-def test_dielectric_loss_threshold_100kV() -> None:
-    """Dielectric loss is off below 100 kV (a 66 kV cable) and on above."""
-    assert dielectric_loss(66.0, 2.5, 0.001, 0.015, 0.025) == 0.0  # 66 kV: off
-    w_d = dielectric_loss(220.0, 2.5, 0.001, 0.025, 0.045)  # export: on
+def test_dielectric_loss_threshold_follows_iec_5_2() -> None:
+    """[IEC60287-1-1] 5.2: counted from U0 = 127 kV for XLPE, 63.5 kV for EPR."""
+    assert dielectric_loss(66.0, 2.5, 0.001, 0.015, 0.025) == 0.0  # U0 38 kV
+    assert dielectric_loss(132.0, 2.5, 0.001, 0.015, 0.025) == 0.0  # U0 76 kV
+    w_d = dielectric_loss(220.0, 2.5, 0.001, 0.025, 0.045)  # U0 127.0 kV
     assert w_d > 0.0
+    epr = dielectric_loss(132.0, 3.0, 0.005, 0.015, 0.025, insulation_type="epr")
+    assert epr > 0.0
+    # Always (CIGRE TB 880 Guidance Point 7) and never.
+    on = dielectric_loss(66.0, 2.5, 0.001, 0.015, 0.025, include=True)
+    u0 = 66.0e3 / math.sqrt(3.0)
+    cap = 2.0 * math.pi * 8.854e-12 * 2.5 / math.log(0.025 / 0.015)
+    assert on == pytest.approx(2.0 * math.pi * 50.0 * cap * u0**2 * 0.001, rel=1e-14)
+    assert dielectric_loss(220.0, 2.5, 0.001, 0.025, 0.045, include=False) == 0.0
+    # The capacitance of a laid-up core is C_LL times that of a straight one.
+    laid = dielectric_loss(
+        66.0, 2.5, 0.001, 0.015, 0.025, include=True, lay_length_factor=1.02
+    )
+    assert laid == pytest.approx(1.02 * on, rel=1e-14)
+    with pytest.raises(ValueError, match="insulation_type"):
+        dielectric_loss(220.0, 2.5, 0.001, 0.025, 0.045, insulation_type="oil")
+
+
+def test_skin_effect_factor_has_the_three_iec_ranges() -> None:
+    """[IEC60287-1-1] 5.1.3: the formula changes at x_s = 2.8 and 3.8."""
+    f = 50.0
+
+    def r_for(xs: float) -> float:  # R' giving x_s at k_s = 1
+        return 8.0 * math.pi * f * 1.0e-7 / xs**2
+
+    for xs, expected in (
+        (2.0, 2.0**4 / (192.0 + 0.8 * 2.0**4)),
+        (3.0, -0.136 - 0.0177 * 3.0 + 0.0563 * 9.0),
+        (4.5, 0.354 * 4.5 - 0.733),
+    ):
+        assert skin_effect_factor(r_for(xs), f) == pytest.approx(expected, rel=1e-12)
+    # The ranges join within the rounding of the published coefficients.
+    lo, hi = skin_effect_factor(r_for(2.8), f), skin_effect_factor(r_for(2.8001), f)
+    assert hi == pytest.approx(lo, abs=3e-3)
+    lo, hi = skin_effect_factor(r_for(3.8), f), skin_effect_factor(r_for(3.8001), f)
+    assert hi == pytest.approx(lo, abs=3e-3)
+
+
+def test_iec60228_resistance_and_lay_up_factor() -> None:
+    """R0 from [IEC60228] Table 4; C_LL of [IEC60287-1-1] Annex A."""
+    import cablexsec as cx  # noqa: PLC0415
+
+    t66 = cx.load_cable(cx.iea_task49_66kv_yaml_path(), geometry_override=None)
+    c_ll, note = lay_length_factor(t66)
+    # Core diameter 70.40 mm, pitch 1.4542 m, C_fL 1.29 (three cores).
+    assert c_ll == pytest.approx(
+        math.sqrt(1.0 + (math.pi * 1.29 * 0.0704 / 1.4542) ** 2), rel=1e-12
+    )
+    assert c_ll == pytest.approx(1.0191, abs=1e-4)
+    assert "Annex A" in note
+    r20, basis = conductor_resistance_20C(t66, 630e-6, "copper_janocha2024")
+    assert r20 == pytest.approx(0.0283e-3, rel=1e-12)  # per km of the cable
+    assert "Table 4" in basis
+    # Between two nominal sizes: linear interpolation (CIGRE TB 880, 2.5).
+    r_mid, basis = conductor_resistance_20C(t66, 700e-6, "copper_janocha2024")
+    expected = 0.0283 + (0.0221 - 0.0283) * (700.0 - 630.0) / (800.0 - 630.0)
+    assert r_mid == pytest.approx(expected * 1e-3, rel=1e-12)
+    assert "interpolated" in basis
+    # Not a standard material: rho/A times C_LL.
+    r_other, basis = conductor_resistance_20C(
+        t66, 630e-6, "lead_sheath", lay_factor=c_ll
+    )
+    assert r_other == pytest.approx(21.4e-8 / 630e-6 * c_ll, rel=1e-12)
+    assert "rho/A" in basis
+    # A single-core cable has no lay-up.
+    single = cx.load_cable(
+        cx.inter_array_single_core_yaml_path(), geometry_override=None
+    )
+    assert lay_length_factor(single) == (1.0, "")
+
+
+def test_three_core_losses_are_computed_from_the_cable() -> None:
+    """y_s, y_p, lambda1 and R0 of the 66 kV template (IEC 60287-1-1 5.1, 5.3.11)."""
+    import cablexsec as cx  # noqa: PLC0415
+
+    t66 = cx.load_cable(cx.iea_task49_66kv_yaml_path(), geometry_override=None)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        res = compute_thermal(t66, 1093.0, 630e-6)
+    assert res.losses is not None
+    r_dc = 0.0283e-3 * (1.0 + 3.93e-3 * 70.0)
+    ys = skin_effect_factor(r_dc, 50.0)
+    s = math.sqrt(3.0) * 0.04081  # distance between conductor axes
+    yp = proximity_effect_factor(r_dc, 50.0, 0.02990, s)
+    assert res.losses["y_s"] == pytest.approx(ys, rel=1e-12)
+    assert res.losses["y_p"] == pytest.approx(yp, rel=1e-12)
+    r_ac = r_dc * (1.0 + ys + yp)
+    assert res.losses["R_ac_ohm_m"] == pytest.approx(r_ac, rel=1e-12)
+    # [IEATask49] Table 13 gives 0.04 ohm/km for the 630 mm2 cable.
+    assert round(r_ac * 1e3, 2) == 0.04
+    assert res.losses["W_d_W_m"] == 0.0  # U0 = 38 kV < 127 kV
+    lam1 = res.losses["lambda1"]
+    assert 0.05 < lam1 < 0.15
+    notes = " ".join(res.provenance.limitations)
+    assert "5.3.11" in notes and "factor 1.5" in notes
+    # A given value replaces the computed one.
+    given = compute_thermal(t66, 1093.0, 630e-6, y_s=0.0, y_p=0.0, lambda1=0.0)
+    assert given.losses["y_s"] == given.losses["y_p"] == given.losses["lambda1"] == 0.0
+    # Non-magnetic armour: the trefoil formula (5.3.2), no factor 1.5.
+    import yaml  # noqa: PLC0415
+
+    data = yaml.safe_load(cx.iea_task49_66kv_yaml_path().read_text(encoding="utf-8"))
+    data["materials"] = {
+        "stainless_armour": {
+            "E_Pa": {"value": 2.0e11, "source": "test"},
+            "nu": {"value": 0.3, "source": "test"},
+            "relative_permeability": {"value": 1.0, "source": "test"},
+        }
+    }
+    for layer in data["layers"]:
+        if layer["layer_type"] == "helical":
+            layer["material"] = "stainless_armour"
+    stainless = cx.CableData.model_validate(data)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        res_ss = compute_thermal(stainless, 1093.0, 630e-6)
+    assert "5.3.2" in " ".join(res_ss.provenance.limitations)
+    assert res_ss.losses["lambda1"] < lam1
 
 
 def test_skin_and_proximity_factors_iec_hand_values() -> None:
@@ -135,83 +257,90 @@ def test_iec_ladder_reduces_to_conduction_primitive() -> None:
 
 
 def _bm5_loss_chain() -> dict[str, float]:
-    """IEC 60287-1-1 loss chain for the Poradowski-Anders (2025) NOTE-1 cable.
+    """IEC 60287-1-1 (2023) loss chain of the Poradowski-Anders (2025) NOTE-1 cable.
 
-    220 kV 3-core (CIGRE TB 880), stranded Cu 1200 mm², copper corrugated
-    sheath. Geometry is from the public benchmark cable.
+    220 kV three-core cable, stranded Cu 1200 mm2, corrugated copper sheath
+    (Table 1 and footnote d), non-magnetic stainless armour (footnote c).
+    ``R0`` from [IEC60228] Table 4; ``lambda1'`` of the sheath from 5.3.2,
+    which CIGRE TB 880 Guidance Point 38 assigns to an SL cable under
+    non-magnetic armour (5.3.11, factor 1.5, is for magnetic armour);
+    ``lambda1''`` from 5.3.7.1 with the solid-bonding factor ``F`` of
+    5.3.6, as TB 880 Guidance Points 6 and 31 keep it.
     """
     f = 50.0
-    rho20, alpha = 1.7241e-8, 3.93e-3
-    r_dc = (rho20 / 1200e-6) * (1.0 + alpha * (90.0 - 20.0))
+    r20, alpha = 0.0151e-3, 3.93e-3  # [IEC60228] Table 4, 1200 mm2 Cu
+    r_dc = r20 * (1.0 + alpha * (90.0 - 20.0))
     ys = skin_effect_factor(r_dc, f)
-    yp = proximity_effect_factor(r_dc, f, 0.042, 0.13175)  # d_c, trefoil spacing
+    yp = proximity_effect_factor(r_dc, f, 0.042, 0.13175)  # d_c, touching cores
     r_ac = r_dc * (1.0 + ys + yp)
     w_c = 908.45**2 * r_ac
-    # Dielectric: U0 = 220/sqrt(3) kV, XLPE eps_r=2.5 tanδ=0.001 (IEC Table 3).
+    # Dielectric: U0 = 127.0 kV >= 127 kV, XLPE eps_r 2.5, tan 0.001 (Table 3).
     w_d = dielectric_loss(220.0, 2.5, 0.001, 0.0227, 0.0466, frequency_Hz=f)
-    # Sheath λ1' (circulating): Cu ring 111.95/113.95 mm, Fcor=1.3406, ~80 C.
+    # Sheath: Cu ring 111.95/113.95 mm, Fcor = 1.3406 (footnote d), ~80 degC.
     a_s = math.pi / 4 * (0.11395**2 - 0.11195**2)
-    r_s = rho20 * 1.3406 / a_s * (1.0 + alpha * (80.0 - 20.0))
+    rho_s = 1.7241e-8 * (1.0 + alpha * (80.0 - 20.0))
+    r_s = rho_s * 1.3406 / a_s
     d_s = 0.5 * (0.11195 + 0.11395)
-    x = 2.0 * (2.0 * math.pi * f) * 1e-7 * math.log(2.0 * 0.13175 / d_s)
-    lam1 = sheath_circulating_loss_factor(r_s, r_ac, x)
-    return {"W_c": w_c, "W_d": w_d, "lambda1": lam1}
+    x = sheath_reactance(0.13175, d_s, frequency_Hz=f)
+    lam1_c = sheath_circulating_loss_factor(r_s, r_ac, x)
+    lam1_e = sheath_eddy_loss_factor(
+        r_s,
+        r_ac,
+        sheath_mean_diameter_m=d_s,
+        sheath_outer_diameter_m=0.11395,
+        sheath_thickness_m=0.001,
+        sheath_resistivity_ohm_m=rho_s,
+        spacing_m=0.13175,
+        frequency_Hz=f,
+        solid_bonding_reactance_ohm_m=x,
+    )
+    return {"W_c": w_c, "W_d": w_d, "lambda1": lam1_c, "lambda1_eddy": lam1_e}
 
 
 @pytest.mark.full_scale
 def test_BM5_poradowski_buried_reference_case() -> None:
-    """BM5: reproduce Poradowski-Anders (2025) Table 1 NOTE-1 buried 220 kV cable.
+    """BM5: Poradowski-Anders (2025) Table 1 NOTE-1 buried 220 kV cable.
 
     Stated network: T1=0.6579, T2=0.1121, T3=0.0357, T4=0.3211 K.m/W (T4 the
-    external soil/Robin resistance, taken verbatim); θ_amb=15 °C, n=3.
-    Reference: I=908.45 A → θc=89.62 °C (FEM) / 90 °C (IEC analytical ampacity).
+    external soil/Robin resistance, taken verbatim); theta_amb = 15 degC,
+    n = 3. Reference: I = 908.45 A gives 89.62 degC (FEM) and 90 degC (the
+    source's IEC analytical ampacity).
 
-    Active heat sources: conductor Joule (W_c, skin+proximity) and dielectric
-    (W_d, 220 kV > 100 kV) per conductor, plus the copper-sheath circulating
-    loss factor λ1. The eddy-current term λ1'' ([IEC60287-1-1] §2.3.6, not in
-    our reference set) is the one untabulated input; it is the documented
-    residual between the circulating-only result and 89.62 °C.
+    With ``R0`` from IEC 60228 and the circulating sheath loss of IEC 5.3.2
+    (``lambda1'' = 0``, IEC) the ladder gives 85.8 degC; the earlier 84.4 degC
+    took ``R0 = rho/A``, 5 % low. Adding the eddy loss that CIGRE TB 880
+    Guidance Points 6 and 31 keep (lambda1'' = 0.19) gives 90.9 degC. The
+    1.5 factor of IEC 5.3.11 belongs to magnetic armour (TB 880 Guidance
+    Point 38) and would give 100 degC.
     """
     t1, t2, t3, t4 = 0.6579, 0.1121, 0.0357, 0.3211
-    t_amb, n, target = 15.0, 3, 89.62
+    t_amb, n = 15.0, 3
     losses = _bm5_loss_chain()
     w_c, w_d, lam1 = losses["W_c"], losses["W_d"], losses["lambda1"]
+    lam1_e = losses["lambda1_eddy"]
 
-    # IEC circulating-current sheath factor is the dominant non-Joule term.
-    assert 1.0 < lam1 < 1.15
+    def theta(lambda1: float) -> float:
+        return iec_conductor_temperature(
+            t1,
+            t2,
+            t3,
+            t4,
+            W_c=w_c,
+            W_d=w_d,
+            lambda1=lambda1,
+            n_conductors=n,
+            T_ambient_C=t_amb,
+        )
 
-    theta_circ = iec_conductor_temperature(
-        t1,
-        t2,
-        t3,
-        t4,
-        W_c=w_c,
-        W_d=w_d,
-        lambda1=lam1,
-        n_conductors=n,
-        T_ambient_C=t_amb,
-    )
-    # Circulating-only is a lower bound; residual to 89.62 is the eddy term.
-    assert 83.0 < theta_circ < target
-    assert (target - theta_circ) < 6.0
-
-    # Network correctness: with the λ1 the paper's analytical ampacity implies,
-    # the ladder reproduces 89.62 °C exactly (closes the residual via λ1'').
-    rhs = target - t_amb - (w_c + 0.5 * w_d) * t1
-    lam1_implied = (rhs / (n * (t2 + t3 + t4)) - w_d) / w_c - 1.0
-    assert 1.2 < lam1_implied < 1.35
-    theta_implied = iec_conductor_temperature(
-        t1,
-        t2,
-        t3,
-        t4,
-        W_c=w_c,
-        W_d=w_d,
-        lambda1=lam1_implied,
-        n_conductors=n,
-        T_ambient_C=t_amb,
-    )
-    assert theta_implied == pytest.approx(target, abs=0.05)
+    assert lam1 == pytest.approx(1.027, abs=1e-3)
+    assert lam1_e == pytest.approx(0.186, abs=1e-3)
+    # IEC (lambda1'' = 0): below both references.
+    assert theta(lam1) == pytest.approx(85.75, abs=0.01)
+    # With the TB 880 eddy loss: within 1.3 K of the FEM and 0.9 K of the IEC
+    # reference temperature.
+    assert theta(lam1 + lam1_e) == pytest.approx(90.89, abs=0.01)
+    # The magnetic-armour factor of 5.3.11 does not apply to stainless armour.
+    assert theta(1.5 * lam1) > 99.0
 
 
 # --------------------------------------------------------------------------- #
@@ -248,12 +377,16 @@ def test_compute_thermal_reduces_to_primitive_single_core() -> None:
     """At n_cores=1 (no dielectric, λ1=0) the wrapper == 1-D primitive + W_c·T4."""
     cable = _concentric_cable(voltage_kV=70.0)  # < 100 kV: W_d = 0
     # The cable has no conductor layer: the conductor material is given.
+    # The losses of the primitive: rho/A, no skin or proximity effect.
     res = compute_thermal(
         cable,
         current_A=600.0,
         conductor_area_m2=300e-6,
         n_cores=1,
         conductor_material="copper_stranded",
+        y_s=0.0,
+        y_p=0.0,
+        conductor_resistance_20C_ohm_m=1.7241e-8 / 300e-6,
     )
 
     # Rebuild the primitive on the same annuli with the surface raised by W_c·T4.
@@ -265,7 +398,7 @@ def test_compute_thermal_reduces_to_primitive_single_core() -> None:
         ),
         ConductionLayer(0.020, 0.024, get_property("hdpe", "lambda_W_mK")),
     ]
-    rho, alpha = 1.724e-8, 3.93e-3
+    rho, alpha = 1.7241e-8, 3.93e-3
     r_ac = (rho / 300e-6) * (1.0 + alpha * 70.0)
     w_c = 600.0**2 * r_ac
     r_int = sum(
@@ -316,7 +449,7 @@ def test_compute_thermal_refuses_inadmissible_inputs(kwargs, match) -> None:
 _PROFILE_CASES: dict[str, tuple[str, int | None]] = {
     "export_three_core": ("export_three_core_yaml_path", None),
     "inter_array_three_core": ("inter_array_three_core_yaml_path", None),
-    "cigre_tb880_single_path": ("cigre_tb880_yaml_path", 1),
+    "poradowski2025_single_path": ("poradowski2025_220kv_yaml_path", 1),
     "inter_array_single_core": ("inter_array_single_core_yaml_path", None),
 }
 
@@ -425,7 +558,16 @@ def test_compute_thermal_heat_flow_steps_at_sheath_hand_calculation() -> None:
     lam1, current, area = 0.25, 1000.0, 1000e-6
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        res = compute_thermal(cable, current, area, n_cores=1, lambda1=lam1)
+        res = compute_thermal(
+            cable,
+            current,
+            area,
+            n_cores=1,
+            lambda1=lam1,
+            y_s=0.0,
+            y_p=0.0,
+            conductor_resistance_20C_ohm_m=1.7241e-8 / area,
+        )
 
     lam_x = get_property("xlpe_qiao2025", "lambda_W_mK")
     lam_h = get_property("hdpe", "lambda_W_mK")
@@ -451,37 +593,58 @@ def test_compute_thermal_heat_flow_steps_at_sheath_hand_calculation() -> None:
 
 
 def test_three_core_filler_is_included_and_reported() -> None:
-    """The r_inner=0 cable-level filler enters T2 as the equal-filler-area annulus."""
+    """Hand ladder of the SL-type export template ([IEC60287-2-1] 4.1, 5.6).
+
+    Per-core resistances divided by C_LL; the filler and bedding under the
+    armour carry T2 = rho/(6 pi) G-bar, lower curve (cores not touching).
+    """
     cable = _load_shipped("export_three_core_yaml_path")
+    rho_cu = 1.7241e-8
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        res = compute_thermal(cable, 908.45, 1000e-6)
+        res = compute_thermal(
+            cable,
+            908.45,
+            1000e-6,
+            y_s=0.0,
+            y_p=0.0,
+            lambda1=0.0,
+            conductor_resistance_20C_ohm_m=rho_cu / 1000e-6,
+        )
     assert res.provenance is not None
     notes = [lim for lim in res.provenance.limitations if "pp_filler" in lim]
-    assert len(notes) == 1
+    assert len(notes) == 2
     assert "equal-filler-area" in notes[0]
-    assert "geometric factor NOT applied" in notes[0]
+    assert "G-bar" in notes[1] and "equal thicknesses" in notes[1]
 
-    # Hand ladder: per-core XLPE (T1) and lead sheath (one core's heat), then
-    # filler (sqrt(3) r_core .. 107.5 mm), bedding, oversheath (three cores).
-    w_c = _conductor_loss(908.45, 1000e-6)
-    w_d = dielectric_loss(220.0, 2.5, 0.001, 0.0210, 0.0420)
+    c_ll = math.sqrt(1.0 + (math.pi * 1.29 * 0.0910 / 2.138) ** 2)
+    w_c = 908.45**2 * rho_cu / 1000e-6 * (1.0 + 3.93e-3 * 70.0)
+    w_d = dielectric_loss(220.0, 2.5, 0.001, 0.0210, 0.0420, lay_length_factor=c_ll)
     q_t1, q_out, n = w_c + 0.5 * w_d, w_c + w_d, 3
-    r_eq = math.sqrt(3.0) * 0.0455
     lam = {
         m: get_property(m, "lambda_W_mK")
         for m in ("xlpe_qiao2025", "lead_sheath", "pp_filler", "hdpe")
     }
+    # Filler and bedding: x = (r_armour_in - r_offset - r_core) / D_core.
+    inner = cable.get_layer("inner_armour")
+    r_arm = float(inner.r_helix_m) - 0.5 * float(inner.d_wire_m)
+    x = (r_arm - 0.060 - 0.0455) / 0.091
+    poly = 0.0126529 + 1.101 * x - 4.56104 * x**2 + 11.5093 * x**3
+    t2 = (
+        max(1.0 / lam["pp_filler"], 1.0 / lam["hdpe"])
+        / (6.0 * math.pi)
+        * (2.0 * math.pi * poly)
+    )
     rise = (
-        q_t1 * thermal_resistance(0.0210, 0.0420, lam["xlpe_qiao2025"])
-        + q_out * thermal_resistance(0.0430, 0.0455, lam["lead_sheath"])
-        + n * q_out * thermal_resistance(r_eq, 0.1075, lam["pp_filler"])
-        + n * q_out * thermal_resistance(0.1075, 0.1105, lam["hdpe"])
+        q_t1 * thermal_resistance(0.0190, 0.0430, lam["xlpe_qiao2025"]) / c_ll
+        + q_out * thermal_resistance(0.0430, 0.0455, lam["lead_sheath"]) / c_ll
+        + n * q_out * t2
         + n * q_out * thermal_resistance(0.1270, 0.1330, lam["hdpe"])
         + n * q_out * 0.35
     )
     assert res.T_conductor_C == pytest.approx(15.0 + rise, rel=1e-12)
     # The filler is part of the profile (no silent drop).
+    r_eq = math.sqrt(3.0) * 0.0455
     assert np.any(np.isclose(res.r_m, r_eq, rtol=0.0, atol=1e-12))
 
 

@@ -85,11 +85,10 @@ def test_armour_loss_needs_a_structural_armour(t66):
     )
     with pytest.raises(CableInputError, match="lambda2 > 0 needs a structural"):
         thermal_network(loose, 630e-6, conductor_material=MATERIAL, lambda2=0.1)
-    # Without armour loss the network does not depend on the flag.
-    np.testing.assert_allclose(
-        thermal_network(loose, 630e-6, conductor_material=MATERIAL).steady_state(
-            RATED_A
-        ),
-        thermal_network(t66, 630e-6, conductor_material=MATERIAL).steady_state(RATED_A),
-        rtol=1e-12,
-    )
+    # Without structural armour the SL-type filler factor and the magnetic
+    # armour of the sheath loss ([IEC60287-1-1] 5.3.11) do not apply, and the
+    # network says so.
+    net = thermal_network(loose, 630e-6, conductor_material=MATERIAL)
+    notes = " ".join(net.provenance.limitations)
+    assert "given for an armoured three-core cable" in notes
+    assert "5.3.2" in notes

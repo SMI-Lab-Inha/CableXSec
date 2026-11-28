@@ -51,7 +51,7 @@ src/cablexsec/
   cores), field validators that reject non-finite values, and `load_cable`.
 - `__init__.py`: paths to the packaged definitions
   `inter_array_single_core_33kv.yaml`, `inter_array_three_core_33kv.yaml`,
-  `export_three_core_220kv.yaml`, `cigre_tb880_220kv.yaml`, `menard2023.yaml`
+  `export_three_core_220kv.yaml`, `poradowski2025_220kv.yaml`, `menard2023.yaml`
   and `menard2023_filled.yaml`, `iea_task49_66kv.yaml` (public 66 kV
   wet-design template) and `iea_task49_66kv_300.yaml` (derived 300 mm²
   section), `chae2023_coiling.yaml` (Chae, Nam and Shim 2023 coiling case),

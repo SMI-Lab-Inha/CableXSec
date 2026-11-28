@@ -20,7 +20,7 @@ Construction
   whose IEC heat flow is that of one core and ``1`` for an annulus that
   carries the losses of all ``n`` cores, so that the chain carries the total
   heat and its temperature drops are exactly the IEC drops
-  ([IEC60287-1-1] 1.4.1.1 Eq. 1; [NeherMcGrath1957] Eqs. 1--2).
+  ([IEC60287-1-1] 4.2.1, Formula (1); [NeherMcGrath1957] Eqs. 1--2).
 * The conductor node holds the conductor heat capacity
   (``n A_c rho c``); metallic shells and armour wires, which carry no
   conduction resistance in the ladder, add their heat capacity to the nearest
@@ -31,8 +31,10 @@ Construction
   ``n (W_c (1 + lambda1) + W_d)``, as in Eq. 1. The surface node is joined
   to the ambient temperature by the external resistance ``T4`` (a series
   resistance without heat capacity).
-* ``W_c = I^2 R_ac(T_c)`` with ``R_ac = R_20 (1 + alpha_20 (T_c - 20))(1 + y_s
-  + y_p)`` ([IEC60287-1-1] 2.1). The loss is affine in ``T_c``, so the
+* ``W_c = I^2 R_ac(T_c)`` with ``R_ac = R_0 (1 + alpha_20 (T_c - 20))(1 + y_s
+  + y_p)`` ([IEC60287-1-1] 5.1, Formula (7)); ``R_0``, ``y_s``, ``y_p``,
+  ``lambda1`` and the dielectric loss as in ``compute_thermal``, held at their
+  rated values. The loss is affine in ``T_c``, so the
   temperature-dependent resistance is solved together with the temperatures
   (implicitly, without iteration) unless a fixed evaluation temperature is
   given, which is the convention of ``compute_thermal``.
@@ -53,9 +55,8 @@ The armour loss ``lambda2 W_c`` per core enters at the nodes of the structural
 armour layers in equal shares, as in the steady ladder; ``lambda1`` and
 ``lambda2`` are whatever the caller supplies.
 
-Not represented (stated, not hidden): the sheath eddy-current factor
-``lambda1''`` (the IEC 60287-1-1 texts are not held), the IEC 60287-2-1
-three-core geometric factor, the heat capacity of the surroundings (``T4`` is
+Not represented (stated, not hidden): the belted and screened-cable factors
+of IEC 60287-2-1 (4.1.2.2, 4.1.2.3), the heat capacity of the surroundings (``T4`` is
 quasi-steady, which shortens the response of a buried cable) and axial heat
 flow. Frictional heating enters through
 :mod:`cablexsec.analysis.frictional_heating`, which adds its sources to
@@ -78,9 +79,11 @@ from cablexsec.exceptions import CableInputError, CableLookupError
 from cablexsec.materials.library import get_property
 from cablexsec.mechanics.thermal import (
     _cable_dielectric_loss,
+    _conductor_losses,
     _ladder_geometry,
-    ac_resistance,
+    _sheath_loss_factor,
     conductor_material_of,
+    thermal_resistance,
 )
 from cablexsec.provenance import Provenance
 
@@ -117,17 +120,18 @@ class ThermalNetwork:
     n_conductors : int
         Number of loaded conductors ``n``.
     r_dc20_ohm_m, alpha_R_per_K : float
-        ``R_20 = rho_20 / A`` and ``alpha_20``.
+        ``R_0`` per metre of cable ([IEC60228] Table 4, else ``rho_20 C_LL / A``)
+        and ``alpha_20``.
     y_s, y_p : float
-        Skin and proximity factors as supplied ([IEC60287-1-1] 2.1).
+        Skin and proximity factors ([IEC60287-1-1] 5.1.3 to 5.1.5).
     conductor_material : str
         Library key of the conductor (for ``rho_20`` and ``alpha_20``).
     conductor_area_m2 : float
         Conductor cross-section of one core [m^2].
     dielectric_loss_W_m : float
-        Dielectric loss of one core [W/m] (zero below 100 kV).
+        Dielectric loss of one core [W/m] ([IEC60287-1-1] 5.2).
     lambda1 : float
-        Sheath loss factor supplied by the caller.
+        Sheath loss factor (given, or computed as in ``compute_thermal``).
     ambient_C : float
         Default ambient temperature [deg C] (cable environment block).
     layer_weights : numpy.ndarray
@@ -173,7 +177,7 @@ class ThermalNetwork:
         *,
         resistance_temperature_C: float | None = None,
     ) -> float:
-        """Joule loss of one conductor ``I^2 R_ac`` [W/m] ([IEC60287-1-1] 2.1)."""
+        """Joule loss of one conductor ``I^2 R_ac`` [W/m] ([IEC60287-1-1] 5.1)."""
         t_r = (
             conductor_temperature_C
             if resistance_temperature_C is None
@@ -182,13 +186,10 @@ class ThermalNetwork:
         return float(current_A) ** 2 * self._r_ac(t_r)
 
     def _r_ac(self, temperature_C: float) -> float:
-        return ac_resistance(
-            get_property(self.conductor_material, "rho_ohm_m"),
-            self.conductor_area_m2,
-            temperature_C,
-            self.alpha_R_per_K,
-            y_s=self.y_s,
-            y_p=self.y_p,
+        return (
+            self.r_dc20_ohm_m
+            * (1.0 + self.alpha_R_per_K * (temperature_C - 20.0))
+            * (1.0 + self.y_s + self.y_p)
         )
 
     def total_heat_W_m(
@@ -571,13 +572,19 @@ def thermal_network(
     *,
     n_cores: int | None = None,
     conductor_material: str | None = None,
-    y_s: float = 0.0,
-    y_p: float = 0.0,
-    lambda1: float = 0.0,
+    y_s: float | None = None,
+    y_p: float | None = None,
+    lambda1: float | None = None,
     T4_external_Km_W: float | None = None,
     ambient_C: float | None = None,
     n_per_layer: int = 4,
     lambda2: float = 0.0,
+    conductor_resistance_20C_ohm_m: float | None = None,
+    k_s: float | None = None,
+    k_p: float | None = None,
+    include_dielectric_loss: bool | None = None,
+    rating_temperature_C: float = 90.0,
+    rating_current_A: float | None = None,
 ) -> ThermalNetwork:
     """Build the transient thermal network of a cable definition.
 
@@ -585,6 +592,14 @@ def thermal_network(
     ``n_per_layer`` sub-annuli per conduction annulus (the steady state does
     not depend on it). See the module notes for the construction. Without
     ``conductor_material`` the material of the cable's conductor layer is used.
+
+    The loss terms not given are computed as in ``compute_thermal`` and held
+    constant: ``y_s`` and ``y_p`` at ``rating_temperature_C`` (the conductor
+    temperature of ``compute_thermal``, default 90 degC), and ``lambda1`` with
+    the screen at the IEC sheath temperature for ``rating_current_A``
+    ([IEC60287-1-1] 5.3.1), or at ``rating_temperature_C`` without a current
+    (recorded). With the same values the steady state equals
+    ``compute_thermal``.
     """
     conductor_material, conductor_note = conductor_material_of(
         cable, conductor_material
@@ -608,15 +623,29 @@ def thermal_network(
         raise CableInputError("n_per_layer must be a positive integer")
     if not (math.isfinite(conductor_area_m2) and conductor_area_m2 > 0):
         raise CableInputError("conductor_area_m2 must be positive")
-    for name, value in (
+    for name, opt in (
         ("y_s", y_s),
         ("y_p", y_p),
         ("lambda1", lambda1),
         ("lambda2", lambda2),
+        ("conductor_resistance_20C_ohm_m", conductor_resistance_20C_ohm_m),
+        ("k_s", k_s),
+        ("k_p", k_p),
+        ("rating_current_A", rating_current_A),
     ):
-        _check_finite(value, name)
-        if value < 0:
+        if opt is None:
+            continue
+        _check_finite(opt, name)
+        if opt < 0:
             raise CableInputError(f"{name} must be non-negative")
+    for name, opt in (
+        ("conductor_resistance_20C_ohm_m", conductor_resistance_20C_ohm_m),
+        ("k_s", k_s),
+        ("k_p", k_p),
+    ):
+        if opt is not None and opt <= 0:
+            raise CableInputError(f"{name} must be positive")
+    _check_temperature(rating_temperature_C, "rating_temperature_C")
     geo = _ladder_geometry(cable, n_cores)
     n = geo.n
     if n < 1:
@@ -632,8 +661,11 @@ def thermal_network(
     gap_end: dict[int, float] = {}
     per_core: list[bool] = [geo.path[0].per_core]
     conductance: list[float] = []
+    # Per-core material per metre of cable is C_LL times the straight-core
+    # amount ([IEC60287-1-1] Annex A).
+    core_lay = geo.lay_factor if geo.multi_core else 1.0
     capacitance: list[float] = [
-        _rho_cp(conductor_material, "conductor") * conductor_area_m2 * n
+        _rho_cp(conductor_material, "conductor") * conductor_area_m2 * n * core_lay
     ]
     # Heat capacity of the loaded cores (conductors and per-core annuli).
     core_capacity = capacitance[0]
@@ -660,7 +692,7 @@ def thermal_network(
             conductance.append(
                 mult * 2.0 * math.pi * lyr.lambda_W_mK / math.log(r_b / r_a)
             )
-            half = 0.5 * mult * rho_cp * area
+            half = 0.5 * mult * rho_cp * area * (core_lay if annulus.per_core else 1.0)
             capacitance[start] += half
             capacitance.append(half)
             if annulus.per_core:
@@ -754,8 +786,63 @@ def thermal_network(
         names.append(layer.name)
         columns.append(column)
 
-    rho = get_property(conductor_material, "rho_ohm_m")
-    alpha_r = get_property(conductor_material, "alpha_R_per_K")
+    try:
+        get_property(conductor_material, "rho_ohm_m")
+        get_property(conductor_material, "alpha_R_per_K")
+    except CableLookupError as exc:
+        raise CableInputError(
+            f"conductor material {conductor_material!r} needs rho_ohm_m and "
+            f"alpha_R_per_K: {exc}"
+        ) from None
+    cond = _conductor_losses(
+        cable,
+        conductor_area_m2,
+        conductor_material,
+        rating_temperature_C,
+        y_s=y_s,
+        y_p=y_p,
+        r20_ohm_m=conductor_resistance_20C_ohm_m,
+        k_s=k_s,
+        k_p=k_p,
+    )
+    r_ac_rated = (
+        cond.r20_ohm_m
+        * (1.0 + cond.alpha_R_per_K * (rating_temperature_C - 20.0))
+        * (1.0 + cond.y_s + cond.y_p)
+    )
+    w_d, w_d_note = _cable_dielectric_loss(
+        cable, lay_factor=cond.lay_factor, include=include_dielectric_loss
+    )
+    loss_notes = [*cond.notes, *([w_d_note] if w_d_note else [])]
+    if lambda1 is None:
+        if rating_current_A is None:
+            t_sheath = rating_temperature_C
+            sheath_basis = (
+                f"screen at {rating_temperature_C:g} degC (no rating current "
+                "given; pass rating_current_A for the IEC sheath temperature)"
+            )
+        else:
+            t1_core = sum(
+                thermal_resistance(
+                    a.layer.r_inner_m, a.layer.r_outer_m, a.layer.lambda_W_mK
+                )
+                for a, inner in zip(geo.path, geo.in_t1, strict=True)
+                if inner
+            )
+            w_c_rated = float(rating_current_A) ** 2 * r_ac_rated
+            t_sheath = rating_temperature_C - (w_c_rated + 0.5 * w_d) * t1_core
+            sheath_basis = ""
+        lambda1, lambda1_note = _sheath_loss_factor(
+            cable,
+            geo,
+            r_ac_ohm_m=r_ac_rated,
+            sheath_temperature_C=t_sheath,
+            lay_factor=cond.lay_factor,
+        )
+        if lambda1_note:
+            loss_notes.append(
+                lambda1_note + (f"; {sheath_basis}" if sheath_basis else "")
+            )
     armour_columns = [
         columns[names.index(layer.name)]
         for layer in cable.helical_layers
@@ -768,10 +855,9 @@ def thermal_network(
         armour_source += column / float(column.sum()) / len(armour_columns)
     limitations = [
         "IEC 60287 ladder as a lumped RC chain; external T4 has no heat capacity",
-        "sheath eddy loss lambda1'' not included ([IEC60287-1-1] full text not "
-        "held); lambda1 and the armour loss factor lambda2 as supplied",
-        "three-core geometric factor [IEC60287-2-1] not applied "
-        "(filler as equal-filler-area annulus)",
+        "armour loss factor lambda2 as supplied ([IEC60287-1-1] 5.4 not "
+        "computed); loss terms held at their rated values",
+        *loss_notes,
         *geo.geometry_notes,
         *notes,
         conductor_note,
@@ -784,7 +870,8 @@ def thermal_network(
     prov = Provenance(
         method="transient IEC 60287 ladder (lumped radial RC network, TR-BDF2)",
         citations=(
-            "[IEC60287-1-1] 1.4.1.1 Eq.1, 2.1",
+            "[IEC60287-1-1] 4.2.1 Formula (1), 5.1 to 5.3, Annex A",
+            "[IEC60228] Table 4",
             "[IEC60287-2-1]",
             "[NeherMcGrath1957] Eqs.1-2",
             "[Poradowski2025] Eq.2",
@@ -803,13 +890,13 @@ def thermal_network(
         external_resistance_Km_W=float(t4),
         sheath_node=sheath_node,
         n_conductors=n,
-        r_dc20_ohm_m=rho / conductor_area_m2,
-        alpha_R_per_K=alpha_r,
-        y_s=float(y_s),
-        y_p=float(y_p),
+        r_dc20_ohm_m=cond.r20_ohm_m,
+        alpha_R_per_K=cond.alpha_R_per_K,
+        y_s=cond.y_s,
+        y_p=cond.y_p,
         conductor_material=conductor_material,
         conductor_area_m2=float(conductor_area_m2),
-        dielectric_loss_W_m=_cable_dielectric_loss(cable),
+        dielectric_loss_W_m=w_d,
         lambda1=float(lambda1),
         ambient_C=float(t_amb),
         layer_weights=np.column_stack(columns),

@@ -425,5 +425,7 @@ def test_packaged_cables_carry_their_documented_clamping():
     assert t66.is_zero and t66.is_declared
     assert {x.basis for x in t66.layers} == {"not_published"}
     assert "not published" in t66.warning_message()
-    tb = clamping_state(load_cable(cx.cigre_tb880_yaml_path(), geometry_override=None))
+    tb = clamping_state(
+        load_cable(cx.poradowski2025_220kv_yaml_path(), geometry_override=None)
+    )
     assert not tb.is_declared and "declares no" in tb.warning_message()

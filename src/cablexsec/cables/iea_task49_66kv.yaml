@@ -90,6 +90,7 @@ layers:
     r_inner_m: 0.0
     r_outer_m: 0.014161046158239446  # exactly 630 mm2 in the aligned equivalent
     conductor_area_mm2: 630.0  # [Janocha2024] Section 2.1; [IEATask49] Table 13
+    d_conductor_m: 0.02990     # [Janocha2024] Table 1 (Conductor 29.90 mm): IEC 60287 d_c
     construction: aligned_solid_equivalent
     notes: >-
       Stranded copper of 29.90 mm envelope (Table 1, Fig. 4a); wire count and

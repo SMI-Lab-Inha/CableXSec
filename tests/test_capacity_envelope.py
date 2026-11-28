@@ -56,7 +56,7 @@ def menard() -> CableData:
 
 @pytest.fixture(scope="module")
 def cigre() -> CableData:
-    return bundled("cigre_tb880_220kv")
+    return bundled("poradowski2025_220kv")
 
 
 # -- capacity envelopes ------------------------------------------------------------

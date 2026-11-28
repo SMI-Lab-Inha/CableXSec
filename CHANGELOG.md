@@ -23,6 +23,54 @@ All notable changes to CableXSec are recorded in this file. The format follows
   cases). The Zeidan section adds what the paper's EPR layer holds, that the source compares
   monotonic curves in plotted curvature (not loops), and the record zero and centre. No
   target, band, gated input or default changes; SV11-PLANE and SV11-GJ stay FAIL.
+- Thermal functions of IEC 60287-1-1:2023: `lay_length_factor` (Annex A),
+  `conductor_resistance_20C` (IEC 60228:2023 Table 4), `sheath_reactance`,
+  `sheath_eddy_loss_factor` (5.3.7.1, with the solid-bonding factor of 5.3.6 that CIGRE TB
+  880 Guidance Point 31 applies), `sl_filler_geometric_factor` (IEC 60287-2-1:2023 5.6) and
+  `DIELECTRIC_LOSS_U0_KV` (5.2). `ThermalResult.losses` holds the loss terms used. New
+  inputs: `d_conductor_m` of a conductor (the IEC `d_c` of a stranded conductor),
+  `insulation_type` of an `electrical` block, the material property
+  `relative_permeability`, and the `compute_thermal` / `thermal_network` options
+  `conductor_resistance_20C_ohm_m`, `k_s`, `k_p` and `include_dielectric_loss`
+  (`thermal_network` also `rating_temperature_C` and `rating_current_A`).
+
+### Changed
+
+- The thermal ladder follows IEC 60287-1-1:2023 and IEC 60287-2-1:2023, and the loss terms
+  are computed from the cable unless given (they defaulted to zero, which put the conductor
+  loss of a 630 mm² three-core cable about 9 % low, and more with its sheath loss):
+  - `R0` from IEC 60228 Table 4 (per km of the complete cable, as its Annex A states), else
+    `ρ/A` times the lay-up factor `C_LL`; `ρ` of copper 1.7241e-8 Ω m (IEC 60287-1-1 Table 1);
+  - the skin factor over the three ranges of `x_s` (5.1.3) and the proximity factor of a two-
+    or three-core cable (5.1.4, 5.1.5.1);
+  - the sheath loss of the per-core screens of an SL-type cable: 5.3.11 (factor 1.5, `X`
+    times `C_LL`) under magnetic armour, 5.3.2 otherwise (CIGRE TB 880 Guidance Point 38);
+    `λ1″` = 0 as in IEC (TB 880 Guidance Point 6 keeps it; see `sheath_eddy_loss_factor`);
+    single-core cables and common sheaths keep `λ1` = 0 with a note;
+  - the dielectric loss from the `U0` of the insulation type (127 kV for XLPE), not from a
+    100 kV line voltage, with the capacitance times `C_LL`;
+  - per-core thermal resistances divided by `C_LL`; `T1` from the conductor diameter `d_c`,
+    not from an area-equivalent radius (+7 % on the 66 kV template); the fillers and bedding
+    of an armoured three-core SL-type cable carry `T2 = ρ/(6π) Ḡ` (IEC 60287-2-1 4.1.4.2,
+    5.6; TB 880 Guidance Point 45) instead of the equal-area annulus.
+  On the 66 kV template at 1093 A the conductor is at 118.3 °C under the assumed burial
+  (95.3 °C before), and the AC resistance at 90 °C, 0.0395 Ω/km, rounds to the 0.04 Ω/km of
+  IEA Wind Task 49 Table 13. The project `thermal` settings default to the computed values.
+- Thermal resistivities: polyethylene 3.5 K m/W (IEC 60287-2-1 Table 1, was 2.5),
+  polypropylene fillers and yarns 6.0 K m/W (IEC 60287-2-1 4.1.2.2.4 and CIGRE TB 880 Table
+  2-3, was 4.5 without a source). Lead and aluminium sheaths have their IEC 60287-1-1 Table 1
+  resistivities.
+- The 220 kV cable of Poradowski and Anders (2025) is `poradowski2025_220kv.yaml`
+  (`cx.poradowski2025_220kv_yaml_path()`), not `cigre_tb880_220kv.yaml`: its data are the
+  paper's Table 1, not CIGRE TB 880. It has every layer of that table with its published
+  resistivity: the semiconducting conductor and insulation screens, the swelling tape, the
+  assembly (5.5 K m/W) and the air layers below and above the corrugated sheath (6.0 K m/W);
+  its `T1` is 0.6578 K m/W against the paper's 0.6579. The export 220 kV template has its
+  semiconducting screens; both left zero-resistance gaps there.
+- BM5: with `R0` from IEC 60228 the tabulated network gives 85.8 °C (84.4 °C with `ρ/A`), and
+  90.9 °C with the eddy loss that CIGRE TB 880 keeps (FEM 89.62, IEC 90 °C). The earlier
+  diagnosis named only the eddy loss. The factor 1.5 of IEC 5.3.11 is for magnetic armour; with
+  the stainless armour of this cable it would give 100 °C.
 
 ### Fixed
 
@@ -37,6 +85,11 @@ All notable changes to CableXSec are recorded in this file. The format follows
 
 ### Documentation
 
+- The thermal modules and guides cite the 2023 editions of IEC 60287-1-1, IEC 60287-2-1 and
+  IEC 60228 by clause and drop the notes that the standards were not held. They state that a
+  three-core cable with spaced-wire core screens is treated as belted by IEC 60287-2-1
+  4.1.2.2.4, which this ladder does not implement (it takes the screen as an isotherm, a
+  lower `T1`); a copper tape screen follows the SL-type route (4.1.2.3.1) that it does.
 - Credit: the coupled intralayer slip of laid cores (`core_core_coupling="relative"`, 0.2.1)
   follows Skeie, Sødahl, Pettersen and Verde (2023, OMAE2023-104817,
   doi:10.1115/OMAE2023-104817), who formulated the relative slip of three cores, its onset

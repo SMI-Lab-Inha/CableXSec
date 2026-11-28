@@ -221,8 +221,8 @@ Terms and abbreviations
 
    CIGRE TB
       A Technical Brochure of CIGRE, the international council on large electric systems. TB
-      610 defines the wet and dry cable designs; TB 862 gives mechanical tests; TB 880 is the source of a bundled 220 kV export cable
-      (:func:`~cablexsec.cigre_tb880_yaml_path`).
+      610 defines the wet and dry cable designs; TB 862 gives mechanical tests; TB 880 gives guidance on IEC 60287 rating calculations
+      (:func:`~cablexsec.poradowski2025_220kv_yaml_path`).
 
    clamp boundary layer
       The length from an anchor over which the friction-fed wire force decays to the sectional

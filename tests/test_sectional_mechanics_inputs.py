@@ -198,7 +198,7 @@ def test_section_state_input_rules(pipe):
 # Axial rigidity                                                               #
 # --------------------------------------------------------------------------- #
 def test_metallic_rigidity_leaves_out_a_polymer_shell():
-    cable = cx.load_cable(cx.cigre_tb880_yaml_path(), geometry_override=None)
+    cable = cx.load_cable(cx.poradowski2025_220kv_yaml_path(), geometry_override=None)
     shell = cable.get_layer("cu_metallic_sheath")
     plastic = cable.model_copy(
         update={
@@ -221,7 +221,7 @@ def test_metallic_rigidity_leaves_out_a_polymer_shell():
 
 
 def test_a_layer_without_modulus_carries_no_axial_or_bending_load():
-    cable = cx.load_cable(cx.cigre_tb880_yaml_path(), geometry_override=None)
+    cable = cx.load_cable(cx.poradowski2025_220kv_yaml_path(), geometry_override=None)
     target = next(
         layer
         for layer in cable.layers

@@ -123,11 +123,15 @@ class ThermalSettings(_Settings):
     #: ``None``: the material of the cable's conductor layer.
     conductor_material: str | None = None
     conductor_temp_C: float = 90.0
-    y_s: float = Field(default=0.0, ge=0)
-    y_p: float = Field(default=0.0, ge=0)
-    lambda1: float = Field(default=0.0, ge=0)
+    #: ``None``: computed from the cable (IEC 60287-1-1, see ``compute_thermal``).
+    y_s: float | None = Field(default=None, ge=0)
+    y_p: float | None = Field(default=None, ge=0)
+    lambda1: float | None = Field(default=None, ge=0)
     T4_external_Km_W: float | None = Field(default=None, ge=0)
     ambient_C: float | None = None
+    lambda2: float = Field(default=0.0, ge=0)
+    conductor_resistance_20C_ohm_m: float | None = Field(default=None, gt=0)
+    include_dielectric_loss: bool | None = None
 
 
 class CapacitySettings(_Settings):

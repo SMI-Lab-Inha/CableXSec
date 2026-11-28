@@ -135,6 +135,22 @@ class ElectricalProperties(_Frozen):
 
     permittivity_relative: float | None = None
     loss_factor_tan_delta: float | None = None
+    # [IEC60287-1-1] 5.2 insulation class for the U0 from which the dielectric
+    # loss counts; None is unfilled XLPE.
+    insulation_type: (
+        Literal[
+            "xlpe",
+            "xlpe_filled",
+            "pe",
+            "epr",
+            "pvc",
+            "butyl_rubber",
+            "paper_solid",
+            "paper_fluid",
+            "ppl",
+        ]
+        | None
+    ) = None
     vec_exponent_n: float | None = None  # n0 — VEC at T0 [Mazzanti2007] Table I
     thermal_b_k: float | None = None  # B [K] [Mazzanti2007] Table I
     vec_synergism_b: float | None = None  # b — electrical-thermal synergism
@@ -1183,6 +1199,9 @@ class CylindricalOffsetLayer(_LayerBase):
     r_outer_m: float | None = None
     # Conductor-specific (concentric-stranded) descriptors.
     conductor_area_mm2: float | None = None
+    # External diameter of a stranded conductor over its wires, the d_c of
+    # IEC 60287 (r_outer_m of an area-equivalent conductor is smaller).
+    d_conductor_m: float | None = None
     strand_diameter_mm: float | None = None
     n_strands: _Count | None = None
     strand_lay_angle_deg: float | None = None
@@ -1215,6 +1234,7 @@ class CylindricalOffsetLayer(_LayerBase):
         for name in (
             "r_outer_m",
             "conductor_area_mm2",
+            "d_conductor_m",
             "strand_diameter_mm",
         ):
             value = getattr(self, name)
@@ -1228,6 +1248,18 @@ class CylindricalOffsetLayer(_LayerBase):
             and self.r_outer_m <= self.r_inner_m
         ):
             raise ValueError("r_outer_m must be greater than r_inner_m")
+        if self.d_conductor_m is not None:
+            if self.r_inner_m is None or self.r_inner_m > 0.0:
+                raise ValueError(
+                    "d_conductor_m belongs to the conductor (r_inner_m = 0)"
+                )
+            if (
+                self.r_outer_m is not None
+                and self.d_conductor_m < 2.0 * self.r_outer_m * (1.0 - 1e-9)
+            ):
+                raise ValueError(
+                    "d_conductor_m is smaller than the conductor (2 r_outer_m)"
+                )
         if self.n_strands is not None and self.n_strands <= 0:
             raise ValueError("n_strands must be > 0")
         if (
@@ -1371,6 +1403,7 @@ class CableMaterial(_Frozen):
     rho_ohm_m: MaterialValue | None = None
     alpha_R_per_K: MaterialValue | None = None
     epsilon_r: MaterialValue | None = None
+    relative_permeability: MaterialValue | None = None
 
     @model_validator(mode="before")
     @classmethod

@@ -207,7 +207,7 @@ The section state minimises the small-strain elastic energy per axial metre with
   - `"void"`: flooded or loose yarn.
   - `"auto"`: as declared. The central interstice is void.
 - Saint-Venant twist rigidity: the bonded ring layers twist about the cable axis and each core about its own centre (both exact for annuli). The filler lobes touch cores and ring through frictionless contacts that carry no axial shear, so they twist as separate bodies with their own warping (`saint_venant_rigidity`, validation row TQ-SV), not with their polar moment about the cable axis. The filler then adds 0.32 kN m² to the Chae, Nam and Shim (2023) cable instead of 7.9 kN m², and 0.14 kN m² instead of 3.6 kN m² to the Su et al. (2026) 35 kV cable.
-- Stranded conductors whose metal area differs from the envelope, nested strands and corrugated shells are rejected, as in A3. The 220 kV template and CIGRE TB 880 are therefore unsupported.
+- Stranded conductors whose metal area differs from the envelope, nested strands and corrugated shells are rejected, as in A3. The 220 kV template and the Poradowski (2025) cable are therefore unsupported.
 
 ### 3.5 Limits
 
@@ -305,7 +305,7 @@ count.
 
 **Single-core 33 kV template.** +11 % inner `P1+P2` at 0 kN (line-force transmission), −3 % outer at 100 kN. Damage is unchanged.
 
-**220 kV three-core template and CIGRE TB 880.** Rejected: the stranded conductor area differs from its envelope, and the sheath is corrugated.
+**220 kV three-core template and Poradowski (2025).** Rejected: the stranded conductor area differs from its envelope, and the sheath is corrugated.
 
 **Loads only the solved model represents** (33 kV three-core, T = 50 kN, inner / outer `P1+P2` in MPa):
 

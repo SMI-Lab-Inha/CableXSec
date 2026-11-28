@@ -95,8 +95,11 @@ verification gates and active limitations. Read it.
   2.4, tension–tension location not reproduced). The trellis term is off by
   default; the legacy surface rule (`trellis_model="surface_swt"`) is not
   validated.
-- The IEC three-core mutual-heating factor. (Transient heat transfer through
-  the IEC 60287 ladder is available, Section 7.3.)
+- The IEC 60287-2-1 thermal resistance of belted and screened three-core
+  cables (4.1.2.2, 4.1.2.3), and of a three-core cable with spaced-wire core
+  screens, which 4.1.2.2.4 treats as belted. (The SL-type route, with the
+  filler geometric factor, and transient heat transfer through the IEC 60287
+  ladder are available, Section 7.3.)
 - The slip-branch bending stiffness of a compact, solid-filler three-core
   cable (known limitation, gap G8; [benchmarks.md](benchmarks.md), "Known
   limitation: slip-branch stiffness of compact sections").
@@ -133,7 +136,7 @@ A cable is a YAML file validated by the Pydantic schema in
 | `inter_array_three_core_yaml_path()` | `inter_array_three_core_33kv.yaml` | Public representative 33 kV three core (61 + 67 wires); cores laid at 10° (pitch 0.926 m, the IEA 66 kV bundle lay angle at this core-centre radius; direction assumed) |
 | `cablexsec.cables.inter_array_single_core_legacy_r2_yaml_path()`, `..._three_core_legacy_r2_yaml_path()` | `*_33kv_legacy_r2.yaml` | Pinned pre-correction copies (armour fill 1.13–1.24, undeclared screens): reproduction of the figures of an earlier revision of the companion article and of the validation report only |
 | `export_three_core_yaml_path()` | `export_three_core_220kv.yaml` | Public 220 kV topology example with corrugated Al sheath; cores laid at 10° (pitch 2.138 m, as the 33 kV template); not a qualified design |
-| `cigre_tb880_yaml_path()` | `cigre_tb880_220kv.yaml` | Public CIGRE TB 880 / Poradowski 220 kV export cable |
+| `poradowski2025_220kv_yaml_path()` | `poradowski2025_220kv.yaml` | Public Poradowski and Anders (2025) 220 kV export cable (single-core-equivalent stack) |
 | `menard2023_yaml_path()` | `menard2023.yaml` | Public Ménard and Cartraud (2023) three-core cable |
 | `witz1996_yaml_path()` | `witz1996.yaml` | Public Witz (1996) ISSC 2.5-inch flexible pipe (benchmarks WITZ-EI, WITZ-ID); area-equivalent round wires, initial pressure identified on the 0-bar loop |
 | `witz1996_yaml_path(wires="rectangular")` | `witz1996_rect.yaml` | The same pipe with its 6 × 3 mm strips, profiled carcass and Zeta (gap G1) |
@@ -499,7 +502,7 @@ Packaged cables:
 | Ménard and Cartraud (2023) | `initial_state` 0.3 MPa | published calibration, all contacts |
 | Witz (1996) 2.5-inch pipe | `initial_state` 1.037 MPa | identified (0-bar loop width, μ = 0.10), armour only |
 | 66 kV IEA Task 49 template | zero | not published (warns) |
-| CIGRE TB 880 export | none declared | missing (warns) |
+| Poradowski (2025) export | none declared | missing (warns) |
 
 ## 5. Worked workflow: global history to fatigue and contact indices
 
@@ -1285,7 +1288,16 @@ components = cx.compute_component_response(cable, 0.02, section_state=state)
 ```
 
 `compute_thermal` takes `ambient_C` and `T4_external_Km_W` from the
-`environment` block unless passed. The section state applies each layer's free
+`environment` block unless passed. It follows IEC 60287-1-1:2023 and IEC
+60287-2-1:2023 and computes each loss term not passed: `R0` from IEC 60228
+Table 4 (`conductor_resistance_20C_ohm_m=` for a datasheet value), the skin and
+proximity factors (`d_conductor_m` of the conductor gives the IEC `d_c` of a
+stranded conductor), the sheath loss of the per-core screens of a two- or
+three-core cable (5.3.11 under magnetic armour, 5.3.2 otherwise; `λ1″` = 0 as
+in IEC), and the dielectric loss from the `U0` of the insulation's
+`insulation_type`. A single-core cable gets no proximity or sheath loss (they
+depend on the circuit): pass `y_p` and `lambda1`. `result.losses` holds the
+values used and the provenance their basis. The section state applies each layer's free
 thermal strain and the registered polymer E(T) laws within their source
 ranges, with one temperature per annulus; `temperature_C=` (a value or a
 mapping covering every layer) replaces the profile. On this path `sigma_A_Pa`
@@ -1465,9 +1477,14 @@ Rules and limits:
 
 - All layers at `T_ref` (`ThermalHistory.isothermal`) reproduce the
   unenergised solved results bit for bit (without relaxation).
-- The thermal network has no armour loss `λ2`, no sheath eddy loss `λ1″` and
-  no IEC 60287-2-1 three-core factor (the full IEC texts are not held); a
-  three-core filler is the equal-filler-area annulus; `T4` has no heat
+- The thermal network takes the losses of `compute_thermal` (IEC
+  60287-1-1:2023: `R_0` from IEC 60228, skin and proximity factors, the
+  sheath loss of an SL-type cable, the dielectric loss above its `U_0`
+  threshold) and holds them at their rated values; it has no armour loss
+  `λ2` unless given and no sheath eddy loss `λ1″` (zero in IEC; CIGRE TB 880
+  keeps it). A three-core filler keeps the heat capacity of the
+  equal-filler-area annulus and, in an armoured SL-type cable, the thermal
+  resistance of the IEC 60287-2-1 geometric factor; `T4` has no heat
   capacity, so a buried cable responds faster than in reality.
 - Cooling below `T_ref` contracts the outer sheath onto the armour while the
   inner polymers shrink away from it; heating does the opposite. Both can

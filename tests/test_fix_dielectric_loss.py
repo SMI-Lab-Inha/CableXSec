@@ -13,7 +13,7 @@ import yaml
 import cablexsec as cx
 from cablexsec.exceptions import CableInputError
 
-SOURCE = Path(cx.__file__).parent / "cables" / "cigre_tb880_220kv.yaml"
+SOURCE = Path(cx.__file__).parent / "cables" / "poradowski2025_220kv.yaml"
 CURRENT_A, AREA_M2 = 908.45, 1200e-6
 
 

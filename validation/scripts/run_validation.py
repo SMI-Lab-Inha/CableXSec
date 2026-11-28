@@ -69,6 +69,8 @@ from cablexsec.mechanics.thermal import (
     iec_conductor_temperature,
     proximity_effect_factor,
     sheath_circulating_loss_factor,
+    sheath_eddy_loss_factor,
+    sheath_reactance,
     skin_effect_factor,
 )
 
@@ -211,38 +213,58 @@ def _pct(a: float, b: float) -> float:
     return abs(a - b) / abs(b) * 100.0
 
 
-def _bm5_conductor_temperature() -> float:
-    """Reproduce BM5 via the [Poradowski2025] Table-1 IEC thermal network.
+def _bm5_conductor_temperature() -> tuple[float, float]:
+    """BM5 from the [Poradowski2025] Table-1 IEC thermal network.
 
-    Uses ``iec_conductor_temperature`` with the paper's *tabulated* T1/T2/T3/T4
-    (public, Poradowski Table 1) — NOT the auto-built ladder of compute_thermal,
-    which omits the IEC-60287-2-1 three-core geometric factor. Circulating-
-    current sheath loss λ1' only; the eddy term λ1″ is BLOCKED (≈5 K residual).
+    Uses ``iec_conductor_temperature`` with the paper's tabulated T1/T2/T3/T4:
+    the packaged cable is a single-core-equivalent stack of a three-core
+    cable, so ``compute_thermal`` on it is not comparable. ``R0`` from
+    [IEC60228] Table 4; the circulating sheath loss of IEC 60287-1-1 5.3.2
+    (non-magnetic armour, CIGRE TB 880 Guidance Point 38). Returns the
+    temperature with ``lambda1'' = 0`` (IEC) and with the eddy loss of
+    5.3.7.1 times the solid-bonding factor F (TB 880 Guidance Points 6, 31).
     """
     t1, t2, t3, t4, t_amb = 0.6579, 0.1121, 0.0357, 0.3211, 15.0
-    rho = library.get_property("copper_stranded", "rho_ohm_m")
     alpha = library.get_property("copper_stranded", "alpha_R_per_K")
-    r_dc = (rho / 1200e-6) * (1.0 + alpha * (90.0 - 20.0))
+    r_dc = 0.0151e-3 * (1.0 + alpha * (90.0 - 20.0))  # [IEC60228] Table 4
     y_s = skin_effect_factor(r_dc, 50.0)
     y_p = proximity_effect_factor(r_dc, 50.0, 0.042, 0.13175)
     r_ac = r_dc * (1.0 + y_s + y_p)
     w_c = 908.45**2 * r_ac
     w_d = dielectric_loss(220.0, 2.5, 0.001, 0.0227, 0.0466)
     a_s = math.pi / 4 * (0.11395**2 - 0.11195**2)
-    r_s = rho * 1.3406 / a_s * (1.0 + alpha * (80.0 - 20.0))
-    x = 2.0 * (2.0 * math.pi * 50.0) * 1e-7 * math.log(2.0 * 0.13175 / 0.1129)
-    lam1 = sheath_circulating_loss_factor(r_s, r_ac, x)
-    return iec_conductor_temperature(
-        t1,
-        t2,
-        t3,
-        t4,
-        W_c=w_c,
-        W_d=w_d,
-        lambda1=lam1,
-        n_conductors=3,
-        T_ambient_C=t_amb,
+    rho_s = library.get_property("copper_tape_screen", "rho_ohm_m") * (
+        1.0 + alpha * (80.0 - 20.0)
     )
+    r_s = rho_s * 1.3406 / a_s
+    d_s = 0.5 * (0.11195 + 0.11395)
+    x = sheath_reactance(0.13175, d_s)
+    lam1 = sheath_circulating_loss_factor(r_s, r_ac, x)
+    lam1_e = sheath_eddy_loss_factor(
+        r_s,
+        r_ac,
+        sheath_mean_diameter_m=d_s,
+        sheath_outer_diameter_m=0.11395,
+        sheath_thickness_m=0.001,
+        sheath_resistivity_ohm_m=rho_s,
+        spacing_m=0.13175,
+        solid_bonding_reactance_ohm_m=x,
+    )
+
+    def theta(lambda1: float) -> float:
+        return iec_conductor_temperature(
+            t1,
+            t2,
+            t3,
+            t4,
+            W_c=w_c,
+            W_d=w_d,
+            lambda1=lambda1,
+            n_conductors=3,
+            T_ambient_C=t_amb,
+        )
+
+    return theta(lam1), theta(lam1 + lam1_e)
 
 
 def _reader_known_answer_residual() -> float:
@@ -2271,18 +2293,19 @@ def _rows() -> list[Row]:
     rows.extend(_dai2020_rows())
     rows.extend(_dai2018_rows())
 
-    theta_bm5 = _bm5_conductor_temperature()  # paper tabulated network, λ1' only
+    theta_bm5, theta_bm5_eddy = _bm5_conductor_temperature()
     rows.append(
         Row(
             "2",
             "BM5",
-            "CIGRE TB880 conductor temp (cited Poradowski tabulated T-network, λ1')",
-            "≤ 90 °C, ~5 K low",
-            f"{theta_bm5:.1f} °C "
-            "(FEM 89.62 / IEC 90; λ1″ closes residual). NOT yet from "
-            "compute_thermal(cable) — three-core geometric factor pending "
-            "IEC 60287-2-1 (not yet implemented)",
-            "PARTIAL (cited network; λ1″ + 3-core factor gated)",
+            "Poradowski (2025) 220 kV conductor temperature (cited tabulated "
+            "T-network; R0 [IEC60228], λ1' IEC 5.3.2)",
+            "≤ 90 °C (λ1″ = 0, IEC)",
+            f"{theta_bm5:.1f} °C with λ1″ = 0; {theta_bm5_eddy:.1f} °C with the "
+            "CIGRE TB 880 GP 6/31 eddy loss (FEM 89.62 / IEC 90). Not from "
+            "compute_thermal(cable): the packaged cable is a single-core-"
+            "equivalent stack of a three-core cable",
+            "PARTIAL (cited network)",
         )
     )
 
@@ -2662,7 +2685,7 @@ def main() -> None:
         "|----|------------------|-----------------------------|",
         "| BM1 | `menard2023.yaml` geometry + material library | YES — `ei_min_slip(cable)` |",
         "| BM3 | `nasution_2014_copper` curve in the S-N registry (cited fit) | YES — from the material/S-N definition |",
-        "| BM5 | Poradowski Table-1 **tabulated** T1/T2/T3 (cited) | PARTIAL — uses the cited tabulated network; `compute_thermal(cigre_tb880.yaml)` reads high (136 °C at the BM5 inputs, three cores) because the IEC-60287-2-1 three-core geometric factor is not yet applied |",
+        "| BM5 | Poradowski Table-1 **tabulated** T1/T2/T3 (cited) | PARTIAL — uses the cited tabulated network; the packaged `poradowski2025_220kv.yaml` is a single-core-equivalent stack of the three-core cable, so `compute_thermal` on it (SL-type losses and the filler geometric factor need the three cores) is not comparable |",
         "| BM6 | `copper_poon2022` SWT constants (cited registry) + representative contact | curve YES (registry); cable-level contact driver is representative, not from a cable |",
         "| WITZ | `witz1996.yaml` geometry + material library + digitised Witz Figs 5-6 | EI_min YES (parameter-free); WITZ-ID: initial pressure identified on the Fig. 5 width (declared `identified`), Fig. 6 predicted without refitting |",
         "| SV11 | `saevik2011.yaml` geometry (Table 1; outer armour, tapes and sheath assumed) + material library (polymer modulus identified on the Table 1 EI) + rig constants in `validation/scripts/check_saevik2011.py` + digitised Sævik Figs 17-23 and Gjøsteen Figs 27-35 | PARTIAL — section from the cable definition; the curvature profile along the pipe comes from a harness beam model with an assumed rotation point |",

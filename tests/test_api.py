@@ -29,7 +29,7 @@ def _menard() -> cx.CableData:
 
 
 def _tb880() -> cx.CableData:
-    return cx.load_cable(cx.cigre_tb880_yaml_path(), geometry_override=None)
+    return cx.load_cable(cx.poradowski2025_220kv_yaml_path(), geometry_override=None)
 
 
 # --------------------------------------------------------------------------- #

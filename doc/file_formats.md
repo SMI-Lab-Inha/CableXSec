@@ -96,7 +96,7 @@ them filled.
 | `helical` (armour wires) | `n_wires`, `d_wire_m`, `r_helix_m`, `lay_angle_deg` | `lay_direction` (`right_hand` default, `left_hand`), `manufacturing_clamping`, `bulk_sn`, `fretting_sn`, `transverse_slip_fraction`; flat or profiled wires: `wire_shape` (`round` default, `rectangular`, `profiled`), `wire_width_m`, `wire_thickness_m`, `wire_corner_radius_m`, `wire_area_m2`, `wire_I_normal_m4`, `wire_I_lateral_m4`, `wire_J_m4` |
 | `helical_stranded` (strand within conductor within cable) | `n_conductors`, `r_cable_m`, `lay_angle_cable_deg`, `n_strands`, `r_strand_m`, `d_strand_m`, `lay_angle_strand_deg` | `bulk_sn`, `fretting_sn` |
 | `cylindrical` (polymer annulus, bedding, filler, sheath, serving) | `r_inner_m`, `r_outer_m` | `tape` (helical tape winding), `strain_life`, `extrusion_shrinkage`, `construction` (`serving`), `stiffness` (instead of `material`) |
-| `cylindrical_offset` (core component: conductor, insulation, screen) | `r_offset_m`, `r_inner_m`, `r_outer_m` | `n_cores` (default 3), `conductor_area_mm2`, `strand_layers`, `n_strands`, `strand_diameter_mm`, `strand_lay_angle_deg`, `construction`, `electrical`, `bulk_sn`, `fretting_sn`, `strain_life`, `outer_face_pressure`, `tape` |
+| `cylindrical_offset` (core component: conductor, insulation, screen) | `r_offset_m`, `r_inner_m`, `r_outer_m` | `n_cores` (default 3), `conductor_area_mm2`, `d_conductor_m` (conductor diameter over the wires, the IEC 60287 `d_c`), `strand_layers`, `n_strands`, `strand_diameter_mm`, `strand_lay_angle_deg`, `construction`, `electrical`, `bulk_sn`, `fretting_sn`, `strain_life`, `outer_face_pressure`, `tape` |
 | `cylindrical_shell` (lead or corrugated aluminium sheath) | `r_mid_m`, `t_m` | `f_corrugation` (default 1), `scf` (default 1), `construction` (`bonded_laminate`), `bulk_sn`, `fretting_sn`, `strain_life` |
 
 `construction: serving` on a `cylindrical` layer declares a served yarn or a
@@ -235,6 +235,7 @@ temperature, scaled to `E_Pa`.
 | `creep_coeff`, `creep_exponent` | – | `rho_ohm_m` | Ω m |
 | `sigma_y_Pa`, `sigma_UTS_Pa` | Pa | `alpha_R_per_K` | 1/K |
 | `epsilon_allow` | – (a ratio) | `epsilon_r` | – |
+| | | `relative_permeability` | – |
 
 Values outside the admissible range of a property are rejected. Materials and
 S–N curves can also be registered for a session with `cx.register_material`

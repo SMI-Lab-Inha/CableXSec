@@ -233,7 +233,7 @@ def test_packaged_cables_declare_only_registered_curve_names():
     """Every S-N or contact-life name declared by a bundled cable is registered."""
     known = set(SN_CURVES) | set(BLOCKED_SN_CURVES) | set(SWT_LIFE)
     paths = [
-        cx.cigre_tb880_yaml_path(),
+        cx.poradowski2025_220kv_yaml_path(),
         cx.menard2023_yaml_path(),
         cx.inter_array_single_core_yaml_path(),
         cx.inter_array_three_core_yaml_path(),

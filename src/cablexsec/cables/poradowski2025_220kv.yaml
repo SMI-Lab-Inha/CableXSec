@@ -1,0 +1,225 @@
+---
+# Poradowski & Anders (2025) 220 kV export cable — PUBLIC.
+#
+# Geometry and thermal resistivities are from Poradowski & Anders, Ocean
+# Engineering 328 (2025) 121027, Table 1 and its footnotes (the source cites
+# CIGRE TB 880 for the construction; nothing here is taken from TB 880).
+# Public data only: this is the section-0.9-safe export demonstration cable.
+# It is modelled as a single-core-equivalent concentric stack, as in the
+# source's axisymmetric thermal model; radii are cumulative outer radii from
+# the published nominal diameters. Every layer of Table 1 is present with its
+# published thermal resistivity: the semiconducting conductor and insulation
+# screens (2.5 K m/W), the swelling tape (12), the assembly (5.5, footnote b)
+# and the polymeric tapes (6.0), and the air layers of 6.0 K m/W that the
+# source puts below and above the corrugated sheath, modelled as a ring of
+# 111.95/113.95 mm (footnote d).
+#
+# Values flagged "representative" are NOT in Poradowski Table 1 (armour lay
+# angles; corrugation stiffness factor; armour material; the elastic
+# properties of the screens, tapes, fillers and air layers, materials block).
+# They are typical values used only for the mechanical demonstration and are
+# clearly marked.
+cable:
+  name: "Poradowski & Anders (2025) 220 kV export cable"
+  description: "220 kV three-core export cable as a single-core-equivalent stack (Poradowski & Anders 2025, Table 1)"
+  manufacturer: "Public (Poradowski & Anders 2025)"
+  source_document: "Poradowski & Anders, Ocean Engineering 328 (2025) 121027, Table 1"
+  voltage_kV: 220
+  design_life_years: 25
+
+environment:
+  ambient_C: 15.0                 # [Poradowski2025] Table 1 NOTE 1 (buried 15 degC)
+  T4_external_Km_W: 0.3211        # [Poradowski2025] Table 1 NOTE 1 (external/soil)
+  frequency_Hz: 50.0
+  source: "[Poradowski2025] Table 1 NOTE 1 (directly buried reference case)"
+
+materials:
+  semicon_poradowski2025:
+    description: Semiconducting tape of the conductor and insulation screens
+    polymer: true
+    E_Pa: {value: 150.0e6, source: "representative: as xlpe_qiao2025 at 20 degC"}
+    nu: {value: 0.45, source: "representative: as xlpe_qiao2025"}
+    rho_kg_m3: {value: 920.0, source: "representative: as xlpe_qiao2025"}
+    alpha_T_K: {value: 1.0e-4, source: "representative: as xlpe_qiao2025"}
+    rho_cp_J_m3K: {value: 2.4e6, source: "representative: as xlpe_qiao2025"}
+    lambda_W_mK: {value: 0.4, source: "[Poradowski2025] Table 1, Nos. 2 and 4: 2.5 K m/W"}
+  swelling_tape_poradowski2025:
+    description: Swelling tape of the water barrier
+    E_Pa: {value: 3.0e9, source: "representative: as polyester_tape"}
+    nu: {value: 0.38, source: "representative: as polyester_tape"}
+    rho_kg_m3: {value: 1380.0, source: "representative: as polyester_tape"}
+    alpha_T_K: {value: 7.0e-5, source: "representative: as polyester_tape"}
+    rho_cp_J_m3K: {value: 1.7e6, source: "representative: as polyester_tape"}
+    lambda_W_mK: {value: 0.08333333333333333, source: "[Poradowski2025] Table 1, No. 5: 12 K m/W"}
+  sheath_air_poradowski2025:
+    description: Air below and above the corrugated sheath (source's thermal model)
+    E_Pa: {value: 1.0e5, source: "representative: an air layer carries no load; small modulus"}
+    nu: {value: 0.0, source: "representative"}
+    rho_kg_m3: {value: 1.2, source: "representative: air"}
+    alpha_T_K: {value: 0.0, source: "representative"}
+    rho_cp_J_m3K: {value: 1.2e3, source: "representative: air"}
+    lambda_W_mK: {value: 0.16666666666666666, source: "[Poradowski2025] Table 1, footnote d: 6.0 K m/W"}
+  filler_poradowski2025:
+    description: Semiconducting polymeric fillers with voids (assembly)
+    polymer: true
+    E_Pa: {value: 1.5e9, source: "representative: as pp_filler"}
+    nu: {value: 0.40, source: "representative: as pp_filler"}
+    rho_kg_m3: {value: 905.0, source: "representative: as pp_filler"}
+    alpha_T_K: {value: 1.5e-4, source: "representative: as pp_filler"}
+    rho_cp_J_m3K: {value: 1.8e6, source: "representative: as pp_filler"}
+    lambda_W_mK: {value: 0.18181818181818182, source: "[Poradowski2025] Table 1, No. 8 and footnote b: 5.5 K m/W for the assembly"}
+  polymeric_tape_poradowski2025:
+    description: Polymeric tapes of the outer armour bedding
+    E_Pa: {value: 3.0e9, source: "representative: as polyester_tape"}
+    nu: {value: 0.38, source: "representative: as polyester_tape"}
+    rho_kg_m3: {value: 1380.0, source: "representative: as polyester_tape"}
+    alpha_T_K: {value: 7.0e-5, source: "representative: as polyester_tape"}
+    rho_cp_J_m3K: {value: 1.7e6, source: "representative: as polyester_tape"}
+    lambda_W_mK: {value: 0.16666666666666666, source: "[Poradowski2025] Table 1, No. 11: 6.0 K m/W"}
+
+layers:
+
+  - name: cu_conductor
+    layer_type: cylindrical_offset
+    material: copper_stranded
+    n_cores: 1
+    r_offset_m: 0.0
+    r_inner_m: 0.0
+    r_outer_m: 0.0210            # dia 42.0 mm [Poradowski2025] Table 1
+    conductor_area_mm2: 1200.0   # [Poradowski2025] Table 1 (stranded Cu)
+    construction: stranded
+    notes: "Internal lay not tabulated; axial reduction uses actual Cu area, not the envelope. No solid-annulus radial substitution."
+    source: "[Poradowski2025] Table 1"
+
+  - name: conductor_screen
+    layer_type: cylindrical_offset
+    material: semicon_poradowski2025
+    n_cores: 1
+    r_offset_m: 0.0
+    r_inner_m: 0.0210
+    r_outer_m: 0.0227            # dia 45.4 mm (1.7 mm)
+    structural: false
+    source: "[Poradowski2025] Table 1, No. 2 (semi-conductive tape)"
+
+  - name: xlpe_insulation
+    layer_type: cylindrical_offset
+    material: xlpe_qiao2025
+    n_cores: 1
+    r_offset_m: 0.0
+    r_inner_m: 0.0227            # over conductor screen, dia 45.4 mm
+    r_outer_m: 0.0466            # under insulation screen, dia 93.2 mm
+    electrical:
+      permittivity_relative: 2.5     # [IEC60287-1-1] Table 3, XLPE > 30 kV
+      loss_factor_tan_delta: 0.001   # [IEC60287-1-1] Table 3, XLPE > 30 kV
+      vec_exponent_n: 15.0           # n0 [Mazzanti2007] Table I (XLPE)
+      thermal_b_k: 12430             # B [K] [Mazzanti2007] Table I (XLPE)
+      vec_synergism_b: 4420          # b [Mazzanti2007] Table I (XLPE)
+      field_threshold_kV_mm: 5.0     # E0 [Mazzanti2007] Table I
+      mechanical_beta: 100.0         # CableXSec screening extension (NOT Mazzanti)
+    source: "[Poradowski2025] Table 1 (XLPE 23.9 mm); electrical [IEC60287]/[Mazzanti2007] Table I"
+
+  - name: insulation_screen
+    layer_type: cylindrical_offset
+    material: semicon_poradowski2025
+    n_cores: 1
+    r_offset_m: 0.0
+    r_inner_m: 0.0466
+    r_outer_m: 0.0481            # dia 96.2 mm (1.5 mm)
+    structural: false
+    source: "[Poradowski2025] Table 1, No. 4 (semi-conductive tape)"
+
+  - name: water_barrier
+    layer_type: cylindrical
+    material: swelling_tape_poradowski2025
+    r_inner_m: 0.0481            # over insulation screen, dia 96.2 mm
+    r_outer_m: 0.0517            # dia 103.4 mm (swelling tape)
+    structural: false
+    source: "[Poradowski2025] Table 1, No. 5"
+
+  - name: sheath_air_inner
+    layer_type: cylindrical
+    material: sheath_air_poradowski2025
+    r_inner_m: 0.0517
+    r_outer_m: 0.055975          # inside of the modelled ring, dia 111.95 mm
+    structural: false
+    source: "[Poradowski2025] Table 1, footnote d (air layer below the sheath)"
+
+  - name: cu_metallic_sheath
+    layer_type: cylindrical_shell
+    material: copper_tape_screen
+    r_mid_m: 0.056475           # corrugated Cu ring, modelled 111.95/113.95 mm
+    t_m: 0.001                  # 1.0 mm [Poradowski2025] Table 1 footnote d
+    f_corrugation: 0.5         # representative corrugation stiffness factor (NOT TB 880)
+    scf: 2.0                   # representative corrugation-root SCF (NOT TB 880)
+    source: "[Poradowski2025] Table 1 footnote d (dims); f_corr/SCF representative"
+
+  - name: sheath_air_outer
+    layer_type: cylindrical
+    material: sheath_air_poradowski2025
+    r_inner_m: 0.056975          # outside of the modelled ring, dia 113.95 mm
+    r_outer_m: 0.06125           # dia 122.5 mm
+    structural: false
+    source: "[Poradowski2025] Table 1, footnote d (air layer above the sheath)"
+
+  - name: anti_corrosion_sheath
+    layer_type: cylindrical
+    material: hdpe
+    r_inner_m: 0.06125          # dia 122.5 mm
+    r_outer_m: 0.065875         # dia 131.75 mm (semi-conductive PE)
+    source: "[Poradowski2025] Table 1"
+
+  - name: assembly_filler
+    layer_type: cylindrical
+    material: filler_poradowski2025
+    r_inner_m: 0.065875
+    r_outer_m: 0.14195          # dia 283.9 mm (assembling / fillers)
+    structural: false
+    source: "[Poradowski2025] Table 1"
+
+  - name: inner_armour_bedding
+    layer_type: cylindrical
+    material: hdpe
+    r_inner_m: 0.14195
+    r_outer_m: 0.14495          # dia 289.9 mm
+    structural: false
+    source: "[Poradowski2025] Table 1"
+
+  - name: inner_armour
+    layer_type: helical
+    material: galvanised_steel_armour   # representative (Poradowski: stainless, non-magnetic)
+    n_wires: 128                # [Poradowski2025] Table 1
+    d_wire_m: 0.007             # 7.0 mm [Poradowski2025] Table 1
+    r_helix_m: 0.14845          # bedding OD + d_wire/2
+    lay_angle_deg: 12.0         # representative submarine armour lay angle (NOT TB 880)
+    lay_direction: right_hand
+    bulk_sn: saevik_2011_flat_steel
+    source: "[Poradowski2025] Table 1 (count/dia); lay angle representative; material representative"
+
+  - name: outer_armour_bedding
+    layer_type: cylindrical
+    material: polymeric_tape_poradowski2025
+    r_inner_m: 0.15195
+    r_outer_m: 0.15425          # dia 308.5 mm
+    structural: false
+    source: "[Poradowski2025] Table 1"
+
+  - name: outer_armour
+    layer_type: helical
+    material: galvanised_steel_armour   # representative (Poradowski: stainless, non-magnetic)
+    n_wires: 135                # [Poradowski2025] Table 1
+    d_wire_m: 0.007             # 7.0 mm [Poradowski2025] Table 1
+    r_helix_m: 0.15775          # bedding OD + d_wire/2
+    lay_angle_deg: 12.0         # representative submarine armour lay angle (NOT TB 880)
+    lay_direction: left_hand
+    bulk_sn: saevik_2011_flat_steel
+    source: "[Poradowski2025] Table 1 (count/dia); lay angle representative; material representative"
+
+  - name: outer_cover
+    layer_type: cylindrical
+    material: hdpe
+    r_inner_m: 0.16125          # dia 322.5 mm
+    r_outer_m: 0.16755          # dia 335.1 mm
+    source: "[Poradowski2025] Table 1"
+
+aggregate_properties:
+  OD_mm: 335.1                  # [Poradowski2025] Table 1

@@ -47,9 +47,10 @@ What CableXSec computes
      - Hertz contact and subsurface stress, Mindlin partial slip, fretting regimes, wear,
        SWT critical-plane recovery
    * - Thermal
-     - IEC 60287 thermal ladder for the conductor temperature (three-core geometric factor and
-       sheath eddy loss not applied, so conservative for three-core cables), a transient thermal
-       network, frictional heating and the thermal change of the clamping
+     - IEC 60287-1-1/2-1:2023 thermal ladder for the conductor temperature (IEC 60228
+       resistance, skin, proximity and SL-type sheath losses, lay-up factor, SL filler geometric
+       factor), a transient thermal network, frictional heating and the thermal change of the
+       clamping
    * - Limit states
      - armour yield and sheath strain envelopes, armour compression, coiling, sheaves,
        capacity checks of time series

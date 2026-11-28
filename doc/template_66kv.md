@@ -65,7 +65,7 @@ Status: **P** published value; **D** derived from published values;
 | PE allowable strain | 7.7 % (MDPE, HDPE) | API 17J Table 6, p. 19 (PE sheaths of unbonded flexible pipe), transferred; no power-cable value is published (DNVGL-ST-0119 16.2.2, p. 149) | P (other source) |
 | XLPE, PPY, copper tape screen limits | none | No public value; the results say "no limit given" | — |
 | Copper bending modulus | 5 GPa effective | Same model assumption as `copper_stranded` | A |
-| Thermal properties | λ, ρc_p, α of the generic library grades | [IEC60287], [Qiao2025] as cited in the library | P (other source) |
+| Thermal properties | λ, ρc_p, α of the generic library grades | λ: IEC 60287-2-1:2023 Table 1 (XLPE and PE 3.5 K·m/W), CIGRE TB 880 Table 2-3 (PP yarn 6.0 K·m/W); ρc_p, α as cited in the library | P (other source) |
 | Manufacturing clamping | `manufacturing_clamping` of both armour layers: zero, basis `not_published`; friction-dependent analyses warn (`MissingClampingStateWarning`) | Not stated by the source (no winding stress or extrusion pressure) | A |
 | Wet design, flooded annulus | `water_ingress: {design: wet, armour_annulus: flooded}` | No barrier in Table 1; CIGRE TB 610 5.4.3; ORE Catapult 2022 | D |
 | Armour S–N | `saevik_2011_flat_steel` (seawater, CP) | Flooded annulus; the source uses a DNV-RP-C203 curve (Fig. 27) of unstated class | A |
@@ -159,7 +159,8 @@ th = cx.compute_thermal(cable, current_A=1093.0, conductor_area_m2=630e-6,
 | Armour yield, pure tension | about 1.1 MN | about 1000 kN, Section 3.3 | |
 | Copper 120 MPa plastic limit, pure tension | 704 kN (characteristic envelope, factors 1.0) | about 600 kN (Fig. 21); MBL 659 kN (IEA Table 13) | +6.9 % against the MBL; governs the envelope (Section 4.6) |
 | Copper 120 MPa plastic limit, pure bending | 0.362 1/m, bend radius 2.76 m, bent towards a core; 0.353 1/m, 2.84 m in the worst bending direction, 30° from a core (strand basis of the 5 GPa bending modulus) | 0.5 1/m (Section 3.3); MBR 2.76 m (IEA Table 13) | Set by the assumed bending modulus (Section 4.6) |
-| Conductor temperature at 1093 A (125 MW) | 95.3 °C (armour 61.0 °C) | 125 MW rating, IEA Table 13 (90 °C XLPE basis) | Assumed T4; no three-core factor or λ2; the semiconducting screens count with the insulation (88.9 °C with the earlier full copper screens), and the stranding voids of the area-equivalent conductor, counted with the conductor screen, add about 1 K |
+| AC resistance at 90 °C | 0.0395 Ω/km (`R0` 0.0283 Ω/km, IEC 60228 Table 4; `y_s` 0.060, `y_p` 0.039) | 0.04 Ω/km, IEA Table 13 | IEC 60287-1-1:2023 5.1 |
+| Conductor temperature at 1093 A (125 MW) | 118.3 °C (armour 73.6 °C); 90 °C at about 932 A | 125 MW, IEA Table 13 (installation not stated) | Under the assumed burial (`T4` 0.343 K·m/W, 15 °C); IEC 60287:2023 losses (`λ1` 0.093 of the copper tape screens, IEC 60287-1-1 5.3.11) and thermal resistances (lay-up factor 1.019, `T1` from the 29.90 mm conductor, PE 3.5 and PP yarn 6.0 K·m/W, filler geometric factor `T2` 0.109 K·m/W); no `λ2`. Before these, 95.3 °C |
 | Mass | 55.4 kg/m (54.9 kg/m without the assumed copper tape) | 55.76 kg/m, IEA Table 13; 547 N/m in air, Janocha Table 5 | −0.6 %; screens after the source's section model (Section 2.1); 76.3 kg/m with Table 1 read as copper |
 
 The friction-dependent values from here to the end of the page were computed
@@ -281,6 +282,15 @@ What the comparison shows:
   not change.
 
 ### 4.2 Energised cable: temperature history into clamping and fatigue
+
+**Status (28 November 2026).** The thermal ladder now follows IEC
+60287-1-1/2-1:2023 (Section 2 table, conductor temperature row). Under the
+assumed burial the conductor is at 131.6 °C at 1093 A with the coupled
+`R_ac` (`T_ref` 20 °C, 50 kN), above the 90 °C of XLPE, with an inner-armour
+clamping of 681 kPa against 44.4 kPa unenergised and a thermal wire stress of
++143.1 MPa; the cold state has 45.4 kPa and the relaxed variant (`T_ref`
+15 °C, f = 0.2) 348 kPa against 46.9 kPa. The tables below are kept as the
+record of 18 November and are not regenerated.
 
 **Status (18 November 2026).** The tables and factors of Sections 4.2 and
 4.2.1 were computed with the earlier full copper screens of Table 1 and are
@@ -506,8 +516,7 @@ solid, which the radial solution needs.
   thickness `t = 29.90/9 = 3.322` mm, helix radii `i t`, and `630/61 = 10.33`
   mm² of copper per wire (`wire_area_m2`, the compacted area; fill 0.90 of the
   envelope). The envelope lies within the 28.7–32.5 mm of a compacted 630 mm²
-  Class 2 conductor (IEC 60228:2004, Annex C, as reproduced by a manufacturer's
-  catalogue; the standard itself is not held).
+  Class 2 conductor (IEC 60228:2023, Annex C, Table C.2).
 - **Lay ratios** (pitch over the ring's outer diameter) of the public copper
   conductors:
 

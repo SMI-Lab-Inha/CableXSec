@@ -14,7 +14,7 @@ from cablexsec.cables.schema import CableData, CoreStrandRing, load_cable
 __all__ = [
     "CableData",
     "chae2023_yaml_path",
-    "cigre_tb880_yaml_path",
+    "poradowski2025_220kv_yaml_path",
     "export_three_core_yaml_path",
     "iea_task49_66kv_300_yaml_path",
     "iea_task49_66kv_stranded",
@@ -204,13 +204,14 @@ def iea_task49_66kv_stranded(
     )
 
 
-def cigre_tb880_yaml_path() -> Path:
-    """Return the path to the packaged CIGRE TB 880 / Poradowski 220 kV cable.
+def poradowski2025_220kv_yaml_path() -> Path:
+    """Return the path to the packaged Poradowski & Anders (2025) 220 kV cable.
 
-    A fully public export-cable definition (published geometry) used for
-    the export demonstration and benchmark BM5.
+    A fully public export-cable definition (Ocean Eng. 328, 121027, Table 1)
+    as a single-core-equivalent stack, used for the export demonstration and
+    benchmark BM5.
     """
-    return Path(str(resources.files("cablexsec.cables") / "cigre_tb880_220kv.yaml"))
+    return Path(str(resources.files("cablexsec.cables") / "poradowski2025_220kv.yaml"))
 
 
 def menard2023_yaml_path() -> Path:
