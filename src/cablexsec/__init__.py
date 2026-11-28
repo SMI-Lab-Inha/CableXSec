@@ -107,10 +107,14 @@ from cablexsec.analysis.neutral_axis import (
 )
 from cablexsec.analysis.rig_test import (
     GaugeLocation,
+    RigBlock,
     RigProtocol,
     RigSetup,
     RigTestResult,
+    SpecimenCheck,
+    component_pitches,
     simulate_rig_test,
+    tb862_specimen_checks,
 )
 from cablexsec.analysis.sea_state_batch import (
     CapacityBatchCheck,
@@ -479,9 +483,13 @@ __all__ = [
     # rig-test simulation and gauge planning
     "simulate_rig_test",
     "RigProtocol",
+    "RigBlock",
     "RigSetup",
     "GaugeLocation",
     "RigTestResult",
+    "SpecimenCheck",
+    "component_pitches",
+    "tb862_specimen_checks",
     # bending-test arrangements (gap T1)
     "simulate_bending_test",
     "BendingProtocol",
