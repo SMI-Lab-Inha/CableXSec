@@ -48,8 +48,29 @@ signed curvature at the reference station or the rotation of the clamp at
 `x = 0`; optionally a uniform specimen temperature. `retain_from_s` selects
 the samples over which ranges are taken. `RigProtocol.cyclic(...)` builds the
 usual test: a tension ramp from zero over one period with the specimen
-straight, then `n_cycles` sinusoidal bending cycles (optionally with tension
-cycling in phase), ranges over the last cycle.
+straight, then `n_cycles` sinusoidal bending cycles, ranges over the last
+cycle. The tension may cycle with the bending period (`tension_amplitude_N`),
+lagging it by `tension_phase_lag_deg` (0 in phase, 90 in quadrature, 180 in
+antiphase); the ramp ends at the tension of the first cycle.
+
+`RigProtocol.blocks([...])` builds a programme of constant-tension blocks, as
+in the block programme of a full-scale fatigue test (CIGRE TB 862, 2022,
+6.3.4.1): each `RigBlock(tension_N, amplitude, n_cycles, mean)` holds its
+tension while the bending cycles about its mean, and the tension and mean
+move linearly between blocks (`transition_s`, default one period).
+`n_cycles` is the number of cycles simulated for gauge planning, not the
+count of the test. Ranges are taken over the last cycle of the last block;
+`protocol.block_times_s` gives each block's interval, so the ranges of one
+block follow from `dataclasses.replace(protocol, retain_from_s=start)` on the
+protocol cut at the block's end.
+
+```python
+programme = cx.RigProtocol.blocks(
+    [cx.RigBlock(80e3, 0.029, 2), cx.RigBlock(80e3, 0.085, 2),
+     cx.RigBlock(110e3, 0.207, 2)],
+    samples_per_cycle=40,
+)
+```
 
 **Setup** (`RigSetup`):
 
@@ -266,6 +287,26 @@ Practical consequences for a test plan:
 4. **Measure the anchorage.** Record where the armour is anchored inside the
    fittings (set-back and epoxy length). `setback_variants_m` shows how
    strongly the near-clamp readings depend on it.
+
+### Specimen length (CIGRE TB 862)
+
+`cx.tb862_specimen_checks(cable, test, ...)` compares the lengths of a test
+specimen with the requirements of CIGRE TB 862 (2022), using the pitches of
+the cable's helical components (`cx.component_pitches(cable)`: armour
+layers, the core lay, resolved strand rings). `P_a` is the pitch of the outer
+armour wires and `P_max` the longest pitch of any component.
+
+| `test` | Requirement | Clause | Kind |
+|---|---|---|---|
+| `"fatigue_template"` | fatigue-loaded section `>= P_max`; `>= P_a` from it to each end fitting (with a uniform-profile `setup`: its free length and clamp set-back) | 6.3.2 | recommended |
+| `"fatigue_bend_stiffener"` | top end fitting to stiffener flange `>= P_a` | 6.3.2 | shall |
+| | stiffener tip to bottom end fitting `>= P_a` | 6.3.2 | recommended |
+| `"bending_stiffness"` | sample `>= P_a` | 6.4.2.2 | recommended |
+| `"compression_bending"` | sample `>= 2 P_max` | 6.6.1.2 | recommended |
+| `"compression"` | sample between end fittings `>= P_max` | 6.6.1.2 | must |
+
+Each `SpecimenCheck` holds the requirement, the clause, the required and the
+actual length, `mandatory` and `passed`.
 
 ## 6. Limits
 

@@ -103,13 +103,17 @@ __all__ = [
     "GaugeRecommendation",
     "GaugeResult",
     "LayerScales",
+    "RigBlock",
     "RigProtocol",
     "RigSetup",
     "RigTestResult",
+    "SpecimenCheck",
     "StationLoop",
+    "component_pitches",
     "default_gauge_grid",
     "end_rotation_profile",
     "simulate_rig_test",
+    "tb862_specimen_checks",
 ]
 
 FloatArray = NDArray[np.float64]
@@ -150,6 +154,11 @@ class RigProtocol:
         temperature (20 deg C).
     retain_from_s : float
         Ranges are taken over samples with ``time_s >= retain_from_s``.
+    block_times_s : tuple of (float, float)
+        Start and end of the bending cycles of each block of a
+        :meth:`blocks` programme (empty otherwise); a block's ranges follow
+        from ``dataclasses.replace(protocol, retain_from_s=start)`` on the
+        protocol cut at its end.
     """
 
     time_s: FloatArray
@@ -158,6 +167,7 @@ class RigProtocol:
     end_rotation_rad: FloatArray | None = None
     temperature_C: FloatArray | None = None
     retain_from_s: float = 0.0
+    block_times_s: tuple[tuple[float, float], ...] = ()
 
     def __post_init__(self) -> None:
         t = real_array(self.time_s, "time_s")
@@ -187,6 +197,16 @@ class RigProtocol:
         require_finite(self.retain_from_s, "retain_from_s")
         if self.retain_from_s > t[-1]:
             raise CableInputError("retain_from_s lies after the last sample")
+        blocks = tuple((float(a), float(b)) for a, b in self.block_times_s)
+        previous = float(t[0])
+        for start, end in blocks:
+            if not (previous <= start < end <= t[-1]):
+                raise CableInputError(
+                    "block_times_s must be ordered, non-overlapping intervals "
+                    "within time_s"
+                )
+            previous = end
+        object.__setattr__(self, "block_times_s", blocks)
 
     @classmethod
     def cyclic(
@@ -201,12 +221,17 @@ class RigProtocol:
         n_cycles: int = 3,
         samples_per_cycle: int = 80,
         period_s: float = 10.0,
+        tension_phase_lag_deg: float = 0.0,
     ) -> RigProtocol:
         """Tension ramp from zero (one period), then sinusoidal bending.
 
-        Tension may cycle in phase with bending (``tension_amplitude_N``).
-        Ranges are retained over the last cycle.
+        Tension may cycle with the bending period (``tension_amplitude_N``),
+        lagging the bending by ``tension_phase_lag_deg`` (0: in phase, 90: in
+        quadrature, 180: in antiphase): ``T(t) = T + T_a sin(phi - lag)`` with
+        the bending ``mean + amplitude sin(phi)``. The ramp ends at the
+        tension of the first cycle. Ranges are retained over the last cycle.
         """
+        require_finite(tension_phase_lag_deg, "tension_phase_lag_deg")
         if (curvature_amplitude_1_m is None) == (end_rotation_amplitude_rad is None):
             raise CableInputError(
                 "give one of curvature_amplitude_1_m or end_rotation_amplitude_rad"
@@ -233,10 +258,12 @@ class RigProtocol:
         bend_ramp = np.zeros(ramp_t.size)
         bend_ramp[:] = mean * ramp_t / period_s
         bend = np.concatenate([bend_ramp, mean + amp * np.sin(phase[ramp_t.size :])])
+        lag = math.radians(tension_phase_lag_deg)
+        start_tension = tension_N + tension_amplitude_N * math.sin(-lag)
         tension = np.concatenate(
             [
-                tension_N * ramp_t / period_s,
-                tension_N + tension_amplitude_N * np.sin(phase[ramp_t.size :]),
+                start_tension * ramp_t / period_s,
+                tension_N + tension_amplitude_N * np.sin(phase[ramp_t.size :] - lag),
             ]
         )
         temperature = (
@@ -250,6 +277,76 @@ class RigProtocol:
             end_rotation_rad=bend if end_rotation_amplitude_rad is not None else None,
             temperature_C=temperature,
             retain_from_s=retain,
+        )
+
+    @classmethod
+    def blocks(
+        cls,
+        blocks: Sequence[RigBlock],
+        *,
+        quantity: str = "curvature",
+        temperature_C: float | None = None,
+        samples_per_cycle: int = 40,
+        period_s: float = 10.0,
+        transition_s: float | None = None,
+    ) -> RigProtocol:
+        """Programme of constant-tension blocks of sinusoidal bending.
+
+        Each block holds its tension while the bending cycles about its mean,
+        as in the blocks of a full-scale fatigue programme (CIGRE TB 862
+        (2022), 6.3.4.1). Between blocks, and from zero before the first, the
+        tension and the mean bending move linearly over ``transition_s``
+        (default one period) without cycling. ``RigBlock.n_cycles`` is the
+        number of cycles simulated for gauge planning, not the count of the
+        test. ``quantity`` is ``"curvature"`` (amplitudes in 1/m) or
+        ``"end_rotation"`` (rad). Ranges are retained over the last cycle of
+        the last block; ``block_times_s`` gives the cycling interval of each
+        block.
+        """
+        if quantity not in ("curvature", "end_rotation"):
+            raise CableInputError("quantity must be 'curvature' or 'end_rotation'")
+        if not blocks:
+            raise CableInputError("give at least one RigBlock")
+        if samples_per_cycle < 8 or not (math.isfinite(period_s) and period_s > 0):
+            raise CableInputError("need samples_per_cycle >= 8 and period_s > 0")
+        ramp = period_s if transition_s is None else float(transition_s)
+        if not (math.isfinite(ramp) and ramp > 0):
+            raise CableInputError("transition_s must be positive")
+        n_ramp = max(2, samples_per_cycle // 2)
+        times, tensions, bends = [np.array([0.0])], [np.array([0.0])], [np.array([0.0])]
+        t_now, tension_now, mean_now = 0.0, 0.0, 0.0
+        intervals: list[tuple[float, float]] = []
+        for block in blocks:
+            if not isinstance(block, RigBlock):
+                raise CableInputError("blocks must be RigBlock instances")
+            tau = np.linspace(0.0, ramp, n_ramp + 1)[1:]
+            times.append(t_now + tau)
+            tensions.append(tension_now + (block.tension_N - tension_now) * tau / ramp)
+            bends.append(mean_now + (block.mean - mean_now) * tau / ramp)
+            t_now += ramp
+            start = t_now
+            n = block.n_cycles * samples_per_cycle
+            tau = np.linspace(0.0, block.n_cycles * period_s, n + 1)[1:]
+            times.append(t_now + tau)
+            tensions.append(np.full(n, block.tension_N))
+            bends.append(
+                block.mean + block.amplitude * np.sin(2 * math.pi * tau / period_s)
+            )
+            t_now += block.n_cycles * period_s
+            intervals.append((start, t_now))
+            tension_now, mean_now = block.tension_N, block.mean
+        time = np.concatenate(times)
+        bend = np.concatenate(bends)
+        return cls(
+            time_s=time,
+            tension_N=np.concatenate(tensions),
+            curvature_1_m=bend if quantity == "curvature" else None,
+            end_rotation_rad=bend if quantity == "end_rotation" else None,
+            temperature_C=(
+                None if temperature_C is None else np.full(time.size, temperature_C)
+            ),
+            retain_from_s=t_now - period_s,
+            block_times_s=tuple(intervals),
         )
 
     @classmethod
@@ -277,6 +374,38 @@ class RigProtocol:
             temperature_C=temperature_C,
             retain_from_s=retain_from_s,
         )
+
+
+@dataclass(frozen=True)
+class RigBlock:
+    """One block of a rig programme (:meth:`RigProtocol.blocks`).
+
+    Attributes
+    ----------
+    tension_N : float
+        Constant tension of the block [N] (non-negative).
+    amplitude : float
+        Bending amplitude: curvature [1/m] or end rotation [rad].
+    n_cycles : int
+        Cycles simulated (a representative few; not the test count).
+    mean : float
+        Mean curvature or end rotation of the block.
+    """
+
+    tension_N: float
+    amplitude: float
+    n_cycles: int = 1
+    mean: float = 0.0
+
+    def __post_init__(self) -> None:
+        for name in ("tension_N", "amplitude", "mean"):
+            require_finite(getattr(self, name), name)
+        if self.tension_N < 0:
+            raise CableInputError("RigBlock tension_N must be non-negative")
+        if isinstance(self.n_cycles, bool) or int(self.n_cycles) != self.n_cycles:
+            raise CableInputError("RigBlock n_cycles must be an integer")
+        if self.n_cycles < 1:
+            raise CableInputError("RigBlock n_cycles must be at least 1")
 
 
 @dataclass(frozen=True)
@@ -1714,6 +1843,216 @@ def _recommend(
             "where the sectional law alone applies.",
         )
     return tuple(out)
+
+
+# --------------------------------------------------------------------------- #
+# Specimen length (CIGRE TB 862)                                               #
+# --------------------------------------------------------------------------- #
+@dataclass(frozen=True)
+class SpecimenCheck:
+    """One specimen-length requirement of CIGRE TB 862 (2022) and its check.
+
+    ``mandatory`` is ``True`` where the brochure writes "shall" or "must"
+    and ``False`` where it recommends ("should", "recommended").
+    """
+
+    requirement: str
+    clause: str
+    required_m: float
+    actual_m: float
+    mandatory: bool
+
+    @property
+    def passed(self) -> bool:
+        return self.actual_m >= self.required_m * (1.0 - 1e-12)
+
+
+def component_pitches(cable: CableData) -> dict[str, float]:
+    """Lay pitch of every helical component of a cable [m], by name.
+
+    Helical layers ``2 pi r / tan(alpha)``, the common core lay
+    (``core_lay``), resolved conductor strand rings and the strands and
+    sub-conductors of ``helical_stranded`` layers. Straight components
+    (lay angle zero, centre wires) have no pitch and are not listed.
+    """
+    pitches: dict[str, float] = {}
+
+    def add(name: str, radius: float | None, angle_deg: float | None) -> None:
+        if radius and angle_deg:
+            angle = math.radians(float(angle_deg))
+            if 0.0 < angle < math.pi / 2:
+                pitches[name] = 2.0 * math.pi * float(radius) / math.tan(angle)
+
+    for layer in cable.layers:
+        if layer.layer_type == "helical":
+            add(layer.name, getattr(layer, "r_helix_m", None), layer.lay_angle_deg)
+        elif layer.layer_type == "helical_stranded":
+            add(
+                f"{layer.name} (conductors)",
+                getattr(layer, "r_cable_m", None),
+                getattr(layer, "lay_angle_cable_deg", None),
+            )
+            add(
+                f"{layer.name} (strands)",
+                getattr(layer, "r_strand_m", None),
+                getattr(layer, "lay_angle_strand_deg", None),
+            )
+        for i, ring in enumerate(getattr(layer, "strand_layers", ()) or ()):
+            if ring.pitch_m:
+                pitches[f"{layer.name} ring {i}"] = float(ring.pitch_m)
+    if cable.core_lay is not None and cable.core_lay.pitch_m:
+        pitches["core lay"] = float(cable.core_lay.pitch_m)
+    return pitches
+
+
+_TB862_TESTS = (
+    "fatigue_template",
+    "fatigue_bend_stiffener",
+    "bending_stiffness",
+    "compression_bending",
+    "compression",
+)
+
+
+def tb862_specimen_checks(
+    cable: CableData,
+    test: str,
+    *,
+    setup: RigSetup | None = None,
+    loaded_length_m: float | None = None,
+    end_distance_m: float | None = None,
+    top_distance_m: float | None = None,
+    bottom_distance_m: float | None = None,
+    sample_length_m: float | None = None,
+) -> tuple[SpecimenCheck, ...]:
+    """Specimen lengths of CIGRE TB 862 (2022) against the cable's pitches.
+
+    ``P_a`` is the pitch of the outer armour wires (the outermost
+    structural helical layer) and ``P_max`` the longest pitch of any
+    component (:func:`component_pitches`).
+
+    * ``"fatigue_template"`` (6.3.2, tension and template method): the
+      fatigue-loaded section (``loaded_length_m``) not shorter than
+      ``P_max``; at least ``P_a`` between it and each end fitting
+      (``end_distance_m``, recommended). With a ``setup`` of the uniform
+      profile they default to its free length and clamp set-back.
+    * ``"fatigue_bend_stiffener"`` (6.3.2): at least ``P_a`` from the top
+      end fitting to the bend-stiffener flange (``top_distance_m``, "shall")
+      and from the stiffener tip to the bottom fitting
+      (``bottom_distance_m``, recommended).
+    * ``"bending_stiffness"`` (6.4.2.2): a sample of at least ``P_a``.
+    * ``"compression_bending"`` (6.6.1.2): a sample of at least ``2 P_max``.
+    * ``"compression"`` (6.6.1.2, pure compression): at least ``P_max``
+      between the end fittings ("must").
+    """
+    if test not in _TB862_TESTS:
+        raise CableInputError(f"test must be one of {_TB862_TESTS}")
+    pitches = component_pitches(cable)
+    armour = [
+        layer for layer in structural_armour_layers(cable) if layer.name in pitches
+    ]
+    if not pitches:
+        raise CableInputError("the cable has no helical component with a pitch")
+    p_max_name = max(pitches, key=lambda k: pitches[k])
+    p_max = pitches[p_max_name]
+
+    def outer_armour_pitch() -> tuple[str, float]:
+        if not armour:
+            raise CableInputError(
+                "this TB 862 check needs the pitch of the outer armour wires; "
+                "the cable has no structural helical layer with a lay angle"
+            )
+        outer = max(armour, key=lambda layer: float(layer.r_helix_m or 0.0))
+        return outer.name, pitches[outer.name]
+
+    def need(value: float | None, name: str) -> float:
+        if value is None:
+            raise CableInputError(f"test {test!r} needs {name}")
+        require_finite(value, name)
+        if value < 0:
+            raise CableInputError(f"{name} must be non-negative")
+        return float(value)
+
+    checks: list[SpecimenCheck] = []
+    if test == "fatigue_template":
+        if setup is not None and setup.profile == "uniform":
+            loaded_length_m = (
+                setup.free_length_m if loaded_length_m is None else loaded_length_m
+            )
+            end_distance_m = (
+                setup.clamp_setback_m if end_distance_m is None else end_distance_m
+            )
+        name_a, p_a = outer_armour_pitch()
+        checks.append(
+            SpecimenCheck(
+                f"fatigue-loaded section >= longest pitch ({p_max_name})",
+                "6.3.2",
+                p_max,
+                need(loaded_length_m, "loaded_length_m"),
+                False,
+            )
+        )
+        checks.append(
+            SpecimenCheck(
+                f"loaded section to each end fitting >= outer armour pitch ({name_a})",
+                "6.3.2",
+                p_a,
+                need(end_distance_m, "end_distance_m"),
+                False,
+            )
+        )
+    elif test == "fatigue_bend_stiffener":
+        name_a, p_a = outer_armour_pitch()
+        checks.append(
+            SpecimenCheck(
+                f"top end fitting to stiffener flange >= outer armour pitch ({name_a})",
+                "6.3.2",
+                p_a,
+                need(top_distance_m, "top_distance_m"),
+                True,
+            )
+        )
+        checks.append(
+            SpecimenCheck(
+                f"stiffener tip to bottom end fitting >= outer armour pitch ({name_a})",
+                "6.3.2",
+                p_a,
+                need(bottom_distance_m, "bottom_distance_m"),
+                False,
+            )
+        )
+    elif test == "bending_stiffness":
+        name_a, p_a = outer_armour_pitch()
+        checks.append(
+            SpecimenCheck(
+                f"sample >= outer armour pitch ({name_a})",
+                "6.4.2.2",
+                p_a,
+                need(sample_length_m, "sample_length_m"),
+                False,
+            )
+        )
+    elif test == "compression_bending":
+        checks.append(
+            SpecimenCheck(
+                f"sample >= twice the longest pitch ({p_max_name})",
+                "6.6.1.2",
+                2.0 * p_max,
+                need(sample_length_m, "sample_length_m"),
+                False,
+            )
+        )
+    else:
+        checks.append(
+            SpecimenCheck(
+                f"sample between end fittings >= longest pitch ({p_max_name})",
+                "6.6.1.2",
+                p_max,
+                need(sample_length_m, "sample_length_m"),
+                True,
+            )
+        )
+    return tuple(checks)
 
 
 # Public entry points read the cable's own materials when called directly.

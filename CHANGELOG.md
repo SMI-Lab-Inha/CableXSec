@@ -33,6 +33,13 @@ All notable changes to CableXSec are recorded in this file. The format follows
   `relative_permeability`, and the `compute_thermal` / `thermal_network` options
   `conductor_resistance_20C_ohm_m`, `k_s`, `k_p` and `include_dielectric_loss`
   (`thermal_network` also `rating_temperature_C` and `rating_current_A`).
+- Rig test: `RigProtocol.cyclic(tension_phase_lag_deg=...)` lets the tension lag the
+  bending (it could cycle only in phase); `RigProtocol.blocks` with `RigBlock` builds a
+  programme of constant-tension blocks with linear transitions, as in the block programme of
+  CIGRE TB 862 (2022) 6.3.4.1, and records each block's interval in
+  `RigProtocol.block_times_s`; `tb862_specimen_checks` and `component_pitches` check the
+  specimen lengths of TB 862 6.3.2 (fatigue, template and bend-stiffener set-ups), 6.4.2.2
+  (bending stiffness) and 6.6.1.2 (compression) against the cable's lay pitches.
 
 ### Changed
 
