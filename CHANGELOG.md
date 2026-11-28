@@ -57,6 +57,19 @@ All notable changes to CableXSec are recorded in this file. The format follows
 - Validation report cells escape a literal `|` (as in `|cos|`).
 - Version references of 0.2.1 in doc/template_66kv.md, doc/citing.rst (BibTeX key) and
   DEVELOPMENT.md.
+- The ULS guide cites the compression tests where they are given: CIGRE TB 862, Section
+  6.6.1 (compression with cyclic bending at a safety factor of at least 1.3 on the force and
+  at least 100 bending cycles; pure axial compression). MecLim II, Section 5.7, only refers
+  to them.
+- Material sources: the copper tensile strength is a standard annealed-copper value (IEC
+  60228 sets no tensile limit for copper); the thermal conductivities of lead and aluminium
+  are standard values (IEC 60287-2-1 lists no metal); the relative permittivity of
+  `xlpe_qiao2025` is 2.5, the XLPE row of IEC 60287-1-1 Table 3 it cites (2.3 is the PE
+  row). No analysis reads that permittivity: the dielectric loss takes the insulation
+  layer's `electrical` block.
+- The changelog of 0.2.0 and the benchmark register drop a model-to-model comparison
+  without a measurement (the torsional stiffness of the Chae, Nam and Shim 2023 cable); the
+  core-lay sensitivity stays.
 
 ### Tests
 
@@ -363,16 +376,6 @@ VALIDATION.md holds the values of the release.
   terms of its own Eq. 11 (12.0 against the exact 6.1 kN m²); the rest is the armour's direction
   dependence (11.3 % here, 10.1 % in the source's model, 4.0 % FE, 4.1 % test), whose FE split
   and test conditions are not published. No input is changed and the 13 % band stays.
-
-- Validation row CH-GJ (stated, model-to-model, registered before the run): free torsional
-  stiffness of the Chae, Nam and Shim (2023) coiling cable at the source's twist of 0.125 rad/m
-  (unwinding, zero tension), against the range of the source's three cross-section tools
-  (Table 5; no measurement). Armour pitch 1.8 / 3.0 m: packaged straight cores 81.9 / 50.5 kN m²;
-  cores laid S as in the source at an assumed pitch of 2.5 m 61.1 / 35.0 and of 3.0 m
-  64.4 / 37.3 kN m² (tools 59.6–83.2 / 34.3–44.7). The packaged file and the benchmark page state
-  that its straight cores raise the free torsional stiffness by 1.3–1.4 times, and why the
-  source's closed form (Eq. 14 as printed) is not a reference. The row was removed again
-  before this release (see Changed).
 
 - Validation row BM1-ID (gap R1b), targets registered before the run: on the Ménard and
   Cartraud (2023) cable with the laid cores, the trefoil wedge and the filler profiles (μ 0.2 on
@@ -687,11 +690,10 @@ VALIDATION.md holds the values of the release.
   the measurements to be unreliable as well. The register keeps the limits of the test: one specimen, end
   effects not investigated, table and figure disagreeing on equal-span ranges, and an
   independent FE reconstruction (Kwon et al. 2026) that does not match.
-- CH-GJ is removed from the validation report. Its only reference values were the outputs of
-  the source's three cross-section tools (Chae, Nam and Shim 2023, Table 5); nothing is
-  measured. The benchmark register keeps the finding as a stated sensitivity: the free
-  torsional stiffness of that cable depends on the core lay. S-lay cores give 21–31 % less than
-  straight cores, so the core lay must be stated with any torsional or coiling result.
+- The benchmark register states the free torsional stiffness of the Chae, Nam and Shim
+  (2023) coiling cable as a sensitivity, not a validation row: nothing is measured, and the
+  stiffness depends on the core lay. S-lay cores give 21–31 % less than straight cores, so
+  the core lay must be stated with any torsional or coiling result.
 
 - `read_cabledyn_sections` places the `Dec`/`Azi` tangents of a finite-EI line (any section
   with `EI > 0`) at their nodes, as CableDyn 0.4.2 and later write them: the node's own

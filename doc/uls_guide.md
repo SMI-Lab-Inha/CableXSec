@@ -30,9 +30,11 @@ supported from below or the cable meets the seabed:
   Vaz 2021b, introduction; Reda 2020, Section 2.1, for installation);
 - the sag bend and the ends of the buoyancy section of a lazy wave, at low
   mean tension and the largest dynamic curvature;
-- installation and storage: lay-vessel heave at the touchdown point and the
-  constant-compression and compression-with-bending tests of CIGRE TB 862
-  (MecLim II, Section 5.7).
+- installation and storage: lay-vessel heave at the touchdown point. CIGRE
+  TB 862 (2022), Section 6.6.1, gives the compression tests: compression
+  with cyclic bending at a safety factor of at least 1.3 on the compressive
+  force and at least 100 bending cycles (6.6.1.3), and pure axial
+  compression (6.6.1.4). MecLim II, Section 5.7, refers to these tests.
 
 The hang-off and the bend-stiffener region carry the top tension and do not
 normally go into compression. Lateral buckling also needs cyclic bending
@@ -319,5 +321,7 @@ curvature of the record. Pairing the two extremes is conservative.
   Section 4.5 and Table 6 (de Sousa test data).
 - Reda, A. (2020). Numerical modelling of subsea cables and pipelines. PhD
   thesis, Curtin University, Section 2.1.
+- CIGRE TB 862 (2022). Recommendations for mechanical testing of submarine
+  cables for dynamic application, Section 6.6.1.
 - DNV-RP-F401 (2019), Table 3-1; DNV-ST-0359 (2016, amended 2021);
   DNV-RP-0360; MecLim II guidelines (Offshore Wind Accelerator).
