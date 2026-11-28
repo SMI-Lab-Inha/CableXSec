@@ -75,7 +75,13 @@ def test_network_with_armour_loss_matches_the_ladder(t66: CableData) -> None:
         ref = compute_thermal(
             t66, RATED_A, 630e-6, conductor_material=MATERIAL, lambda2=lambda2
         )
-    net = thermal_network(t66, 630e-6, conductor_material=MATERIAL, lambda2=lambda2)
+    net = thermal_network(
+        t66,
+        630e-6,
+        conductor_material=MATERIAL,
+        lambda2=lambda2,
+        rating_current_A=RATED_A,
+    )
     temps = net.steady_state(RATED_A, resistance_temperature_C=90.0)
     # The 0.10 mm copper tape screens make the chain stiff: agreement to
     # its conditioning.
@@ -86,7 +92,9 @@ def test_network_with_armour_loss_matches_the_ladder(t66: CableData) -> None:
     assert heat_out == pytest.approx(heat_in, rel=1e-8)
     assert heat_in == pytest.approx(ref.P_total_W_m, rel=1e-12)
     w_c = net.conductor_loss_W_m(RATED_A, 90.0)
-    assert heat_in == pytest.approx(net.n_conductors * w_c * (1.0 + lambda2))
+    assert heat_in == pytest.approx(
+        net.n_conductors * w_c * (1.0 + net.lambda1 + lambda2)
+    )
     # The armour heat raises the armour against the lossless case.
     plain = thermal_network(t66, 630e-6, conductor_material=MATERIAL)
     cold = plain.layer_temperatures(

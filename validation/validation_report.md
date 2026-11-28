@@ -79,12 +79,12 @@ Every row is computed from published data or closed-form references in this repo
 | 2 | DAI18-RS | Dai et al. (2018) Fig. 4a/4c, 7 loops: re-stick peak above the dynamic level at every reversal; spring-slider (FrictionLaw static_factor = mu_s/mu_d) with stick_time_s = 0 vs the default inf, third cycle | excess > 5 reading resolutions on all 14 measured strokes; stick_time_s = 0 on all 14; inf on none | measured 14/14 (excess 0.039-0.094); stick_time_s = 0 14/14; inf 0/14 | PASS |
 | 2 | DAI18-T1 | Dai et al. (2018) Test 1 loops vs spring-slider with the printed mu_s/mu_d, stick_time_s = 0 and each loop's stick slope (last 0.5 mm before each reversal excluded): peak and dynamic level (+x/-x stroke), stroke work; decay and peak position, Tests 1 and 3 | stated, not gated | 8 MPa: peak -1.8/-0.8%, level +0.1/+4.7%, work -2.6%; 4 MPa: peak -0.4/+0.6%, level -1.0/+6.6%, work -1.9%; 1 MPa: peak +1.0/+0.2%, level -3.3/+12.3%, work -2.1%; decay to 10% of peak-level 0.6-2.3 mm (model: one step); peak 1.4-2.5x the slider's elastic travel from the reversal | INFO |
 | 2 | DAI18-T3 | Dai et al. (2018) Test 3 (4 MPa, groove track, 0.01-0.2 Hz) vs the rate-independent spring-slider with the 0.01 Hz peak and level | stated, not gated | dynamic level vs 0.01 Hz -3.5, -2.4, +0.3% at 0.05/0.1/0.2 Hz (model 0); static peak +10.6% at 0.2 Hz (model 0: no rate term on mu_s); 0.2 Hz peak error -7.9/-11.4%; work -5.4 to -0.9% | INFO |
-| 2 | BM5 | CIGRE TB880 conductor temp (cited Poradowski tabulated T-network, λ1') | ≤ 90 °C, ~5 K low | 84.4 °C (FEM 89.62 / IEC 90; λ1″ closes residual). NOT yet from compute_thermal(cable) — three-core geometric factor pending IEC 60287-2-1 (not yet implemented) | PARTIAL (cited network; λ1″ + 3-core factor gated) |
+| 2 | BM5 | Poradowski (2025) 220 kV conductor temperature (cited tabulated T-network; R0 [IEC60228], λ1' IEC 5.3.2) | ≤ 90 °C (λ1″ = 0, IEC) | 85.8 °C with λ1″ = 0; 90.9 °C with the CIGRE TB 880 GP 6/31 eddy loss (FEM 89.62 / IEC 90). Not from compute_thermal(cable): the packaged cable is a single-core-equivalent stack of a three-core cable | PARTIAL (cited network) |
 | 2 | BM4 | Saevik-Bruaseth EA population; no-radial-interaction bound | mean model/measured < 1.25 | mean ratio about 1.45; U1 > 2.0 | NOT VALIDATED (negative finding; radial interaction missing) |
 
 ## Test taxonomy (full gate suite)
 
-- analytical_sanity: `1321 passed`
+- analytical_sanity: `1326 passed`
 - independent_method: `93 passed`
 - full_scale: `62 passed`
 
@@ -98,7 +98,7 @@ Does each benchmark's pass come from the cable/material definition, or from an i
 |----|------------------|-----------------------------|
 | BM1 | `menard2023.yaml` geometry + material library | YES — `ei_min_slip(cable)` |
 | BM3 | `nasution_2014_copper` curve in the S-N registry (cited fit) | YES — from the material/S-N definition |
-| BM5 | Poradowski Table-1 **tabulated** T1/T2/T3 (cited) | PARTIAL — uses the cited tabulated network; `compute_thermal(cigre_tb880.yaml)` reads high (136 °C at the BM5 inputs, three cores) because the IEC-60287-2-1 three-core geometric factor is not yet applied |
+| BM5 | Poradowski Table-1 **tabulated** T1/T2/T3 (cited) | PARTIAL — uses the cited tabulated network; the packaged `poradowski2025_220kv.yaml` is a single-core-equivalent stack of the three-core cable, so `compute_thermal` on it (SL-type losses and the filler geometric factor need the three cores) is not comparable |
 | BM6 | `copper_poon2022` SWT constants (cited registry) + representative contact | curve YES (registry); cable-level contact driver is representative, not from a cable |
 | WITZ | `witz1996.yaml` geometry + material library + digitised Witz Figs 5-6 | EI_min YES (parameter-free); WITZ-ID: initial pressure identified on the Fig. 5 width (declared `identified`), Fig. 6 predicted without refitting |
 | SV11 | `saevik2011.yaml` geometry (Table 1; outer armour, tapes and sheath assumed) + material library (polymer modulus identified on the Table 1 EI) + rig constants in `validation/scripts/check_saevik2011.py` + digitised Sævik Figs 17-23 and Gjøsteen Figs 27-35 | PARTIAL — section from the cable definition; the curvature profile along the pipe comes from a harness beam model with an assumed rotation point |

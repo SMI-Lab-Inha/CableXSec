@@ -71,7 +71,7 @@ The Yun shear coefficient of the finite-support no-slip EI counted an
 interstitial filler as a concentric shear layer in series with the armour,
 although it lies beside the cores. It is now left out. This raises the no-slip
 EI of every cable with an interstitial filler (IEA Task 49 66 kV, the bundled
-33 kV and 220 kV three-core cables, Chae 2023, CIGRE TB 880 and Thies 2016 by
+33 kV and 220 kV three-core cables, Chae 2023, Poradowski 2025 and Thies 2016 by
 14 to 58%) and moves the loops that use the coefficient slightly. Full-slip
 EI, the plane-section full-stick EI and the cables without a filler (Ménard
 BM1, Witz, Sævik) are unchanged. The benchmark input `menard2023.yaml` is
@@ -95,7 +95,7 @@ model) is the full construction.
 | Armour longitudinal displacement, Ménard and Cartraud FE | MM | Phase and scale reproduced; peaks over-predicted |
 | Tjahjanto et al. (2017), Leroy et al. (2017) FE armour slip | MM | Qualitative agreement only |
 | Sævik and Bruaseth (2005) umbilical axial stiffness | M | NOT VALIDATED |
-| CIGRE TB880 conductor temperature | MM | PARTIAL |
+| Poradowski (2025) conductor temperature | MM | PARTIAL |
 | Global–local consistency, floating-wind application | I | Full-slip results are upper estimates |
 | Laid-core friction (gap R1b), Ménard and Cartraud (2023) six ranges | M | FAIL (BM1-ID, gated). With the transferred 0.3 MPa the cores raise the work (range (b) +30.2 %); identified on (b) with the full accounting, predictions (a) and (c) outside the registered target (+28.5, +26.2 %), (d)–(f) within 16 % |
 | Laid-core law, distributed form and contact loads that follow the tension (CF-D, CF-T) | A, I | PASS except CF-D-slip (1.02e-4 against 1e-4 at the default stations: station quadrature, documented) |
@@ -833,7 +833,7 @@ no loop or beam solver run):
 | `inter_array_single_core_33kv.yaml` | inner 0.0248 → 0.0248 (concentric core layers); outer 0.0333 → 1.0000 | 2.20 → 33.0 |
 | `inter_array_single_core_33kv_legacy_r2.yaml` | inner 0.0305 → 0.0305; outer 0.0409 → 1.0000 | 2.88 → 38.0 |
 | `export_three_core_220kv.yaml` | inner 0.2613 → 0.9363; outer 0.2809 → 1.0000 | 3422 → 9394 |
-| `cigre_tb880_220kv.yaml` | inner 0.4692 → 0.4692 (single core: all concentric); outer 0.4957 → 0.9848 | 11425 → 17640 |
+| `poradowski2025_220kv.yaml` | inner 0.4692 → 0.4692 (single core: all concentric); outer 0.4957 → 0.9848 | 11425 → 17640 |
 | `thies2016_30kv.yaml` | armour 0.2083 → 0.8428 (bedding) | 105 → 322 |
 | `chae2023_coiling.yaml` | armour 0.5427 → 0.9633 (inner yarn) | 860 → 1314 |
 
@@ -995,16 +995,34 @@ elements and behaves as the source's no-radial-interaction analytical bound;
 the source FE with radial interaction gives a mean ratio of 0.946. Retained as
 a negative finding.
 
-## CIGRE TB880 thermal benchmark (BM5)
+## Poradowski (2025) thermal benchmark (BM5)
+
+Source: Poradowski and Anders (2025), Ocean Eng. 328, 121027, Table 1 and
+NOTE 1: a 220 kV three-core export cable, 1200 mm² copper, corrugated copper
+sheath, non-magnetic stainless armour, buried at 1.5 m (T4 = 0.3211 K·m/W,
+15 °C), 908.45 A. The source cites CIGRE TB 880 for the construction; no TB
+880 data are used here.
 
 | Class | Quantity | Reference | Result | Status |
 | --- | --- | --- | --- | --- |
-| MM | Conductor temperature, three-core 220 kV cable, tabulated thermal network of Poradowski (2025) with circulating-current sheath loss only | FEM 89.62 °C; IEC 90 °C | 84.4 °C, about 5 K low | PARTIAL |
+| MM | Conductor temperature from the tabulated network (T1 0.6579, T2 0.1121, T3 0.0357 K·m/W); `R0` 0.0151 Ω/km (IEC 60228 Table 4); `λ1′` 1.027 (IEC 60287-1-1 5.3.2); `λ1″` = 0 (IEC) | FEM 89.62 °C; IEC 90 °C | 85.8 °C | PARTIAL |
+| MM | Same with the sheath eddy loss of IEC 60287-1-1 5.3.7.1 times the solid-bonding factor F (5.3.6), as CIGRE TB 880 Guidance Points 6 and 31 keep it (`λ1″` 0.186) | FEM 89.62 °C; IEC 90 °C | 90.9 °C | stated |
 
-The eddy-current loss term is not included, and the IEC 60287-2-1 three-core
-geometric factor is not yet applied, so `compute_thermal` on the TB880 cable
-input reads 136.1 °C with the BM5 inputs (908.45 A, three cores, λ1′, T4 = 0.3211 K·m/W, 15 °C; after the filler is represented as an equal-area annulus, which overestimates the filler resistance: 0.166 against 0.112 K·m/W). The comparison uses the cited tabulated network, not
-the cable definition.
+The earlier result, 84.4 °C, took `R0 = ρ/A` (5 % below the IEC 60228
+value), which gives 1.4 K of the 5.6 K difference; the eddy loss gives the
+rest. Its earlier diagnosis named only the eddy loss. The sheath formula is
+that of IEC 60287-1-1 5.3.2: CIGRE TB 880 Guidance Point 38 gives the factor
+1.5 of 5.3.11 to SL-type cables under magnetic armour, and with the
+stainless armour of this cable that factor would give 100.0 °C.
+
+The packaged `poradowski2025_220kv.yaml` is a single-core-equivalent stack of
+the three-core cable, as in the source's axisymmetric thermal model, with
+every layer of Table 1 (the semiconducting screens, the swelling tape and the
+air layers of footnote d) and its published resistivity; its `T1` is
+0.6578 K·m/W against the source's 0.6579. The SL-type losses and the filler
+geometric factor need the three cores, so `compute_thermal` on the stack is
+not comparable, and the comparison uses the tabulated network
+(`tests/test_thermal.py`, `validation/scripts/run_validation.py`).
 
 ## Temperature history coupled into clamping and fatigue (gap 4.1)
 
@@ -1013,8 +1031,8 @@ Gates of `tests/test_thermal_history.py` for the slow-time driver
 
 | Class | Quantity | Reference | Result | Status |
 | --- | --- | --- | --- | --- |
-| A | Steady state of the transient RC ladder at the BM5 inputs (908.45 A, three cores, λ1′, `T4` 0.3211 K·m/W, 15 °C, `R_ac` at 90 °C) | `compute_thermal` 136.06 °C (IEC-consistent profile) | Equal to 1e-12 at 1, 3 and 8 sub-annuli per layer; every annulus edge to 1e-11; heat through `T4` equals the heat generated to 1e-10 | PASS |
-| A | Same, 66 kV three-core template at 1093 A | `compute_thermal` 95.35 °C | Equal to 1e-8 (conditioning of the 0.10 mm copper tape screens) | PASS |
+| A | Steady state of the transient RC ladder at the BM5 inputs (908.45 A, three cores, λ1′, `T4` 0.3211 K·m/W, 15 °C, `R_ac` at 90 °C) on the single-core-equivalent stack | `compute_thermal` (IEC-consistent profile) | Equal to 1e-12 at 1, 3 and 8 sub-annuli per layer; every annulus edge to 1e-11; heat through `T4` equals the heat generated to 1e-10 | PASS |
+| A | Same, 66 kV three-core template at 1093 A, computed losses (`rating_current_A` 1093 A) | `compute_thermal` 118.3 °C | Equal to 1e-8 (conditioning of the 0.10 mm copper tape screens) | PASS |
 | A | Crank–Nicolson energy balance of the transient network | Discrete identity `ΣC ΔT = h/2 (Q_n + Q_n+1)` | Round-off (1e-9) | PASS |
 | A | TR-BDF2 order; steady hold; step response | Second order; steady state | Error ratio 3–5 on halving the step; drift < 1e-8 K; step reaches the steady state to 1e-3 K | PASS |
 | A | Coupled `R_ac(T_c)` | Fixed point | Re-evaluating `R_ac` at `T_c` changes no node by more than 1e-10 | PASS |
@@ -3261,7 +3279,7 @@ Electro-thermo-mechanical benchmarks for the energised-cable chain.
 
 | Benchmark | Class | Quantity | Prerequisite |
 | --- | --- | --- | --- |
-| CIGRE TB880 (BM5) completion | MM | Conductor temperature of the three-core 220 kV cable from the cable definition, not only the tabulated network | λ1″ eddy-current loss and the IEC 60287-2-1 three-core factor; full IEC 60287-1-1 and 2-1 texts (previews only in the library) |
+| Poradowski (2025) (BM5) completion | MM | Conductor temperature of the three-core 220 kV cable from the cable definition, not only the tabulated network | a three-core definition of the cable (cores, fillers, armour) in place of the single-core-equivalent stack |
 | Transient conductor temperature under a current step and a daily cycle | A | Crank–Nicolson solution against the closed-form exponential response of a lumped ladder | The current-history driver is in place (`ThermalHistory.from_current`, gap 4.1); remaining: registered targets |
 | Fixed temperature against temperature history | I | Armour damage at the governing and hang-off sections of the floating-wind reference case with a synthetic power-correlated current history | Clamping history into `fast_slip`; joint current–sea-state binning |
 | Komperød (2017), bending at two temperatures | M | Bending-stiffness change between +5 and +20 °C | Published construction and heating condition |

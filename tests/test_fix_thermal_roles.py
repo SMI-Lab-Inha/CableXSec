@@ -245,7 +245,7 @@ def _raise_dielectric_without_sheath() -> None:
     [
         "inter_array_single_core_yaml_path",
         "inter_array_three_core_yaml_path",
-        "cigre_tb880_yaml_path",
+        "poradowski2025_220kv_yaml_path",
         "iea_task49_66kv_yaml_path",
     ],
 )

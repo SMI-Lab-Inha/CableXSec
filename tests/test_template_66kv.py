@@ -322,10 +322,14 @@ def test_thermal_rating_is_consistent_with_published_power(cable) -> None:
         conductor_area_m2=630e-6,
         conductor_material="copper_janocha2024",
     )
-    # 125 MW (Table 13) is a 90 degC XLPE rating; the lumped ladder with the
-    # equal-filler-area annulus and the assumed seabed T4 lands close to it
-    # (95.4 degC: the semiconducting screens count with the insulation, and
-    # the stranding voids of the area-equivalent conductor add about 1 K).
-    assert 85.0 < th.T_conductor_C < 100.0
+    # The IEC 60287-1-1 (2023) AC resistance at 90 degC rounds to the 0.04
+    # ohm/km of [IEATask49] Table 13 for the 630 mm2 cable.
+    assert th.losses is not None
+    assert round(th.losses["R_ac_ohm_m"] * 1e3, 2) == 0.04
+    # Table 13 states no installation for its 125 MW: under this template's
+    # assumed burial (T4 0.343 K m/W, 15 degC) the IEC ladder puts the
+    # conductor at 118.4 degC at 1093.5 A; its 90 degC rating is about 932 A.
+    assert th.T_conductor_C == pytest.approx(118.43, abs=0.05)
     limitations = " ".join(th.provenance.limitations)
     assert "equal-filler-area annulus" in limitations
+    assert "G-bar" in limitations

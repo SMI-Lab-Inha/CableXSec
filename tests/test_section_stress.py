@@ -21,7 +21,7 @@ _CABLES = (
     "inter_array_three_core_33kv",
     "iea_task49_66kv",
     "thies2016_30kv",
-    "cigre_tb880_220kv",
+    "poradowski2025_220kv",
     "saevik2011",
 )
 

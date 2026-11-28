@@ -259,8 +259,8 @@ MATERIALS: dict[str, Material] = {
         "alpha_T_K": (17.0e-6, "Standard Cu"),
         "lambda_W_mK": (400.0, "Standard Cu"),
         "rho_cp_J_m3K": (3.45e6, "Standard Cu"),
-        "rho_ohm_m": (1.724e-8, "[IEC60228] at 20 degC"),
-        "alpha_R_per_K": (3.93e-3, "[IEC60287-1-1] Cu resistivity temp. coeff."),
+        "rho_ohm_m": (1.7241e-8, "[IEC60287-1-1] Table 1, copper at 20 degC"),
+        "alpha_R_per_K": (3.93e-3, "[IEC60287-1-1] Table 1, copper"),
         # F6 citation fix (18 Oct 2026): [Poon2022] contains no 0.25 (it uses
         # 0.8, range 0.08-1.4). No library source gives 0.25 for Cu-Cu
         # stranded wire, so the value is kept (results unchanged) as an
@@ -281,7 +281,8 @@ MATERIALS: dict[str, Material] = {
         "alpha_T_K": (17.0e-6, "Standard Cu"),
         "lambda_W_mK": (400.0, "Standard Cu"),
         "rho_cp_J_m3K": (3.45e6, "Standard Cu"),
-        "rho_ohm_m": (1.724e-8, "[IEC60228] at 20 degC"),
+        "rho_ohm_m": (1.7241e-8, "[IEC60287-1-1] Table 1, copper at 20 degC"),
+        "alpha_R_per_K": (3.93e-3, "[IEC60287-1-1] Table 1, copper"),
         # Gap P1/P4. Cold-drawn and annealed ETP Cu wire, lowest strain rate
         # (1e-4 1/s) of [Wan2022] Table 2 (range 145-155 / 235-262 MPa).
         "sigma_y_Pa": (145.0e6, "[Wan2022] Table 2, annealed ETP Cu wire, 1e-4 1/s"),
@@ -305,7 +306,8 @@ MATERIALS: dict[str, Material] = {
         "alpha_T_K": (17.0e-6, "Standard Cu"),
         "lambda_W_mK": (400.0, "Standard Cu"),
         "rho_cp_J_m3K": (3.45e6, "Standard Cu"),
-        "rho_ohm_m": (1.724e-8, "[IEC60228] at 20 degC"),
+        "rho_ohm_m": (1.7241e-8, "[IEC60287-1-1] Table 1, copper at 20 degC"),
+        "alpha_R_per_K": (3.93e-3, "[IEC60287-1-1] Table 1, copper"),
     },
     "xlpe_qiao2025": {
         "E_Pa": (150.0e6, "[Qiao2025] Eq. 9 evaluated at 20 degC"),
@@ -321,7 +323,11 @@ MATERIALS: dict[str, Material] = {
         "nu": (0.48, "[Qiao2025] Table 2"),
         "rho_kg_m3": (955.0, "Standard HDPE"),
         "alpha_T_K": (100.0e-6, "[Qiao2025] Table 2"),
-        "lambda_W_mK": (0.4, "[Qiao2025] Table 2"),
+        "lambda_W_mK": (
+            1.0 / 3.5,
+            "[IEC60287-2-1] Table 1: polyethylene 3.5 K m/W (insulation, "
+            "protective covering)",
+        ),
         "rho_cp_J_m3K": (1.9e6, "Standard HDPE"),
         "epsilon_allow": (
             0.077,
@@ -336,7 +342,12 @@ MATERIALS: dict[str, Material] = {
         "nu": (0.40, "Standard PP"),
         "rho_kg_m3": (905.0, "Standard PP"),
         "alpha_T_K": (1.5e-4, "Standard PP"),
-        "lambda_W_mK": (0.22, "[IEC60287]"),
+        "lambda_W_mK": (
+            1.0 / 6.0,
+            "[IEC60287-2-1] 4.1.2.2.4: fillers of extruded-insulation cables "
+            "6 to 13 K m/W, the lower value; 6.0 for polypropylene yarn in "
+            "CIGRE TB 880 (2022) Table 2-3",
+        ),
         "rho_cp_J_m3K": (1.8e6, "Standard PP"),
     },
     "polyester_tape": {
@@ -415,8 +426,8 @@ MATERIALS: dict[str, Material] = {
         "alpha_T_K": (17.0e-6, "Standard Cu, as copper_stranded"),
         "lambda_W_mK": (400.0, "Standard Cu, as copper_stranded"),
         "rho_cp_J_m3K": (3.45e6, "Standard Cu, as copper_stranded"),
-        "rho_ohm_m": (1.724e-8, "[IEC60228] at 20 degC"),
-        "alpha_R_per_K": (3.93e-3, "[IEC60287-1-1] Cu resistivity temp. coeff."),
+        "rho_ohm_m": (1.7241e-8, "[IEC60287-1-1] Table 1, copper at 20 degC"),
+        "alpha_R_per_K": (3.93e-3, "[IEC60287-1-1] Table 1, copper"),
         "mu_on_cu": (0.30, "[Janocha2024] Table 2 friction coefficient (copper)"),
     },
     "steel_janocha2024": {
@@ -450,7 +461,11 @@ MATERIALS: dict[str, Material] = {
         "nu": (0.40, "[Janocha2024] Table 2 (MDPE)"),
         "rho_kg_m3": (956.0, "[Janocha2024] Table 2 (MDPE)"),
         "alpha_T_K": (100.0e-6, "[Qiao2025] Table 2 (HDPE), as hdpe"),
-        "lambda_W_mK": (0.4, "[Qiao2025] Table 2 (HDPE), as hdpe"),
+        "lambda_W_mK": (
+            1.0 / 3.5,
+            "[IEC60287-2-1] Table 1: polyethylene 3.5 K m/W (insulation, "
+            "protective covering), as hdpe",
+        ),
         "rho_cp_J_m3K": (1.9e6, "Standard HDPE, as hdpe"),
         "epsilon_allow": (
             0.077,
@@ -465,7 +480,11 @@ MATERIALS: dict[str, Material] = {
         "nu": (0.40, "[Janocha2024] Table 2 (HDPE)"),
         "rho_kg_m3": (980.0, "[Janocha2024] Table 2 (HDPE)"),
         "alpha_T_K": (100.0e-6, "[Qiao2025] Table 2, as hdpe"),
-        "lambda_W_mK": (0.4, "[Qiao2025] Table 2, as hdpe"),
+        "lambda_W_mK": (
+            1.0 / 3.5,
+            "[IEC60287-2-1] Table 1: polyethylene 3.5 K m/W (insulation, "
+            "protective covering), as hdpe",
+        ),
         "rho_cp_J_m3K": (1.9e6, "Standard HDPE, as hdpe"),
         "epsilon_allow": (
             0.077,
@@ -482,7 +501,11 @@ MATERIALS: dict[str, Material] = {
         "nu": (0.40, "[Janocha2024] Table 2 (PPY)"),
         "rho_kg_m3": (895.0, "[Janocha2024] Table 2 (PPY)"),
         "alpha_T_K": (1.5e-4, "Standard PP, as pp_filler"),
-        "lambda_W_mK": (0.22, "[IEC60287], as pp_filler"),
+        "lambda_W_mK": (
+            1.0 / 6.0,
+            "CIGRE TB 880 (2022) Table 2-3: polypropylene yarn 6.0 K m/W, the "
+            "fibrous materials of [IEC60287-2-1] Table 1",
+        ),
         "rho_cp_J_m3K": (1.8e6, "Standard PP, as pp_filler"),
     },
     # ----- Public flexible-pipe benchmark: Witz (1996) ISSC 2.5-inch pipe -----
@@ -612,6 +635,8 @@ MATERIALS: dict[str, Material] = {
         "alpha_T_K": (29.0e-6, "Standard Pb, high expansion"),
         "lambda_W_mK": (35.0, "Standard Pb (IEC 60287-2-1 lists no metal resistivity)"),
         "rho_cp_J_m3K": (1.47e6, "Standard Pb"),
+        "rho_ohm_m": (21.4e-8, "[IEC60287-1-1] Table 1, lead or lead alloy"),
+        "alpha_R_per_K": (4.0e-3, "[IEC60287-1-1] Table 1, lead or lead alloy"),
         "creep_exponent": (4.5, "[CIGRE TB 623] Norton creep"),
         "creep_coeff": (1.2e-14, "[CIGRE TB 623] at 50 degC"),
     },
@@ -640,6 +665,8 @@ MATERIALS: dict[str, Material] = {
             "Standard Al (IEC 60287-2-1 lists no metal resistivity)",
         ),
         "rho_cp_J_m3K": (2.43e6, "Standard Al"),
+        "rho_ohm_m": (2.84e-8, "[IEC60287-1-1] Table 1, aluminium sheath"),
+        "alpha_R_per_K": (4.03e-3, "[IEC60287-1-1] Table 1, aluminium sheath"),
     },
     "aluminium_corrugated": {
         "E_Pa": (70.0e9, "Standard Al 1050"),
@@ -656,6 +683,8 @@ MATERIALS: dict[str, Material] = {
             "Standard Al (IEC 60287-2-1 lists no metal resistivity)",
         ),
         "rho_cp_J_m3K": (2.43e6, "Standard Al"),
+        "rho_ohm_m": (2.84e-8, "[IEC60287-1-1] Table 1, aluminium sheath"),
+        "alpha_R_per_K": (4.03e-3, "[IEC60287-1-1] Table 1, aluminium sheath"),
     },
 }
 

@@ -44,7 +44,7 @@ def results():
     k = 0.02 * np.sin(np.linspace(0, 40 * np.pi, 300))
     fat = cx.compute_fatigue(cab, k, np.zeros_like(k))
     ser = cx.jonswap_series(duration_s=120, dt_s=0.5, rms_curvature_1_m=0.01, seed=3)
-    tb = cx.load_cable(cx.cigre_tb880_yaml_path(), geometry_override=None)
+    tb = cx.load_cable(cx.poradowski2025_220kv_yaml_path(), geometry_override=None)
     th = cx.compute_thermal(tb, 908.45, 1200e-6, n_cores=1)
     return {
         "cab": cab,

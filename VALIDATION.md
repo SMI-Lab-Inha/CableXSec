@@ -89,7 +89,7 @@ afterwards: a comparison that misses its target is reported as failed.
 | **DAI18-RS** | Re-stick peak at every reversal, seven loops; spring-slider with `stick_time_s = 0` against the default `inf` | Dai, Sævik and Ye (2018), Figs 4a, 4c | measured 14 of 14 strokes; `0`: 14 of 14; `inf`: 0 of 14 | all; all; none | Pass |
 | **DAI18-T1** | Test 1 loops (8, 4, 1 MPa) against the spring-slider with the printed coefficients | Dai, Sævik and Ye (2018), Fig. 4a | peak −1.8 to +1.0 %; level −3.3 to +12.3 %; work −1.9 to −2.6 %; no gradual decay after the peak | stated, not gated | Info |
 | **DAI18-T3** | Test 3 loops (0.01–0.2 Hz) against the rate-independent spring-slider | Dai, Sævik and Ye (2018), Fig. 4c | dynamic level −3.5 to +0.3 %; static peak +10.6 % at 0.2 Hz not represented | stated, not gated | Info |
-| **BM5** | Conductor temperature of the CIGRE TB 880 export cable, from the source's tabulated network inputs (`compute_thermal` on the cable itself is not yet comparable) | Poradowski tabulated thermal network; FEM 89.62 °C | 84.4 °C | ≤90 °C, about 5 K low | Partial |
+| **BM5** | Conductor temperature of the Poradowski and Anders (2025) 220 kV export cable, from the source's tabulated network inputs (the packaged single-core-equivalent stack is not comparable with `compute_thermal`) | Poradowski tabulated thermal network; FEM 89.62 °C, IEC 90 °C | 85.8 °C (`R0` from IEC 60228, `λ1″` = 0); 90.9 °C with the CIGRE TB 880 eddy loss | ≤90 °C | Partial |
 | **BM4** | Axial stiffness of a population of umbilicals | Sævik and Bruaseth (2005) | mean ratio about 1.45 | <1.25 | Not validated |
 
 **Pass** meets the registered target. **Fail** does not; the target is unchanged and the row

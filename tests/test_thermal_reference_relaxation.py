@@ -105,13 +105,15 @@ def test_zero_current_at_ambient_is_the_unenergised_result_bitwise(t66):
 def test_explicit_reference_reproduces_the_reported_state(t66):
     hot20 = ThermalHistory.steady(t66, RATED_A, T_ref_C=20.0).blocks()[0].state
     a = armour_thermal_state(t66, hot20, tension_N=50e3)["inner_armour"]
-    # Armour temperature at its gap node (24 Oct 2026; before, it was
-    # interpolated into the next annulus: 294.006 kPa, 84.18 MPa). Screens of
-    # the source's section model (18 Nov 2026; with full copper screen annuli
-    # the state was 292.957 kPa, reference 31.104 kPa, 84.30 MPa).
-    assert a.contact_pressure_Pa == pytest.approx(439.480e3, rel=1e-5)
+    # IEC 60287 (2023) losses and thermal resistances (28 Nov 2026; before
+    # 439.480 kPa and 96.85 MPa at a 97.1 degC conductor). Armour temperature
+    # at its gap node (24 Oct 2026; before, it was interpolated into the next
+    # annulus: 294.006 kPa, 84.18 MPa). Screens of the source's section model
+    # (18 Nov 2026; with full copper screen annuli the state was 292.957 kPa,
+    # reference 31.104 kPa, 84.30 MPa).
+    assert a.contact_pressure_Pa == pytest.approx(680.777e3, rel=1e-5)
     assert a.contact_pressure_reference_Pa == pytest.approx(44.371e3, rel=1e-4)
-    assert a.thermal_wire_stress_Pa == pytest.approx(96.85e6, rel=1e-4)
+    assert a.thermal_wire_stress_Pa == pytest.approx(143.06e6, rel=1e-4)
     cold20 = ThermalHistory.steady(t66, 0.0, T_ref_C=20.0).blocks()[0].state
     c = armour_thermal_state(t66, cold20, tension_N=50e3)["inner_armour"]
     # 5 K below the stress-free state: the sheath shrink lifts cold clamping.
@@ -152,7 +154,7 @@ def test_hot_polymers_without_a_modulus_law_warn(t66):
 
 
 def test_registered_laws_are_continuous_at_a_non_library_reference():
-    cable = cx.load_cable(cx.cigre_tb880_yaml_path(), geometry_override=None)
+    cable = cx.load_cable(cx.poradowski2025_220kv_yaml_path(), geometry_override=None)
     laws = [x for x in cable.layers if x.material in library.TEMPERATURE_MODULUS_MODELS]
     assert laws
     near = ThermalState({x.name: 15.0 + 1e-3 for x in cable.layers}, T_ref_C=15.0)
@@ -185,7 +187,7 @@ def test_relaxation_scales_the_sustained_state_not_the_stick_stiffness(t66):
     ]
     assert a == b
     # The independent check's relaxed variant (T_ref 15 deg C, f = 0.2).
-    assert c.contact_pressure_Pa == pytest.approx(243.88e3, rel=1e-3)
+    assert c.contact_pressure_Pa == pytest.approx(347.92e3, rel=1e-3)
     assert c.contact_pressure_reference_Pa == pytest.approx(46.86e3, rel=1e-3)
     assert 0.0 < c.thermal_wire_stress_Pa < a.thermal_wire_stress_Pa
     assert c.stick_modulus_Pa == a.stick_modulus_Pa

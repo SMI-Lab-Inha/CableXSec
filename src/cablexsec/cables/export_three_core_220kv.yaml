@@ -3,7 +3,8 @@
 #
 # Generic, public geometry for a 220 kV three-core export cable: three
 # offset cores (Cu + XLPE + lead sheath per core, modelled as offset annuli),
-# PP filler, HDPE bedding, an overall corrugated-aluminium metallic sheath
+# semiconducting screens with the XLPE properties, PP filler, HDPE bedding,
+# an overall corrugated-aluminium metallic sheath
 # (cylindrical_shell), double steel armour, HDPE outer sheath. Round
 # representative numbers for a topology integration test. The corrugated-Al
 # sheath exercises the metallic-sheath wall-stress path with f_corr/SCF.
@@ -41,6 +42,17 @@ layers:
     notes: "Internal lay unspecified; axial calculation uses stated Cu area in an aligned-axis reduction"
     source: "Representative"
 
+  - name: conductor_screen
+    layer_type: cylindrical_offset
+    material: xlpe_qiao2025
+    n_cores: 3
+    r_offset_m: 0.060
+    r_inner_m: 0.0190
+    r_outer_m: 0.0210
+    structural: false
+    notes: "Semiconducting screen with the XLPE properties ([IEC60287-2-1] Table 1, note a)"
+    source: "Representative"
+
   - name: xlpe_insulation
     layer_type: cylindrical_offset
     material: xlpe_qiao2025
@@ -56,6 +68,17 @@ layers:
       vec_synergism_b: 4420
       field_threshold_kV_mm: 5.0
     source: "Representative; electrical [IEC60287]/[Mazzanti2007] Table I"
+
+  - name: insulation_screen
+    layer_type: cylindrical_offset
+    material: xlpe_qiao2025
+    n_cores: 3
+    r_offset_m: 0.060
+    r_inner_m: 0.0420
+    r_outer_m: 0.0430
+    structural: false
+    notes: "Semiconducting screen with the XLPE properties ([IEC60287-2-1] Table 1, note a)"
+    source: "Representative"
 
   - name: lead_core_sheath
     layer_type: cylindrical_offset

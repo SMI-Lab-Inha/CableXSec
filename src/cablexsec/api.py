@@ -126,7 +126,6 @@ from cablexsec.cable_adapters import (
     structural_armour_layers,
 )
 from cablexsec.cables import (
-    cigre_tb880_yaml_path,
     export_three_core_yaml_path,
     iea_task49_66kv_300_yaml_path,
     iea_task49_66kv_stranded,
@@ -135,6 +134,7 @@ from cablexsec.cables import (
     inter_array_three_core_yaml_path,
     load_cable,
     menard2023_yaml_path,
+    poradowski2025_220kv_yaml_path,
     saevik2011_yaml_path,
     witz1996_yaml_path,
 )
@@ -244,7 +244,7 @@ MeanStressOption = MeanStressSpec | MeanStressMethod
 __all__ = [
     # loading
     "load_cable",
-    "cigre_tb880_yaml_path",
+    "poradowski2025_220kv_yaml_path",
     "menard2023_yaml_path",
     "inter_array_single_core_yaml_path",
     "inter_array_three_core_yaml_path",
@@ -1398,8 +1398,9 @@ def compute_shell_stress(
 
     Examples
     --------
-    >>> from cablexsec import load_cable, compute_shell_stress, cigre_tb880_yaml_path
-    >>> cab = load_cable(cigre_tb880_yaml_path(), geometry_override=None)
+    >>> from cablexsec import load_cable, compute_shell_stress
+    >>> from cablexsec import poradowski2025_220kv_yaml_path
+    >>> cab = load_cable(poradowski2025_220kv_yaml_path(), geometry_override=None)
     >>> s = compute_shell_stress(cab, "cu_metallic_sheath", 0.03, 1e-3,
     ...                          p_ext_Pa=2e6, delta_T_K=40.0)
     >>> s.sigma_total_Pa > 0.0

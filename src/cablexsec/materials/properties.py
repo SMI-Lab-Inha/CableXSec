@@ -242,6 +242,18 @@ _DEFINITIONS: tuple[PropertyDefinition, ...] = (
         (1.0, 100.0),
         open_="none",
     ),
+    _p(
+        "relative_permeability",
+        "Relative magnetic permeability",
+        ELECTRICAL,
+        "",
+        (1.0, 1.0e5),
+        open_="none",
+        help="Longitudinal relative permeability of an armour material (1 for "
+        "stainless steel, copper or aluminium). An armour material without it "
+        "counts as magnetic steel in the sheath-loss factor of an SL-type "
+        "cable (IEC 60287-1-1 5.3.11).",
+    ),
 )
 
 MATERIAL_PROPERTIES: Mapping[str, PropertyDefinition] = MappingProxyType(

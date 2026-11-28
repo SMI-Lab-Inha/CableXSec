@@ -268,10 +268,10 @@ without the heat of armour friction.
 ```text
 coupling none
   friction heat 0.00 W/m at start, 0.00 W/m at 6 h
-  after 6 h: conductor 31.9 C, outer armour 24.7 C
+  after 6 h: conductor 34.8 C, outer armour 25.8 C
 coupling two_way
-  friction heat 9.90 W/m at start, 18.24 W/m at 6 h
-  after 6 h: conductor 34.7 C, outer armour 27.8 C
+  friction heat 9.90 W/m at start, 22.27 W/m at 6 h
+  after 6 h: conductor 38.0 C, outer armour 29.5 C
 ```
 
 This cable declares no manufacturing clamping, so the friction rests on the

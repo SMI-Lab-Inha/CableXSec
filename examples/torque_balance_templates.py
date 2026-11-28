@@ -36,7 +36,7 @@ CABLES = (
     ("33 kV single-core", cx.inter_array_single_core_yaml_path),
     ("33 kV three-core", cx.inter_array_three_core_yaml_path),
     ("220 kV export", cx.export_three_core_yaml_path),
-    ("CIGRE TB 880", cx.cigre_tb880_yaml_path),
+    ("CIGRE TB 880", cx.poradowski2025_220kv_yaml_path),
     ("Menard 2023", cx.menard2023_yaml_path),
 )
 

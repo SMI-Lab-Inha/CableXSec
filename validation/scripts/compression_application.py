@@ -43,7 +43,7 @@ CABLES = {
     "inter_array_single_core_33kv": cx.inter_array_single_core_yaml_path,
     "inter_array_three_core_33kv": cx.inter_array_three_core_yaml_path,
     "export_three_core_220kv": cx.export_three_core_yaml_path,
-    "cigre_tb880_220kv": cx.cigre_tb880_yaml_path,
+    "poradowski2025_220kv": cx.poradowski2025_220kv_yaml_path,
 }
 
 

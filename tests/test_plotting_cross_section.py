@@ -34,7 +34,7 @@ def _outer_radius(layer: object) -> float:
 
 
 @pytest.mark.parametrize(
-    "path", [cx.cigre_tb880_yaml_path(), cx.export_three_core_yaml_path()]
+    "path", [cx.poradowski2025_220kv_yaml_path(), cx.export_three_core_yaml_path()]
 )
 def test_axes_span_the_outermost_layer_with_shells_and_offsets(path):
     cable = cx.load_cable(path, geometry_override=None)

@@ -32,7 +32,7 @@ Start with one of these:
 
 - **A {term}`bundled cable`**: published constructions such as the IEA Wind Task 49
   66 kV three-core cable (`cx.iea_task49_66kv_yaml_path()`), {term}`CIGRE TB` 880
-  220 kV (`cx.cigre_tb880_yaml_path()`), the Ménard and Cartraud (2023) cable
+  220 kV (`cx.poradowski2025_220kv_yaml_path()`), the Ménard and Cartraud (2023) cable
   (`cx.menard2023_yaml_path()`) or the Sævik (2011) riser
   (`cx.saevik2011_yaml_path()`). Each states its source. Load one with
   `cx.load_cable(path, geometry_override=None)`.
@@ -126,7 +126,8 @@ for screening.
   of the conductor, the armour and the surface at an entered current, with the
   environment of the cable (or the ambient and external resistance entered as
   arguments). It gives the temperatures of that current; it does not search
-  for the rating.
+  for the rating. The losses (IEC 60228 conductor resistance, skin, proximity,
+  sheath and dielectric losses) are computed from the cable unless entered.
 - **Frictional heating in bending**
   (`cablexsec.analysis.frictional_heating.simulate_frictional_heating`): an
   energised cable bent cyclically, as in a heated bending test or at a bend

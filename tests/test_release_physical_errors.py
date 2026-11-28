@@ -169,7 +169,7 @@ def test_shell_fatigue_requires_a_shell(cable):
 
 
 def test_shell_fatigue_requires_a_curve():
-    cable = cx.load_cable(cx.cigre_tb880_yaml_path(), geometry_override=None)
+    cable = cx.load_cable(cx.poradowski2025_220kv_yaml_path(), geometry_override=None)
     with pytest.raises(cx.CableSchemaError, match="no bulk_sn"):
         cx.compute_shell_fatigue(cable, "cu_metallic_sheath", np.zeros(2))
 

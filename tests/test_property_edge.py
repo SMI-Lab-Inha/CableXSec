@@ -32,7 +32,7 @@ pytestmark = pytest.mark.analytical_sanity
 _TOPOLOGIES = {
     "single_core_inter_array": (cx.inter_array_single_core_yaml_path, 1),
     "three_core_inter_array": (cx.inter_array_three_core_yaml_path, 3),
-    "single_core_export": (cx.cigre_tb880_yaml_path, 1),
+    "single_core_export": (cx.poradowski2025_220kv_yaml_path, 1),
     "three_core_export": (cx.export_three_core_yaml_path, 3),
 }
 

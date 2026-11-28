@@ -415,9 +415,9 @@ class ThermalHistory:
         conductor_area_m2: float | None = None,
         conductor_material: str | None = None,
         n_cores: int | None = None,
-        y_s: float = 0.0,
-        y_p: float = 0.0,
-        lambda1: float = 0.0,
+        y_s: float | None = None,
+        y_p: float | None = None,
+        lambda1: float | None = None,
         ambient_C: Sequence[float] | FloatArray | float | None = None,
         T4_external_Km_W: float | None = None,
         resistance_temperature_C: float | None = None,
@@ -454,6 +454,7 @@ class ThermalHistory:
             lambda1=lambda1,
             T4_external_Km_W=T4_external_Km_W,
             n_per_layer=n_per_layer,
+            rating_current_A=_peak_current(current_A),
         )
         t = np.asarray(time_s, dtype=np.float64)
         cur = np.broadcast_to(np.asarray(current_A, dtype=np.float64), t.shape).copy()
@@ -512,9 +513,9 @@ class ThermalHistory:
         conductor_area_m2: float | None = None,
         conductor_material: str | None = None,
         n_cores: int | None = None,
-        y_s: float = 0.0,
-        y_p: float = 0.0,
-        lambda1: float = 0.0,
+        y_s: float | None = None,
+        y_p: float | None = None,
+        lambda1: float | None = None,
         ambient_C: float | None = None,
         T4_external_Km_W: float | None = None,
         resistance_temperature_C: float | None = None,
@@ -544,6 +545,7 @@ class ThermalHistory:
             T4_external_Km_W=T4_external_Km_W,
             ambient_C=ambient_C,
             n_per_layer=n_per_layer,
+            rating_current_A=_peak_current(current_A),
         )
         nodes = net.steady_state(
             current_A, resistance_temperature_C=resistance_temperature_C
@@ -743,6 +745,19 @@ def _interval_mean(t: FloatArray, y: FloatArray, a: float, b: float) -> float:
     grid = np.concatenate([[a], inner, [b]])
     values = np.interp(grid, t, y)
     return float(np.sum(0.5 * (values[1:] + values[:-1]) * np.diff(grid)) / (b - a))
+
+
+def _peak_current(current_A: Sequence[float] | FloatArray | float) -> float | None:
+    """Largest current of a history: the rating current of a computed ``lambda1``.
+
+    ``None`` when it is not a finite positive number (the network then
+    refuses or records the inputs as usual).
+    """
+    try:
+        peak = float(np.max(np.abs(np.asarray(current_A, dtype=np.float64))))
+    except (TypeError, ValueError):
+        return None
+    return peak if math.isfinite(peak) and peak > 0.0 else None
 
 
 def _conductor_defaults(
@@ -1702,8 +1717,8 @@ def compute_thermal_fatigue(
             "block-mean state frozen within a block; record repeated per block",
             "friction coefficient independent of temperature",
             "E(T) only for registered laws (10-90 degC) or explicit transfers",
-            "lambda2, lambda1'' and the IEC 60287-2-1 three-core factor are not "
-            "included in the thermal network (IEC full texts not held)",
+            "the armour loss lambda2 (unless given) and the sheath eddy loss "
+            "lambda1'' (zero in IEC 60287-1-1) are not in the thermal network",
             f"stress-free reference T_ref {thermal.T_ref_C:g} deg C"
             + (f" ({thermal.T_ref_basis})" if thermal.T_ref_basis else ""),
             f"damage ratios scale with a power of the friction stress range: "

@@ -288,12 +288,14 @@ def test_sweep_with_flooded_pressure_and_temperature(
 
 
 def test_sweep_falls_back_to_fixed_radius() -> None:
-    cable = cx.load_cable(cx.cigre_tb880_yaml_path(), geometry_override=None)
+    cable = cx.load_cable(cx.poradowski2025_220kv_yaml_path(), geometry_override=None)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         held = compute_load_sharing(cable, 40e3, 3)
         free = compute_load_sharing(cable, 40e3, 3, twist="free")
-    assert held.route == "fixed_radius" and "radial bundle law" in held.route_reason
+    # The solved route refuses the corrugated sheath (and the stranded
+    # conductor, which it would meet next).
+    assert held.route == "fixed_radius" and "corrugated shells" in held.route_reason
     expected = load_sharing(cable, 40e3)
     assert set(held.force_N) == {n for n, v in expected.items() if v}
     for name, force in held.force_N.items():
