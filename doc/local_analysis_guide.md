@@ -1295,7 +1295,10 @@ proximity factors (`d_conductor_m` of the conductor gives the IEC `d_c` of a
 stranded conductor), the sheath loss of the per-core screens of a two- or
 three-core cable (5.3.11 under magnetic armour, 5.3.2 otherwise; `λ1″` = 0 as
 in IEC), and the dielectric loss from the `U0` of the insulation's
-`insulation_type`. A single-core cable gets no proximity or sheath loss (they
+`insulation_type`. The screen resistance takes the wires of a wire screen
+(`strand_layers`) over their lay and a laminated foil over them in parallel,
+as CIGRE TB 880 does; a metal tape over the wires is left out (TB 880
+Guidance Point 29). A single-core cable gets no proximity or sheath loss (they
 depend on the circuit): pass `y_p` and `lambda1`. `result.losses` holds the
 values used and the provenance their basis. The section state applies each layer's free
 thermal strain and the registered polymer E(T) laws within their source

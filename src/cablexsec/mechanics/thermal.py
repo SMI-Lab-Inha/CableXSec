@@ -783,10 +783,14 @@ def _sheath_loss_factor(
     (SL-type) cable: [IEC60287-1-1] 5.3.11 under magnetic armour (factor 1.5,
     ``X`` times ``C_LL``) and 5.3.2 otherwise, following CIGRE TB 880 (2022)
     Guidance Point 38 for non-magnetic armour; ``λ1'' = 0`` in both clauses.
-    The sheath resistance is the metallic annulus of one core at the sheath
-    temperature, times ``C_LL``. A single-core cable (bonding and spacing of
-    the circuit) and a common sheath over the cores are not computed:
-    ``λ1 = 0`` with a note, and the caller passes ``lambda1``.
+    ``R_s`` is that of one core's screen at the sheath temperature, times
+    ``C_LL``: the wires of a wire screen (``strand_layers``) over their own
+    lay (CIGRE TB 880 Guidance Point 27), a solid sheath or foil by its
+    annulus, and further per-core metallic layers over the screen (a laminated
+    foil) in parallel with it, as in TB 880 Case 2; metal tapes are left out
+    (Guidance Point 29, counter helix tapes). A single-core cable (bonding and
+    spacing of the circuit) and a common sheath over the cores are not
+    computed: ``λ1 = 0`` with a note, and the caller passes ``lambda1``.
     """
     if not geo.sheath_found:
         return 0.0, ""
@@ -803,23 +807,73 @@ def _sheath_loss_factor(
             "pass lambda1)"
         )
     layer = next(x for x in cable.layers if x.name == geo.sheath_name)
-    r_in = float(getattr(layer, "r_inner_m", 0.0) or 0.0)
-    r_out = float(getattr(layer, "r_outer_m", 0.0) or 0.0)
-    try:
-        rho_s = get_property(layer.material, "rho_ohm_m")
-        alpha_s = get_property(layer.material, "alpha_R_per_K")
-    except KeyError:
-        raise CableInputError(
-            f"the sheath loss needs rho_ohm_m and alpha_R_per_K of the screen "
-            f"material {layer.material!r} ({layer.name!r}); give them or pass "
-            "lambda1"
-        ) from None
-    area = math.pi * (r_out**2 - r_in**2)
-    r_s = rho_s / area * lay_factor * (1.0 + alpha_s * (sheath_temperature_C - 20.0))
+    by_name = {x.name: x for x in cable.layers}
+    r_screen_in = float(getattr(layer, "r_inner_m", 0.0) or 0.0)
+    counted = [layer]
+    tapes: list[str] = []
+    for a in geo.path:
+        other = by_name.get(a.layer_name)
+        if (
+            other is None
+            or other is layer
+            or not (a.metallic and a.per_core)
+            or a.layer.r_inner_m < r_screen_in - _RADIUS_TOL_M
+        ):
+            continue
+        if getattr(other, "tape", None) is not None:
+            tapes.append(other.name)
+        else:
+            counted.append(other)
+    conductance = 0.0  # 1 / R_s per unit length of the core
+    diameters: list[float] = []
+    parts: list[str] = []
+    for item in counted:
+        r_in = float(getattr(item, "r_inner_m", 0.0) or 0.0)
+        r_out = float(getattr(item, "r_outer_m", 0.0) or 0.0)
+        try:
+            rho_s = get_property(item.material, "rho_ohm_m")
+            alpha_s = get_property(item.material, "alpha_R_per_K")
+        except KeyError:
+            raise CableInputError(
+                f"the sheath loss needs rho_ohm_m and alpha_R_per_K of the screen "
+                f"material {item.material!r} ({item.name!r}); give them or pass "
+                "lambda1"
+            ) from None
+        rings = tuple(getattr(item, "strand_layers", ()) or ())
+        if rings:
+            # Wires in parallel, each ring over its own helix length per unit
+            # core length (1 / cos of its lay angle; TB 880 GP 27).
+            area = sum(ring.area_m2 * math.cos(ring.lay_angle_rad) for ring in rings)
+            what = (
+                f"{sum(ring.n_wires for ring in rings)} wires of "
+                f"{sum(ring.area_m2 for ring in rings) * 1e6:.4g} mm2 over their lay"
+            )
+        else:
+            area = math.pi * (r_out**2 - r_in**2)
+            what = f"annulus of {area * 1e6:.4g} mm2"
+            if getattr(item, "construction", "") == "resolved_wire_screen":
+                what += " (a wire screen without strand_layers)"
+        r_item = rho_s / area * (1.0 + alpha_s * (sheath_temperature_C - 20.0))
+        conductance += 1.0 / r_item
+        diameters.append(r_in + r_out)
+        parts.append(f"{item.name!r}: {what}")
+    r_s = lay_factor / conductance
+    # Mean diameter of the screens in parallel: the mean of their own mean
+    # diameters (TB 880 Case 2, wires and laminated foil).
+    d_mean = sum(diameters) / len(diameters)
+    metal = (
+        f" ({'; '.join(parts)}"
+        + ("; in parallel" if len(counted) > 1 else "")
+        + (
+            f"; metal tape(s) {', '.join(tapes)} not counted, TB 880 GP 29"
+            if tapes
+            else ""
+        )
+        + ")"
+    )
     core = _conductor_offset_layer(cable)
     r_offset = float(getattr(core, "r_offset_m", None) or 0.0) if core else 0.0
     spacing = 2.0 * r_offset * math.sin(math.pi / geo.n_geo)
-    d_mean = r_in + r_out
     armour = [layer for layer in cable.helical_layers if layer.structural]
     magnetic = [
         a
@@ -839,11 +893,7 @@ def _sheath_loss_factor(
         if sl_armoured
         else "5.3.2 (SL type, unarmoured or non-magnetic armour; CIGRE TB 880 GP 38)"
     )
-    screen = (
-        "; the annulus of a wire screen is its copper"
-        if getattr(layer, "construction", "") == "resolved_wire_screen"
-        else ""
-    )
+    screen = metal
     common = [a.layer_name for a in geo.path if a.metallic and not a.per_core] + [
         x.name for x in cable.layers if x.layer_type == "cylindrical_shell"
     ]
@@ -1529,15 +1579,18 @@ def _cable_dielectric_loss(
     voltage = cable.cable.voltage_kV
     if voltage is None or include is False:
         return 0.0, ""
+    incomplete: list[tuple[str, str]] = []  # (layer, insulation type) lacking data
     for layer in cable.layers:
         elec = getattr(layer, "electrical", None)
         r_in = getattr(layer, "r_inner_m", None)
         r_out = getattr(layer, "r_outer_m", None)
-        if elec is None or r_in is None or r_out is None:
+        if elec is None:
             continue
         tan_d = elec.loss_factor_tan_delta
         eps_r = elec.permittivity_relative
-        if not (tan_d and eps_r):
+        if not (tan_d and eps_r) or r_in is None or r_out is None:
+            if elec.insulation_type:
+                incomplete.append((layer.name, elec.insulation_type))
             continue
         kind = elec.insulation_type or "xlpe"
         w_d = dielectric_loss(
@@ -1563,17 +1616,36 @@ def _cable_dielectric_loss(
                 "([IEC60287-1-1] 5.2)"
             )
         return w_d, f"dielectric loss W_d = {w_d:.4g} W/m per core: {basis}"
-    needed = include is True or (
-        voltage / math.sqrt(3.0) >= DIELECTRIC_LOSS_U0_KV["xlpe"]
-    )
+    # The threshold of the declared insulation type of a layer without the
+    # data, else that of XLPE (the default type).
+    kinds = [kind for _, kind in incomplete] or ["xlpe"]
+    kind = min(kinds, key=lambda k: DIELECTRIC_LOSS_U0_KV[k])
+    threshold = DIELECTRIC_LOSS_U0_KV[kind]
+    needed = include is True or voltage / math.sqrt(3.0) >= threshold
     if not needed:
         return 0.0, ""
     # Where the dielectric loss may count, a silent zero would understate the
     # conductor temperature.
+    declared = (
+        "; "
+        + ", ".join(
+            f"{name!r} declares {k} without both values" for name, k in incomplete
+        )
+        if incomplete
+        else ""
+    )
+    reason = (
+        "the dielectric loss is requested (include_dielectric_loss=True)"
+        if include is True
+        else (
+            f"U0 = {voltage / math.sqrt(3.0):.1f} kV reaches the {threshold:g} kV "
+            f"of {kind} from which the dielectric loss counts ([IEC60287-1-1] 5.2)"
+        )
+    )
     raise CableInputError(
-        f"the cable is rated {voltage:g} kV, at which the dielectric loss may "
-        "count ([IEC60287-1-1] 5.2), but no insulation layer gives "
-        "'electrical: {permittivity_relative, loss_factor_tan_delta}'"
+        f"the cable is rated {voltage:g} kV and {reason}, but no insulation "
+        "layer gives 'electrical: {permittivity_relative, loss_factor_tan_delta}' "
+        "with its radii" + declared
     )
 
 

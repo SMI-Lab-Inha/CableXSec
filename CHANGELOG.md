@@ -46,9 +46,12 @@ All notable changes to CableXSec are recorded in this file. The format follows
   - the sheath loss of the per-core screens of an SL-type cable: 5.3.11 (factor 1.5, `X`
     times `C_LL`) under magnetic armour, 5.3.2 otherwise (CIGRE TB 880 Guidance Point 38);
     `λ1″` = 0 as in IEC (TB 880 Guidance Point 6 keeps it; see `sheath_eddy_loss_factor`);
-    single-core cables and common sheaths keep `λ1` = 0 with a note;
+    single-core cables and common sheaths keep `λ1` = 0 with a note; the screen resistance
+    is that of the wires of a wire screen over their lay (TB 880 Guidance Point 27), with a
+    laminated foil over them in parallel and a metal tape left out (Guidance Point 29);
   - the dielectric loss from the `U0` of the insulation type (127 kV for XLPE), not from a
-    100 kV line voltage, with the capacitance times `C_LL`;
+    100 kV line voltage, with the capacitance times `C_LL`; an insulation layer that
+    declares its type without the loss data is an error from that type's `U0`;
   - per-core thermal resistances divided by `C_LL`; `T1` from the conductor diameter `d_c`,
     not from an area-equivalent radius (+7 % on the 66 kV template); the fillers and bedding
     of an armoured three-core SL-type cable carry `T2 = ρ/(6π) Ḡ` (IEC 60287-2-1 4.1.4.2,
