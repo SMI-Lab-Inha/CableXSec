@@ -60,7 +60,7 @@ Status: **P** published value; **D** derived from published values;
 | XLPE, MDPE, HDPE | E 1000 MPa, ν 0.40; ρ 925 / 956 / 980 kg/m³ | Table 2 | P |
 | PPY | E 150 MPa, ν 0.40, ρ 895 kg/m³ | Table 2 (footnote says polypyrrole; the values are those of polypropylene yarn) | P |
 | Steel UTS | 470 MPa (1.25 σ_y) | Enters only the thermal scaling of the yield check | A |
-| Copper UTS | 220 MPa | [IEC60228] annealed Cu, as `copper_stranded` | P (other source) |
+| Copper UTS | 220 MPa | Standard annealed Cu, as `copper_stranded` (IEC 60228 sets no copper tensile limit) | P (other source) |
 | Copper 0.2 % proof stress | 120 MPa | Section 2.1, p. 5: plastic limit of ETP copper (0.2 % plastic strain), after Robinson; the 250 MPa yield strength of the same sentence is not used | P |
 | PE allowable strain | 7.7 % (MDPE, HDPE) | API 17J Table 6, p. 19 (PE sheaths of unbonded flexible pipe), transferred; no power-cable value is published (DNVGL-ST-0119 16.2.2, p. 149) | P (other source) |
 | XLPE, PPY, copper tape screen limits | none | No public value; the results say "no limit given" | — |

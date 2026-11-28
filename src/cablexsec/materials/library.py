@@ -251,7 +251,11 @@ MATERIALS: dict[str, Material] = {
             "stress) of the ETP copper conductor, 120 MPa, after Robinson; a "
             "published value for ETP copper",
         ),
-        "sigma_UTS_Pa": (220.0e6, "[IEC60228] annealed Cu"),
+        "sigma_UTS_Pa": (
+            220.0e6,
+            "Standard annealed Cu (IEC 60228 sets no tensile limit for copper; "
+            "its Tables 1-2 cover aluminium only)",
+        ),
         "alpha_T_K": (17.0e-6, "Standard Cu"),
         "lambda_W_mK": (400.0, "Standard Cu"),
         "rho_cp_J_m3K": (3.45e6, "Standard Cu"),
@@ -310,7 +314,7 @@ MATERIALS: dict[str, Material] = {
         "alpha_T_K": (100.0e-6, "[Qiao2025] Table 2"),
         "lambda_W_mK": (0.286, "[IEC60287]"),
         "rho_cp_J_m3K": (2.4e6, "Standard XLPE"),
-        "epsilon_r": (2.3, "[IEC60287-1-1] Table 3"),
+        "epsilon_r": (2.5, "[IEC60287-1-1] Table 3, XLPE (2.3 is the PE row)"),
     },
     "hdpe": {
         "E_Pa": (885.6e6, "[Qiao2025] Eq. 9 evaluated at 20 degC"),
@@ -407,7 +411,7 @@ MATERIALS: dict[str, Material] = {
             "[Janocha2024] Sec. 2.1, p. 5: 0.2 % plastic-strain limit (proof "
             "stress) of the ETP copper conductor, 120 MPa, after Robinson",
         ),
-        "sigma_UTS_Pa": (220.0e6, "[IEC60228] annealed Cu, as copper_stranded"),
+        "sigma_UTS_Pa": (220.0e6, "Standard annealed Cu, as copper_stranded"),
         "alpha_T_K": (17.0e-6, "Standard Cu, as copper_stranded"),
         "lambda_W_mK": (400.0, "Standard Cu, as copper_stranded"),
         "rho_cp_J_m3K": (3.45e6, "Standard Cu, as copper_stranded"),
@@ -606,7 +610,7 @@ MATERIALS: dict[str, Material] = {
         "rho_kg_m3": (11340.0, "Standard Pb"),
         "sigma_y_Pa": (12.0e6, "Standard Pb, very low yield"),
         "alpha_T_K": (29.0e-6, "Standard Pb, high expansion"),
-        "lambda_W_mK": (35.0, "[IEC60287]"),
+        "lambda_W_mK": (35.0, "Standard Pb (IEC 60287-2-1 lists no metal resistivity)"),
         "rho_cp_J_m3K": (1.47e6, "Standard Pb"),
         "creep_exponent": (4.5, "[CIGRE TB 623] Norton creep"),
         "creep_coeff": (1.2e-14, "[CIGRE TB 623] at 50 degC"),
@@ -631,7 +635,10 @@ MATERIALS: dict[str, Material] = {
             "in the reference library",
         ),
         "alpha_T_K": (23.0e-6, "Standard Al"),
-        "lambda_W_mK": (230.0, "[IEC60287]"),
+        "lambda_W_mK": (
+            230.0,
+            "Standard Al (IEC 60287-2-1 lists no metal resistivity)",
+        ),
         "rho_cp_J_m3K": (2.43e6, "Standard Al"),
     },
     "aluminium_corrugated": {
@@ -644,7 +651,10 @@ MATERIALS: dict[str, Material] = {
         "rho_kg_m3": (2700.0, "Standard Al"),
         "sigma_y_Pa": (95.0e6, "1050-H14 temper"),
         "alpha_T_K": (23.0e-6, "Standard Al"),
-        "lambda_W_mK": (230.0, "[IEC60287]"),
+        "lambda_W_mK": (
+            230.0,
+            "Standard Al (IEC 60287-2-1 lists no metal resistivity)",
+        ),
         "rho_cp_J_m3K": (2.43e6, "Standard Al"),
     },
 }

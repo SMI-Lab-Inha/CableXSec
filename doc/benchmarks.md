@@ -2757,7 +2757,7 @@ arrangement from the far end fitting to the tensioner pin (Fig. 1 sketch);
 no inlet tube between the end fitting and the entrance; no gravity (the
 source applies self-weight, value not printed); small slopes (the largest
 angle is 17°); tube steel 207 GPa. The umbilical bending stiffness and weight
-are not printed ("obtained from one of the source's cross-section tools").
+are not printed.
 
 **DAI20-KAPPA (registered).** The SV11 rig beam (`check_saevik2011.Beam` with
 this rig: clamp at the end fitting, free inlet, entrance gap 3 mm, curved
@@ -3124,7 +3124,7 @@ straight cores.
   gives no core pitch; the packaged file keeps straight cores. Under an
   unwinding twist the armour shortens; straight cores resist that shortening
   at the free end, whereas S-lay cores shorten with it, so straight cores give
-  the larger stiffness. The core pitch is not identified on the tools.
+  the larger stiffness. No core pitch is published, so none is identified.
 - **Terms.** With straight cores at 1.8 m: the fixed-radius armour term
   `K_tt − K_et²/K_ee` is 81.9 kN m², the Saint-Venant terms of the cores about
   their centres 21.0 kN m² and of the filler lobes 0.3 kN m² (the yarns are
@@ -3137,10 +3137,6 @@ straight cores.
   then takes `k22 − k12²/k11` with the cylinders in `k11`. The published column
   (69.6–25.1 kN m²) is proportional to `1/P²` within 0.2 % and therefore holds
   no pitch-independent `G_c J_c` term; it is not used as a reference here.
-- **Removed row.** CH-GJ compared these values with the range of the
-  source's three cross-section tools (Table 5), the only reference values
-  there. It was a model-to-model comparison with no measurement and is
-  removed from the validation report.
 
 ### Torsional stiffness of the Su et al. (2026) 35 kV cable
 
