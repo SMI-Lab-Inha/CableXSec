@@ -1871,9 +1871,13 @@ def component_pitches(cable: CableData) -> dict[str, float]:
     """Lay pitch of every helical component of a cable [m], by name.
 
     Helical layers ``2 pi r / tan(alpha)``, the common core lay
-    (``core_lay``), resolved conductor strand rings and the strands and
-    sub-conductors of ``helical_stranded`` layers. Straight components
-    (lay angle zero, centre wires) have no pitch and are not listed.
+    (``core_lay``), resolved conductor strand rings, the strands and
+    sub-conductors of ``helical_stranded`` layers, and tape windings
+    (``tape`` of a cylindrical layer, at its mid radius as in
+    :func:`cablexsec.analysis.tape.tape_geometry`). Straight components
+    (lay angle zero, centre wires) have no pitch and are not listed, nor
+    are components whose radius, angle or pitch is withheld
+    (:func:`tb862_specimen_checks` refuses those).
     """
     pitches: dict[str, float] = {}
 
@@ -1900,9 +1904,43 @@ def component_pitches(cable: CableData) -> dict[str, float]:
         for i, ring in enumerate(getattr(layer, "strand_layers", ()) or ()):
             if ring.pitch_m:
                 pitches[f"{layer.name} ring {i}"] = float(ring.pitch_m)
+        tape = getattr(layer, "tape", None)
+        r_in, r_out = (
+            getattr(layer, "r_inner_m", None),
+            getattr(layer, "r_outer_m", None),
+        )
+        if tape is not None and r_in is not None and r_out is not None:
+            add(f"{layer.name} (tape)", 0.5 * (r_in + r_out), tape.lay_angle_deg)
     if cable.core_lay is not None and cable.core_lay.pitch_m:
         pitches["core lay"] = float(cable.core_lay.pitch_m)
     return pitches
+
+
+def _withheld_pitches(cable: CableData) -> list[str]:
+    """Helical components whose pitch is unknown (a withheld radius, angle or pitch)."""
+    out: list[str] = []
+    for layer in cable.layers:
+        if layer.layer_type == "helical":
+            if getattr(layer, "r_helix_m", None) is None or layer.lay_angle_deg is None:
+                out.append(layer.name)
+        elif layer.layer_type == "helical_stranded":
+            for part, r_key, a_key in (
+                ("conductors", "r_cable_m", "lay_angle_cable_deg"),
+                ("strands", "r_strand_m", "lay_angle_strand_deg"),
+            ):
+                if (
+                    getattr(layer, r_key, None) is None
+                    or getattr(layer, a_key, None) is None
+                ):
+                    out.append(f"{layer.name} ({part})")
+        if getattr(layer, "tape", None) is not None and (
+            getattr(layer, "r_inner_m", None) is None
+            or getattr(layer, "r_outer_m", None) is None
+        ):
+            out.append(f"{layer.name} (tape)")
+    if cable.core_lay is not None and cable.core_lay.pitch_m is None:
+        out.append("core lay")
+    return out
 
 
 _TB862_TESTS = (
@@ -1948,21 +1986,40 @@ def tb862_specimen_checks(
     if test not in _TB862_TESTS:
         raise CableInputError(f"test must be one of {_TB862_TESTS}")
     pitches = component_pitches(cable)
-    armour = [
-        layer for layer in structural_armour_layers(cable) if layer.name in pitches
-    ]
-    if not pitches:
-        raise CableInputError("the cable has no helical component with a pitch")
-    p_max_name = max(pitches, key=lambda k: pitches[k])
-    p_max = pitches[p_max_name]
+    withheld = _withheld_pitches(cable)
+    armour = [layer for layer in cable.helical_layers if layer.structural]
+
+    def longest_pitch() -> tuple[str, float]:
+        # An unknown pitch may be the longest: no length can be certified.
+        if withheld:
+            raise CableInputError(
+                f"test {test!r} needs the longest pitch of the cable, but the "
+                f"pitch of {', '.join(withheld)} is withheld (give its radius "
+                "and lay angle, or the core_lay pitch)"
+            )
+        if not pitches:
+            raise CableInputError("the cable has no helical component with a pitch")
+        name = max(pitches, key=lambda k: pitches[k])
+        return name, pitches[name]
 
     def outer_armour_pitch() -> tuple[str, float]:
+        unknown = [layer.name for layer in armour if layer.name in withheld]
+        if unknown:
+            raise CableInputError(
+                f"test {test!r} needs the pitch of the outer armour wires, but "
+                f"the radius or lay angle of {', '.join(unknown)} is withheld"
+            )
         if not armour:
             raise CableInputError(
                 "this TB 862 check needs the pitch of the outer armour wires; "
-                "the cable has no structural helical layer with a lay angle"
+                "the cable has no structural helical layer"
             )
         outer = max(armour, key=lambda layer: float(layer.r_helix_m or 0.0))
+        if outer.name not in pitches:
+            raise CableInputError(
+                f"the outer armour {outer.name!r} has no lay angle, so no pitch "
+                "for this TB 862 check"
+            )
         return outer.name, pitches[outer.name]
 
     def need(value: float | None, name: str) -> float:
@@ -1982,6 +2039,7 @@ def tb862_specimen_checks(
             end_distance_m = (
                 setup.clamp_setback_m if end_distance_m is None else end_distance_m
             )
+        p_max_name, p_max = longest_pitch()
         name_a, p_a = outer_armour_pitch()
         checks.append(
             SpecimenCheck(
@@ -2033,6 +2091,7 @@ def tb862_specimen_checks(
             )
         )
     elif test == "compression_bending":
+        p_max_name, p_max = longest_pitch()
         checks.append(
             SpecimenCheck(
                 f"sample >= twice the longest pitch ({p_max_name})",
@@ -2043,6 +2102,7 @@ def tb862_specimen_checks(
             )
         )
     else:
+        p_max_name, p_max = longest_pitch()
         checks.append(
             SpecimenCheck(
                 f"sample between end fittings >= longest pitch ({p_max_name})",

@@ -39,7 +39,8 @@ All notable changes to CableXSec are recorded in this file. The format follows
   CIGRE TB 862 (2022) 6.3.4.1, and records each block's interval in
   `RigProtocol.block_times_s`; `tb862_specimen_checks` and `component_pitches` check the
   specimen lengths of TB 862 6.3.2 (fatigue, template and bend-stiffener set-ups), 6.4.2.2
-  (bending stiffness) and 6.6.1.2 (compression) against the cable's lay pitches.
+  (bending stiffness) and 6.6.1.2 (compression) against the cable's lay pitches, tape
+  windings included; a withheld pitch makes the check an error.
 
 ### Changed
 

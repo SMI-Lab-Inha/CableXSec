@@ -10,6 +10,7 @@ import warnings
 
 import numpy as np
 import pytest
+import yaml
 
 import cablexsec as cx
 from cablexsec.analysis.rig_test import (
@@ -187,3 +188,66 @@ def test_tb862_specimen_lengths(t66) -> None:
 def test_tb862_inputs_are_checked(t66, test, kwargs, match) -> None:
     with pytest.raises(CableInputError, match=match):
         tb862_specimen_checks(t66, test, **kwargs)
+
+
+def _variant(tmp_path, source, edit):
+    data = yaml.safe_load(source.read_text(encoding="utf-8"))
+    edit(data)
+    target = tmp_path / "variant.yaml"
+    target.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    return cx.load_cable(target, geometry_override=None)
+
+
+def _layer(data, name):
+    return next(x for x in data["layers"] if x["name"] == name)
+
+
+def test_tape_windings_have_a_pitch(tmp_path) -> None:
+    # 2026-11-28 (PR #67 review): tape windings were left out of P_max.
+    source = cx.thies2016_yaml_path()
+    thies = cx.load_cable(source, geometry_override=None)
+    tape = thies.get_layer("cu_tape")
+    radius = 0.5 * (tape.r_inner_m + tape.r_outer_m)
+    expected = 2.0 * math.pi * radius / math.tan(math.radians(tape.tape.lay_angle_deg))
+    assert component_pitches(thies)["cu_tape (tape)"] == pytest.approx(expected)
+
+    # A tape laid at 1 deg has the longest pitch and governs the compression length.
+    def flat_tape(data):
+        _layer(data, "cu_tape")["tape"]["lay_angle_deg"] = 1.0
+
+    long_tape = _variant(tmp_path, source, flat_tape)
+    p_tape = component_pitches(long_tape)["cu_tape (tape)"]
+    assert p_tape > max(
+        v for k, v in component_pitches(long_tape).items() if k != "cu_tape (tape)"
+    )
+    (comp,) = tb862_specimen_checks(
+        long_tape, "compression", sample_length_m=0.9 * p_tape
+    )
+    assert "cu_tape (tape)" in comp.requirement
+    assert comp.required_m == pytest.approx(p_tape)
+    assert not comp.passed
+
+
+def test_withheld_pitches_are_refused(tmp_path) -> None:
+    # 2026-11-28 (PR #67 review): a withheld core lay or armour pitch was
+    # skipped, so P_max or P_a could be too short and a check pass.
+    source = cx.iea_task49_66kv_yaml_path()
+
+    def no_core_pitch(data):
+        data["core_lay"].pop("pitch_m")
+
+    cable = _variant(tmp_path, source, no_core_pitch)
+    assert "core lay" not in component_pitches(cable)
+    for test in ("compression", "compression_bending"):
+        with pytest.raises(CableInputError, match="core lay is withheld"):
+            tb862_specimen_checks(cable, test, sample_length_m=100.0)
+    # The outer armour pitch is still known: the P_a checks run.
+    (stiff,) = tb862_specimen_checks(cable, "bending_stiffness", sample_length_m=100.0)
+    assert stiff.passed
+
+    def no_armour_angle(data):
+        _layer(data, "outer_armour").pop("lay_angle_deg")
+
+    cable = _variant(tmp_path, source, no_armour_angle)
+    with pytest.raises(CableInputError, match="outer_armour is withheld"):
+        tb862_specimen_checks(cable, "bending_stiffness", sample_length_m=100.0)

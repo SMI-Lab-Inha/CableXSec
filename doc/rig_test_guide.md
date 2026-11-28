@@ -293,8 +293,12 @@ Practical consequences for a test plan:
 `cx.tb862_specimen_checks(cable, test, ...)` compares the lengths of a test
 specimen with the requirements of CIGRE TB 862 (2022), using the pitches of
 the cable's helical components (`cx.component_pitches(cable)`: armour
-layers, the core lay, resolved strand rings). `P_a` is the pitch of the outer
-armour wires and `P_max` the longest pitch of any component.
+layers, the core lay, resolved strand rings, stranded sub-conductors and tape
+windings). `P_a` is the pitch of the outer armour wires and `P_max` the
+longest pitch of any component. A check is refused, not passed, when the pitch
+it needs is unknown: a withheld `core_lay` pitch or a helical layer without
+its radius or lay angle blocks the `P_max` checks, and a withheld armour
+blocks the `P_a` checks.
 
 | `test` | Requirement | Clause | Kind |
 |---|---|---|---|
