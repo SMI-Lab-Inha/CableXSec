@@ -1874,7 +1874,10 @@ def component_pitches(cable: CableData) -> dict[str, float]:
     (``core_lay``), resolved conductor strand rings, the strands and
     sub-conductors of ``helical_stranded`` layers, and tape windings
     (``tape`` of a cylindrical layer, at its mid radius as in
-    :func:`cablexsec.analysis.tape.tape_geometry`). Straight components
+    :func:`cablexsec.analysis.tape.tape_geometry`). A conductor given by a
+    single ``strand_lay_angle_deg`` (no resolved ``strand_layers``) is listed
+    at its outer radius ``r_outer_m``: its strands lie inside it, so this is
+    an upper bound of their pitch at the declared angle. Straight components
     (lay angle zero, centre wires) have no pitch and are not listed, nor
     are components whose radius, angle or pitch is withheld
     (:func:`tb862_specimen_checks` refuses those).
@@ -1901,9 +1904,17 @@ def component_pitches(cable: CableData) -> dict[str, float]:
                 getattr(layer, "r_strand_m", None),
                 getattr(layer, "lay_angle_strand_deg", None),
             )
-        for i, ring in enumerate(getattr(layer, "strand_layers", ()) or ()):
+        rings = getattr(layer, "strand_layers", ()) or ()
+        for i, ring in enumerate(rings):
             if ring.pitch_m:
                 pitches[f"{layer.name} ring {i}"] = float(ring.pitch_m)
+        strand_angle = getattr(layer, "strand_lay_angle_deg", None)
+        if not rings and strand_angle:
+            add(
+                f"{layer.name} (strands, at r_outer)",
+                getattr(layer, "r_outer_m", None),
+                abs(strand_angle),
+            )
         tape = getattr(layer, "tape", None)
         r_in, r_out = (
             getattr(layer, "r_inner_m", None),
@@ -1938,6 +1949,12 @@ def _withheld_pitches(cable: CableData) -> list[str]:
             or getattr(layer, "r_outer_m", None) is None
         ):
             out.append(f"{layer.name} (tape)")
+        if (
+            not getattr(layer, "strand_layers", ())
+            and getattr(layer, "strand_lay_angle_deg", None)
+            and getattr(layer, "r_outer_m", None) is None
+        ):
+            out.append(f"{layer.name} (strands)")
     if cable.core_lay is not None and cable.core_lay.pitch_m is None:
         out.append("core lay")
     return out

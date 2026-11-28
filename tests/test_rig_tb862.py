@@ -228,6 +228,36 @@ def test_tape_windings_have_a_pitch(tmp_path) -> None:
     assert not comp.passed
 
 
+def test_aggregate_strand_lay_has_a_pitch() -> None:
+    # 2026-11-28 (PR #67 review): a conductor given by one strand lay angle,
+    # without resolved strand_layers, was left out of P_max.
+    cable = cx.load_cable(cx.iea_task49_66kv_yaml_path(), geometry_override=None)
+    conductor = cable.get_layer("cu_conductor")
+    name = "cu_conductor (strands, at r_outer)"
+    assert not any(k.startswith("cu_conductor") for k in component_pitches(cable))
+
+    for angle in (1.0, -1.0):  # the sign of the aggregate angle is no handedness
+        lay = conductor.model_copy(update={"strand_lay_angle_deg": angle})
+        layers = tuple(lay if x.name == "cu_conductor" else x for x in cable.layers)
+        stranded = cable.model_copy(update={"layers": layers})
+        pitches = component_pitches(stranded)
+        expected = 2.0 * math.pi * conductor.r_outer_m / math.tan(math.radians(1.0))
+        assert pitches[name] == pytest.approx(expected)
+        assert pitches[name] == max(pitches.values())
+        (comp,) = tb862_specimen_checks(
+            stranded, "compression", sample_length_m=0.9 * expected
+        )
+        assert name in comp.requirement
+        assert not comp.passed
+
+    # Without its outer radius the strand pitch is unknown: refused.
+    lay = conductor.model_copy(update={"strand_lay_angle_deg": 12.0, "r_outer_m": None})
+    layers = tuple(lay if x.name == "cu_conductor" else x for x in cable.layers)
+    withheld = cable.model_copy(update={"layers": layers})
+    with pytest.raises(CableInputError, match=r"cu_conductor \(strands\) is withheld"):
+        tb862_specimen_checks(withheld, "compression", sample_length_m=100.0)
+
+
 def test_withheld_pitches_are_refused(tmp_path) -> None:
     # 2026-11-28 (PR #67 review): a withheld core lay or armour pitch was
     # skipped, so P_max or P_a could be too short and a check pass.
